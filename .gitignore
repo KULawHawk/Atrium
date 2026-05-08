@@ -1,0 +1,27 @@
+# Atrium is a docs-only repo; the only things to ignore are OS/editor junk.
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.aider*
+
+# Local-only working notes (uncomment if you start using these conventions)
+# DRAFTS/
+# *.draft.md
+# *.local.md
+
+# Python -- only relevant if Atrium ever gains scripts (e.g. governance linters)
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.mypy_cache/
