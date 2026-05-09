@@ -1,9 +1,9 @@
 # The Atrium Constitution
 
-**Status:** v0.1 — first ratified version
+**Status:** v0.2 — RATIFIED 2026-05-08 by Jake Leese (chat reply "2 ratify"). v0.2 amends Article I from six Aims to ten Aims, adding Comprehensiveness, Validity, Reliability, and Fidelity as Aims 7–10. The amendment is ordinary (Article V §"Ordinary amendments") since it modifies Article I, not Article II Non-Negotiable Principles.
 **Date:** 2026-05-08
 **Authority:** This is the binding governance document for the Atrium constellation of products. Where this Constitution conflicts with any other document in any constellation product, this Constitution prevails.
-**Ratification:** Jake Leese, 2026-05-08
+**Ratification:** Jake Leese, 2026-05-08 (v0.1 + v0.2 amendment).
 **Amendment codeword:** TBD by Jake (proposed: `Keystone` — the load-bearing stone of an arch, fitting Atrium's architectural metaphor; alternatives: `Cornerstone`, `Threshold`, `Beacon`)
 
 ---
@@ -18,9 +18,11 @@ This Constitution defines what the Atrium is, what it must always be, what it mu
 
 ---
 
-## Article I — The Six Aims
+## Article I — The Ten Aims
 
 Every Atrium product, every feature, every plugin, and every code change must serve these aims. Conflicts between aims are resolved by the order listed (earlier wins ties), with the following exception: any safety concern outranks all aims.
+
+*Aims 1–6 are the original v0.1 aims; Aims 7–10 (Comprehensiveness, Validity, Reliability, Fidelity) were added in v0.2 to canonicalize the psychometric construct discipline that has been implicit in the constellation's work on assessment data. The four new aims are drawn from classical test theory and information-fidelity engineering; together with Accuracy (Aim 1) and Auditability (Aim 4), they form the constellation's measurement-quality contract for every product that classifies, indexes, or summarizes data.*
 
 ### Aim 1: Accuracy
 
@@ -78,6 +80,46 @@ Every product must run on Windows, macOS, and Linux. Platform-specific code is e
 - Cross-platform send2trash (Curator's Phase β gate 2 model).
 - Cross-platform Filesystem operations through tested platform dispatchers.
 - Configuration files are file-format-portable (TOML or JSON; never platform-specific binary formats).
+
+### Aim 7: Comprehensiveness
+
+Where the constellation indexes, classifies, or describes a body of work, the description aspires to completeness — every relevant file, every relevant relationship, every applicable constitutional check. Gaps are explicit failures, not silent omissions. A comprehensiveness audit should be runnable against any product to surface what was missed.
+
+**Concrete commitments:**
+- Curator's `scan` walks every readable file under a source root, not a sample. Skip decisions are logged with reason (permission denied, symlink loop, db_path_guard, etc.).
+- Lineage-graph traversals surface unresolvable edges, rather than terminating quietly when an ancestor or descendant cannot be located.
+- Conclave / APEX assessment KBs aspire to cover every relevant page of every source document, with explicit "no relevant content found" markers where appropriate rather than the absence of any record.
+- A `<product> coverage` introspection command (or equivalent audit query) is available so the user can answer "what did this product NOT cover?".
+
+### Aim 8: Validity
+
+Measurements and classifications produced by the constellation must measure what they claim to measure. A "duplicate detection" classifier must actually detect duplicates, not near-duplicates dressed up as duplicates. A "lineage edge" must reflect a real derivation, not a coincidental hash collision or a filename pattern that happens to match. The construct claimed must match the construct delivered.
+
+**Concrete commitments:**
+- Hash-based duplicate detection uses cryptographically sound hashes (SHA256, xxh3_128) with documented collision probability, not heuristics that claim "duplicate" without bytes-equal proof.
+- Classifier outputs record the criteria they evaluated, not just the verdict, so a downstream reader can audit whether the classifier asked the right question.
+- Conclave Lens votes record what each Lens looked at and what it inferred, so dissenting votes are reviewable as evidence rather than discarded as noise.
+- Where a metric's name might mislead (e.g., "confidence" can mean classifier softmax, ensemble agreement, or human-rater agreement — all different), the metric definition is in scope and queryable alongside the value.
+
+### Aim 9: Reliability
+
+The constellation produces consistent outputs across runs given consistent inputs. Re-running a scan over the same corpus yields the same lineage graph (modulo deliberate changes). A migration replayed from the same checkpoint produces the same per-file outcomes. Stochastic operations declare themselves stochastic; everything else is deterministic.
+
+**Concrete commitments:**
+- Curator's hash cache is deterministic given the same file bytes (xxh3_128 is deterministic by construction).
+- Migration outcomes are deterministic given the same plan + plugin set + file bytes — a v1.4.0 migration replayed via `--resume` produces identical per-file outcomes for SAFE files.
+- Where stochasticity is unavoidable (LLM-mediated extraction in Conclave, embedding-based similarity scoring), the seed and model version are recorded so reproducibility within a fixed configuration is achievable, even if exact bit-for-bit reproducibility across model upgrades is not.
+- Tests assert reliability properties via property-based testing where practical (Curator's `tests/property/`).
+
+### Aim 10: Fidelity
+
+Information moving through the constellation is preserved without loss or distortion. Bytes copied are bytes verified. Metadata transferred is metadata complete. Citations that travel across product boundaries arrive intact. Where compression, transcoding, or summarization is applied, the loss is documented and the original is recoverable.
+
+**Concrete commitments:**
+- Curator migrations are byte-perfect (Article II Principle 2 enforces this as non-negotiable).
+- Cross-product handoffs through the SIP preserve all relevant metadata, not a subset chosen for convenience. Schema-level loss (a partner system not having a field) is logged at the boundary.
+- Lossy operations (image resizing, text summarization, OCR re-encoding) are explicit opt-ins; the original is archived; the audit log records the operation so a downstream reader can reach the original if needed.
+- Citation chain (Article II Principle 3) is the cross-cutting fidelity invariant for derived information; this aim is its broader scope, covering bytes and metadata in addition to citations.
 
 ---
 
@@ -254,8 +296,15 @@ To prevent scope creep:
 
 This Constitution is ratified upon Jake Leese's affirmative acknowledgment in chat or in a commit message. Until ratified, it operates in `provisional` status — non-binding but informative.
 
-**Ratification status:** Awaiting Jake's affirmation as of 2026-05-08.
+**Ratification status:** RATIFIED 2026-05-08 by Jake Leese via chat reply ("2 ratify" + amendment instruction adding Comprehensiveness, Validity, Reliability, Fidelity to Article I as Aims 7–10). v0.1 + v0.2 amendment ratified together; future amendments follow Article V process.
 
 ---
 
-*End of `CONSTITUTION.md` v0.1. Subordinate documents implement; this document governs.*
+## Revision log
+
+* **2026-05-08 v0.1 — DRAFTED.** Initial Constitution authored. Six Aims (Article I), Five Non-Negotiable Principles (Article II), Constellation Roster (Article III), Cross-Product Governance (Article IV), Amendment Process (Article V), What This Constitution Is NOT (Article VI). Awaiting Jake's affirmation.
+* **2026-05-08 v0.2 — RATIFIED.** Jake Leese ratified v0.1 + an Article I amendment in the same turn. Article I expanded from Six Aims to Ten Aims, adding Comprehensiveness (Aim 7), Validity (Aim 8), Reliability (Aim 9), Fidelity (Aim 10). The four new aims canonicalize the psychometric and information-fidelity disciplines that were already implicit in the constellation's work on assessment data. Aim ordering preserves earlier-wins-ties precedence: the original Six Aims sit at positions 1–6 and the new four sit at 7–10, so e.g. Reversibility (Aim 2) still outranks Reliability (Aim 9) when they conflict. Recommendation in the design log: future revisions consider whether Validity and Reliability deserve promotion to non-negotiable Principles in Article II given their role in assessment workflows; that's an Article II amendment requiring the codeword + 7-day waiting period and is not on the immediate roadmap.
+
+---
+
+*End of `CONSTITUTION.md` v0.2. Subordinate documents implement; this document governs.*
