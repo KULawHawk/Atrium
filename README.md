@@ -7,7 +7,7 @@ Names, per Jake's ruling of 2026-10-23 12:21 PM CT (decision A1, recorded in `fu
 - **Atrium** is the integration layer that lets APEX and future suites integrate with one another.
 - **Ad Astra** is Jake's developer and portfolio name for all of his projects. It is not the suite name (earlier versions of these docs called Ad Astra the suite).
 
-This repository contains documents, not code. The code that **implements** Atrium's principles lives in the per-product repos (e.g. [`KULawHawk/Curator`](https://github.com/KULawHawk/Curator)).
+This repository is mostly documents. Its one piece of code is `atrium_check` (`src/atrium_check/`, standard library only), which checks the contracts registry against the member repos. The code that **implements** Atrium's principles lives in the per-product repos (e.g. [`KULawHawk/Curator`](https://github.com/KULawHawk/Curator)).
 
 ---
 
@@ -17,7 +17,7 @@ Atrium is the answer to "how do these products stay coherent across years of evo
 
 1. **A constitution** with numbered principles (Principle 1 — the MORTAL SIN rule, Principle 2 — Hash-Verify-Before-Move, Principle 3 — Citation Chain Preservation, Principle 4 — No Silent Failures, Principle 5 — Atomic Operations Where Atomicity Is Claimed). These are non-negotiable invariants every product governed by Atrium must preserve.
 2. **A charter** describing the suite's goals, scope, and values at a higher level than any individual product, including the APEX suite charter rules (standalone first, replayable, every input generalizes, high-stakes 100%-or-defer, the original-copy rule) and the two data paths.
-3. **A contracts registry** (`CONTRACTS_REGISTRY.md`) listing the cross-tool contracts Atrium owns, one line per module.
+3. **A contracts registry** (`CONTRACTS_REGISTRY.md`, machine-readable in `registry/contracts.v1.json`) listing the cross-tool contracts Atrium owns, with sha256 pins that `python -m atrium_check check` compares against the member repos.
 4. **A contributor protocol** — operating rules for human-AI collaborative development. Includes the numbered-list-with-number-replies convention, the `c` shorthand, the `Nm` 30-second-pitch convention, the wishlist-always-visible rule, the no-corner-cutting rule, and how those interact with safety practices.
 5. **A glossary** pinning the meaning of every term that appears in more than one product. Avoids drift like "what does 'lineage' mean across Curator vs APEX?"
 6. **A naming registry** (`NAMES.md`) tracking every brand name, capability name, and product name, with the ruling date and source for each.
@@ -56,7 +56,7 @@ The principles in §1 are the most important. Every product's design doc subordi
 |----------|--------|
 | `CONSTITUTION.md` | **RATIFIED v0.3** (2026-05-08); still uses pre-A1 names, alignment needs an Article V amendment |
 | `CHARTER.md` | v0.2; APEX suite charter rules and the two data paths added (2026-10-23 rulings) |
-| `CONTRACTS_REGISTRY.md` | living document; one line per module |
+| `CONTRACTS_REGISTRY.md` + `registry/contracts.v1.json` | living; 14 contracts pinned, checked by `atrium_check` |
 | `CONTRIBUTOR_PROTOCOL.md` | drafted; in active use |
 | `GLOSSARY.md` | v0.2; APEX suite terms added |
 | `ONBOARDING.md` | drafted |
