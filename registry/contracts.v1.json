@@ -22,7 +22,7 @@
     "locutus": {
       "repo": "KULawHawk/Locutus",
       "dir": "Locutus",
-      "pinned_commit": "34106ee",
+      "pinned_commit": "29c936a",
       "contract_dirs": [
         "src/locutus/contracts"
       ]
@@ -30,7 +30,7 @@
     "obsidian": {
       "repo": "KULawHawk/Obsidian",
       "dir": "Obsidian",
-      "pinned_commit": "c70bdac",
+      "pinned_commit": "ad157ad",
       "contract_dirs": [
         "src/obsidian/contracts"
       ]
@@ -122,6 +122,26 @@
       "sha256": "13339136e68eb4900a2aea6e8d1a701419f299b21c953672b3504f420defc8f2"
     },
     {
+      "name": "TagProposal/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/tag_proposal.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "const_value": "conclave.tag_proposal.v1",
+      "note": "W-7 manual-tag sibling contract (Locutus fd931cb). Declares the pre-suite name 'conclave.tag_proposal.v1'; a Locutus follow-up can move it to the suite form as #25 did for PhrasingRuling/1.",
+      "sha256": "c4fc65e88f57202b17d7498d86e6d3d3fa7b6ddee13738371e9b30985a114dfe"
+    },
+    {
+      "name": "TagRuling/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/tag_ruling.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "const_value": "conclave.tag_ruling.v1",
+      "note": "W-7 manual-tag sibling contract (Locutus fd931cb). Declares the pre-suite name 'conclave.tag_ruling.v1'; a Locutus follow-up can move it to the suite form as #25 did for PhrasingRuling/1.",
+      "sha256": "b57457f6790325161c372ccde36aa9c362fc92c905719742ef5817ef689d14f4"
+    },
+    {
       "name": "EngineFamilies/1",
       "home": "locutus",
       "path": "src/locutus/contracts/engine_families.v1.json",
@@ -136,7 +156,7 @@
       "path": "src/obsidian/contracts/obsidian_request.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "sha256": "f9ca3376ee2db4e44f17e7687f153af7a4346b95ec4fb27fbda345c1d3b6c91f"
+      "sha256": "0c863c82c5e3ae595c56f1a24a96442d342469cfc1ce55b2a382f44e788d79e7"
     },
     {
       "name": "ObsidianResult/1",
@@ -152,7 +172,7 @@
       "path": "src/obsidian/contracts/obsidian_sidecar.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "sha256": "d9107d39740aed6326afcc8ec3efde74627cfe2cd23eb0ca6d4d650a814ebbb7"
+      "sha256": "9d03df7caf2952d41a49f0b86a49b4043f4782e22c04f2bae4706b4999e285d8"
     },
     {
       "name": "VaultEntry/1",
