@@ -22,7 +22,7 @@
     "locutus": {
       "repo": "KULawHawk/Locutus",
       "dir": "Locutus",
-      "pinned_commit": "f0a5d42",
+      "pinned_commit": "b7a42b1",
       "contract_dirs": [
         "src/locutus/contracts"
       ]
@@ -30,7 +30,7 @@
     "obsidian": {
       "repo": "KULawHawk/Obsidian",
       "dir": "Obsidian",
-      "pinned_commit": "e33e4e5",
+      "pinned_commit": "4c45399",
       "contract_dirs": [
         "src/obsidian/contracts"
       ]
@@ -38,7 +38,7 @@
     "sequoia": {
       "repo": "KULawHawk/Sequoia",
       "dir": "Sequoia",
-      "pinned_commit": "bbf7f45",
+      "pinned_commit": "b73f301",
       "contract_dirs": [
         "sequoia/integration/contracts"
       ]
@@ -51,7 +51,7 @@
       "path": "src/locutus/contracts/ruling_record.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "sha256": "6125929afb415c037dea39ca096ce4582a9193a8df5d2ed9fd0b5ccfce216284"
+      "sha256": "6a01d77eff46dcc7e5e2c0631169b2fc41d30abbc30a3e4ac1928f70d2e17fd4"
     },
     {
       "name": "RulingRetraction/1",
@@ -67,7 +67,7 @@
       "path": "src/locutus/contracts/pattern_pack.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "sha256": "28ac420bc71dd354365295c923eab379a2ead569cb596253312a996ee6595e2d"
+      "sha256": "bcfeb5019829d4599cfc94ee0496489631e74550c81afa95360ff2aca70b5c23"
     },
     {
       "name": "PartitionManifest/1",
@@ -75,7 +75,7 @@
       "path": "src/locutus/contracts/partition_manifest.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "sha256": "e187aa7be976ac0a5fa652e15e053cbce246f81a61bf26e4391942ab857c5e5b"
+      "sha256": "36836414e22d8e2e814b124b5837142c21a033f327ba8f79f6fa8019a393ddfa"
     },
     {
       "name": "QueryRequest/1",
@@ -83,7 +83,7 @@
       "path": "src/locutus/contracts/query_request.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "sha256": "c058034458e16db49dd3b5089efaf44980e1e8a2f3b21325619483371355d178"
+      "sha256": "b34a3f74fa0df80c9b3a16ad7f320a3e7bb0343002f5925afa4fcc97e2ab64c9"
     },
     {
       "name": "ForgeRequest/1",
@@ -91,7 +91,7 @@
       "path": "src/locutus/contracts/forge.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/$defs/request/properties/contract/const",
-      "sha256": "5c8080de3d28bcef1b250522dd9d5016fc393be39a2d33482a3bb537d67d7660",
+      "sha256": "38920f4d6d916dca8ffe2a5f1060b1d3620a910514ad5b9474b7303668482590",
       "note": "ForgeRequest/1 and ForgeOutput/1 share one schema file (oneOf)."
     },
     {
@@ -100,7 +100,7 @@
       "path": "src/locutus/contracts/forge.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/$defs/output/properties/contract/const",
-      "sha256": "5c8080de3d28bcef1b250522dd9d5016fc393be39a2d33482a3bb537d67d7660",
+      "sha256": "38920f4d6d916dca8ffe2a5f1060b1d3620a910514ad5b9474b7303668482590",
       "note": "ForgeRequest/1 and ForgeOutput/1 share one schema file (oneOf)."
     },
     {
@@ -111,6 +111,16 @@
       "const_pointer": null,
       "sha256": "3ed5a2015fdc87b709212a5b26d89ebf01070531ef414693aff200bc96239a9b",
       "note": "Scope schema for a PatternPack/1 artefact of kind shape_check; it validates a sub-object, so it carries no contract const."
+    },
+    {
+      "name": "PhrasingRuling/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/phrasing_ruling.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "const_value": "locutus.phrasing_ruling.v1",
+      "note": "W-8 phrasing lexicon ruling (Locutus #21). Its contract const uses the dotted form 'locutus.phrasing_ruling.v1', not the suite 'Name/N' form; open question for the next Locutus contract change.",
+      "sha256": "7b4dcf46a36a69f9b4ad7faa9d1efd2e21e2c7036a2ebdb94d49f3b13456af28"
     },
     {
       "name": "EngineFamilies/1",

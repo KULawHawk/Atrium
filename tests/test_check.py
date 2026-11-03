@@ -453,3 +453,30 @@ def test_pattern_unbounded_is_a_warning(suite):
     assert [(f.severity, f.code) for f in r.findings] == [("warn", "PATTERN_UNBOUNDED")]
     assert "/properties/h" in r.findings[0].message
     assert r.passed and not run(reg, root, strict=True).passed
+
+
+# ----------------------------------------------------------------- non-standard const values
+
+
+def test_const_value_overrides_the_name_and_is_noted(suite):
+    reg, _, root = suite
+    reg["mirrors"] = []
+    _rewrite(reg, 0, root, "Alpha", lambda d: d["properties"]["contract"].update(const="alpha.rec.v1"))
+    assert codes(run(reg, root)) == ["CONST_MISMATCH"]
+    reg["contracts"][0]["const_value"] = "alpha.rec.v1"
+    r = run(reg, root)
+    assert [(f.severity, f.code) for f in r.findings] == [("note", "CONST_NONSTANDARD")]
+    reg["contracts"][0]["const_value"] = "other"
+    assert "expected 'other'" in run(reg, root).findings[0].message
+
+
+def test_validate_registry_const_value(suite):
+    reg, _, _ = suite
+    reg["contracts"][0]["const_value"] = ""
+    reg["contracts"][1]["const_pointer"] = None
+    reg["contracts"][1]["const_value"] = "x"
+    problems = validate_registry(reg)
+    assert problems == [
+        "contracts[0].const_value: a string, and only with a const_pointer",
+        "contracts[1].const_value: a string, and only with a const_pointer",
+    ]
