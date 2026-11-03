@@ -22,7 +22,7 @@
     "locutus": {
       "repo": "KULawHawk/Locutus",
       "dir": "Locutus",
-      "pinned_commit": "29c936a",
+      "pinned_commit": "2de9a14",
       "contract_dirs": [
         "src/locutus/contracts"
       ]
@@ -129,7 +129,7 @@
       "const_pointer": "/properties/contract/const",
       "const_value": "conclave.tag_proposal.v1",
       "note": "W-7 manual-tag proposal sibling contract (Locutus fd931cb). The dotted name 'conclave.tag_proposal.v1' is deliberate: under W-7 design §3.5 the record is owned by Conclave and emitted by the Workbench, so it keeps the Conclave form. Any move to the suite form is a W-7 decision, not a registry follow-up.",
-      "sha256": "c4fc65e88f57202b17d7498d86e6d3d3fa7b6ddee13738371e9b30985a114dfe"
+      "sha256": "1071262edf3c01aa2464545cec0b9c0af2c65c789fc7e44434ceec3de60cae7e"
     },
     {
       "name": "TagRuling/1",
@@ -139,7 +139,7 @@
       "const_pointer": "/properties/contract/const",
       "const_value": "conclave.tag_ruling.v1",
       "note": "W-7 manual-tag ruling sibling contract (Locutus fd931cb). The dotted name 'conclave.tag_ruling.v1' is deliberate: under W-7 design §3.5 the record is owned by Conclave and emitted by the Workbench, so it keeps the Conclave form. Any move to the suite form is a W-7 decision, not a registry follow-up.",
-      "sha256": "b57457f6790325161c372ccde36aa9c362fc92c905719742ef5817ef689d14f4"
+      "sha256": "3c60ed0abf6f2e9684e5d5e6de1df94a4cc14f72d36deb2beef27184a249ce61"
     },
     {
       "name": "EngineFamilies/1",
