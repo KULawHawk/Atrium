@@ -25,3 +25,9 @@ __pycache__/
 .venv/
 .ruff_cache/
 .mypy_cache/
+
+# atrium_check test artefacts
+.pytest_cache/
+.coverage
+*.egg-info/
+build/

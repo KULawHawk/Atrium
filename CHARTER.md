@@ -1,8 +1,10 @@
 # The Atrium Charter
 
-**Status:** v0.1 — first issued
-**Date:** 2026-05-08
+**Status:** v0.2 (adds the APEX suite charter rules and the two data paths)
+**Date:** 2026-05-08 (v0.1); 2026-11-03 (v0.2)
 **Authority:** Subordinate to `CONSTITUTION.md`. This Charter elaborates Article III (the constellation roster) and Article IV (cross-product governance) into operational practice.
+
+**What changed in v0.2.** Jake ruled on 2026-10-23 (decision A1, 12:21 PM CT, recorded in `full-audit-2026-10-23/STRATEGY.md` §3) that **APEX is the suite**, **Atrium is the integration layer** that lets APEX and future suites integrate with one another, and **Ad Astra is Jake's developer and portfolio name**, not the suite. v0.2 adds the rules every APEX tool keeps (the section "The APEX suite charter rules") and the two data paths (decision A3). The v0.1 text below is kept where it is still true; where the A1 ruling changes a statement, the section says so. Names are registered in `NAMES.md` v0.2.
 
 ---
 
@@ -20,9 +22,11 @@ The constellation pattern says: rather than build one tool that does everything 
 
 This pattern is the inverse of what's tempting in early development: just put everything in one repo, share data structures, get fast wins through tight coupling. That works for v0.1 but becomes the source of every painful refactor by v3.
 
+**Atrium after A1.** The constellation pattern above still describes how Atrium works. A1 sharpens Atrium's role: it is the integration layer *above* the suites. It owns the contracts that cross tool boundaries (the ruling record, pattern pack, partition manifest, query request, forge request and the Obsidian contracts, listed in `CONTRACTS_REGISTRY.md`) and the charter rules below. It runs nothing. Its job is to let a future suite reuse Conclave, Locutus or Obsidian without rewiring them.
+
 ## Why standalone-first matters
 
-Per Constitution Aim 3 (Self-sufficiency):
+Per Constitution Aim 7 (Self-sufficiency; numbered Aim 3 before the v0.3 reordering):
 
 A user installing only Curator must get full Curator value. Not "Curator works but you really need Conclave for the indexer." Not "you can use Curator standalone but the GUI assumes APEX is installed." **Full value, standalone.**
 
@@ -47,7 +51,7 @@ The first criterion is structural: the product can be installed and used by some
 
 The second is interface-driven: the product must implement health check, audit log format, SHA256 hash compatibility, configuration conventions, and any other SIP requirements that apply to its domain.
 
-The third is Constitutional: by joining, the product accepts the Six Aims and Five Non-Negotiable Principles. Products that can't accept these (e.g., a tool that needs to ignore the MORTAL SIN rule for performance reasons) don't join the Atrium — they remain standalone tools that may interoperate at arm's length.
+The third is Constitutional: by joining, the product accepts the Ten Aims (Six Aims before the v0.2 amendment) and Five Non-Negotiable Principles. Products that can't accept these (e.g., a tool that needs to ignore the MORTAL SIN rule for performance reasons) don't join the Atrium — they remain standalone tools that may interoperate at arm's length.
 
 The fourth prevents internal competition: the Atrium is a constellation, not a marketplace. If two products would do substantially the same thing, one is chosen and the other is either retired (with a phase-out plan) or absorbed.
 
@@ -85,6 +89,8 @@ When a conflict requires Constitutional resolution (i.e., it can't be resolved b
 
 ## How the Atrium relates to APEX
 
+**Updated by A1 (2026-10-23 12:21 PM CT).** "APEX" now names the suite: Conclave, Sequoia, Verity, Affine, Locutus, Obsidian and the APEX hub sit under it, and Atrium is the integration layer it uses. The rest of this section was written when "APEX" meant only Jake's original psychological-assessment indexing platform. It still holds for that platform's own Constitution (v0.5) and its data directories, so it is kept as written below.
+
 APEX is a peer system, not an Atrium member. The relationship is asymmetric and intentional:
 
 - **APEX has its own Constitution** (v0.5 BINDING, separate from this Constitution). The Atrium honors APEX's Constitutional rules; APEX is not bound by Atrium rules.
@@ -103,6 +109,66 @@ The constellation will gain and lose members over time. Some likely future traje
 - **A 6th charter member** is plausible but unforeseen at v0.1. The Charter explicitly does not enumerate future members.
 - **Synergy** is not an Atrium member but its phased retirement reshapes the Curator/APEX boundary in a Constitutionally significant way; the Charter is updated when Phase 3 lands.
 
+## The APEX suite charter rules
+
+These rules bind every APEX suite tool (Conclave, Sequoia, Verity, Affine, Locutus, Obsidian, the APEX hub) and any future tool or suite that integrates through Atrium. They come from Jake's rulings of 2026-10-23, recorded in the `full-audit-2026-10-23/` documents named in each rule. They add to the Constitution; they do not replace any Constitutional principle.
+
+### Rule 1. Standalone first
+
+Every tool runs on its own. The suite adds value without ever becoming a dependency a tool cannot run without. This restates Constitution Aim 7 (Self-sufficiency) for the suite (`APEX_SUITE_DESCRIPTION.md`, APEX entry). A concrete test: a Conclave or Sequoia run with an empty Locutus Pattern Pack still works (`LOCUTUS_DESIGN.md` §3).
+
+### Rule 2. Replayable
+
+Every tool is replayable byte for byte from its own audit trail. Anything loaded from another tool (for example a Locutus Pattern Pack) is loaded by hash, like a config file, and the hash is recorded in the audit trail, so the run replays without the other tool running (`APEX_SUITE_DESCRIPTION.md`; `LOCUTUS_DESIGN.md` §3).
+
+### Rule 3. Every human input generalizes
+
+Jake, 2026-10-23 1:23 PM CT (`STRATEGY.md` §2a; restated as an acceptance rule in `BLUEPRINT.md`, "Standing acceptance rule for every human-in-the-loop item"):
+
+> "No part of Apex should ever simply take user feedback or input and just use it for that singular instance. All of that should be used to learn from grow in its ability to recognize & improve in reliability, verification, and accuracy without the need of human assistance."
+
+**Applies to** every human-in-the-loop point in the suite: Conclave Review, the kickback band, Chaise K3 dual review, Sequoia corrections and attestation, Verity, Affine, and any future one.
+
+**Every clarification or correction produces two records:**
+1. The correct choice for this item.
+2. A **pattern record**: a structural breakdown of the item (its structure, pattern, format and presentation), filed so that similar items are recognized and handled without asking next time.
+
+In the suite these are carried by a `RulingRecord` (one per human decision, any tool), which Locutus turns into patterns shipped back as Pattern Packs (`LOCUTUS_DESIGN.md` §4).
+
+**Acceptance check.** A design that stores a human answer only for the one instance fails review. The verify step for each human-in-the-loop item includes: "a second, structurally similar item is resolved without a human prompt, and the record shows the pattern it matched" (`BLUEPRINT.md`).
+
+**Guardrails that still hold:**
+- Learned or augmented data stays out of clearance sets, answer keys and held-out sets.
+- An independence review is required before data is used for shared training. No engine is retrained on its own corrections while still being counted as independent.
+- High-stakes changes still go through the verifier and Rule 4.
+
+**Measured targets** (Jake, 2026-10-23 1:38 PM CT, `STRATEGY.md` §2b): about ten or fewer human flags per entire source at steady state, zero repeat flags on an issue type already ruled on, and every ruling ingested every day.
+
+### Rule 4. High-stakes content is 100% correct or deferred
+
+High-stakes content (cutoffs, norm tables, scoring rules, decision-tree branches, validity indicators, conversion algorithms) is 100% correct or deferred to a human. No tool, mode or learned pattern may lower that bar, mark high-stakes content resolved without a human, or make a research run look certifiable (`APEX_SUITE_DESCRIPTION.md`, APEX entry; `STRATEGY.md` §2). Chaise, the clinical mode, may only tighten this rule, never loosen it (`STRATEGY.md` §3a).
+
+### Rule 5. The original copy is always kept (SEC-2)
+
+Jake, 2026-10-23 2:18 and 2:19 PM CT, with the wording corrected at 2:20 PM CT (`DEIDENTIFY_MODULE_SPEC.md` §8 SEC-2; `STRATEGY.md` §3f and §3g): any file of any type, audio included, may be edited or de-identified in place as the working file. The one invariant is that a **password-protected original copy is always kept**, with its password held in the vault. This sits beside the Constitution's MORTAL SIN rule (Principle 1): editing the working file is allowed, losing the original is not.
+
+### Rule 6. Patient data passes Obsidian first
+
+Obsidian, the de-identification module, is a hard gate before any patient data enters the suite (`STRATEGY.md` §3g). Sharing identified documents is a routine action with safeguards, not a locked one; only automated paths (cloud lanes, language-model calls, CI) default to de-identified copies (SEC-8, Jake, 2026-10-23 2:40 and 2:41 PM CT, `DEIDENTIFY_MODULE_SPEC.md` §8).
+
+## The two data paths (A3)
+
+**RULED by Jake, 2026-10-23 12:24 PM CT: as recommended** (decision A3, `STRATEGY.md` §3).
+
+| Path | From | To | Tools | Status |
+|---|---|---|---|---|
+| **Path 1** | A published assessment manual | A reviewed knowledge base, then Sequoia decision trees | Conclave, then human Review, then Sequoia | **Build first**, to working, before path 2. |
+| **Path 2** | A completed protocol or session (case data) | Scored, cited findings | Affine and Verity, then Conclave, then Sequoia | New scope. Gated on decision D1 (which audio enters the suite) and behind Obsidian, because it carries patient data. |
+
+Two related rulings shape the end of both paths:
+- **D6** (Jake, 2026-10-23 12:35 PM CT, `STRATEGY.md` §3): the Atrium Forensic scoring-engine brief merges into Sequoia as its output and form-fill layer. There is one scorer per instrument.
+- **D1** (Jake, 2026-10-23 12:31 PM CT, `STRATEGY.md` §3): path 2 audio covers verbal subtest responses first, then interviews, then full session recordings.
+
 ## What the Charter is NOT
 
 - **It does not specify products.** That's per-product DESIGN docs.
@@ -112,4 +178,4 @@ The constellation will gain and lose members over time. Some likely future traje
 
 ---
 
-*End of `CHARTER.md` v0.1. Implements Constitution Articles III + IV.*
+*End of `CHARTER.md` v0.2. Implements Constitution Articles III + IV; adds the APEX suite charter rules and the two data paths (Jake's rulings of 2026-10-23).*

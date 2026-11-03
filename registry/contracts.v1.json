@@ -1,0 +1,265 @@
+{
+  "registry": "AtriumContractRegistry/1",
+  "owner": "Atrium",
+  "updated": "2026-11-03",
+  "about": "Every contract that crosses an APEX tool boundary. Atrium is the owner of record; the member repo named in 'home' carries the file. A contract change updates this registry in the same change (python -m atrium_check repin). Human-readable view: CONTRACTS_REGISTRY.md.",
+  "tool_roster": [
+    "conclave",
+    "sequoia",
+    "verity",
+    "affine",
+    "apex_hub",
+    "obsidian",
+    "locutus"
+  ],
+  "members": {
+    "conclave": {
+      "repo": "KULawHawk/Conclave",
+      "dir": "Conclave",
+      "pinned_commit": "b66d3b8",
+      "contract_dirs": []
+    },
+    "locutus": {
+      "repo": "KULawHawk/Locutus",
+      "dir": "Locutus",
+      "pinned_commit": "f0a5d42",
+      "contract_dirs": [
+        "src/locutus/contracts"
+      ]
+    },
+    "obsidian": {
+      "repo": "KULawHawk/Obsidian",
+      "dir": "Obsidian",
+      "pinned_commit": "e33e4e5",
+      "contract_dirs": [
+        "src/obsidian/contracts"
+      ]
+    },
+    "sequoia": {
+      "repo": "KULawHawk/Sequoia",
+      "dir": "Sequoia",
+      "pinned_commit": "bbf7f45",
+      "contract_dirs": [
+        "sequoia/integration/contracts"
+      ]
+    }
+  },
+  "contracts": [
+    {
+      "name": "RulingRecord/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/ruling_record.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "sha256": "6125929afb415c037dea39ca096ce4582a9193a8df5d2ed9fd0b5ccfce216284"
+    },
+    {
+      "name": "RulingRetraction/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/ruling_retraction.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "sha256": "0c99cb2ebf764f1cd2a2c15ae87660782702c1199ec02a58b8b90735d6d4b023"
+    },
+    {
+      "name": "PatternPack/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/pattern_pack.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "sha256": "28ac420bc71dd354365295c923eab379a2ead569cb596253312a996ee6595e2d"
+    },
+    {
+      "name": "PartitionManifest/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/partition_manifest.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "sha256": "e187aa7be976ac0a5fa652e15e053cbce246f81a61bf26e4391942ab857c5e5b"
+    },
+    {
+      "name": "QueryRequest/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/query_request.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "sha256": "c058034458e16db49dd3b5089efaf44980e1e8a2f3b21325619483371355d178"
+    },
+    {
+      "name": "ForgeRequest/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/forge.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/$defs/request/properties/contract/const",
+      "sha256": "5c8080de3d28bcef1b250522dd9d5016fc393be39a2d33482a3bb537d67d7660",
+      "note": "ForgeRequest/1 and ForgeOutput/1 share one schema file (oneOf)."
+    },
+    {
+      "name": "ForgeOutput/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/forge.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/$defs/output/properties/contract/const",
+      "sha256": "5c8080de3d28bcef1b250522dd9d5016fc393be39a2d33482a3bb537d67d7660",
+      "note": "ForgeRequest/1 and ForgeOutput/1 share one schema file (oneOf)."
+    },
+    {
+      "name": "ShapeCheckScope/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/shape_check_scope.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": null,
+      "sha256": "3ed5a2015fdc87b709212a5b26d89ebf01070531ef414693aff200bc96239a9b",
+      "note": "Scope schema for a PatternPack/1 artefact of kind shape_check; it validates a sub-object, so it carries no contract const."
+    },
+    {
+      "name": "EngineFamilies/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/engine_families.v1.json",
+      "kind": "data",
+      "const_pointer": "/contract",
+      "sha256": "1465ef5ca432fb9d4a39144b925e297d738ec518dcbc54a6bedac9296bafa035",
+      "note": "Data contract, regenerated from the Conclave roster (CL-3 method_family); Conclave ECHO_REGISTRY row (CL-56)."
+    },
+    {
+      "name": "ObsidianRequest/1",
+      "home": "obsidian",
+      "path": "src/obsidian/contracts/obsidian_request.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "sha256": "f9ca3376ee2db4e44f17e7687f153af7a4346b95ec4fb27fbda345c1d3b6c91f"
+    },
+    {
+      "name": "ObsidianResult/1",
+      "home": "obsidian",
+      "path": "src/obsidian/contracts/obsidian_result.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "sha256": "f4d5fe0944260bef054740e515c80fad73c343b41f6d19139221be8b499dd9e1"
+    },
+    {
+      "name": "ObsidianSidecar/1",
+      "home": "obsidian",
+      "path": "src/obsidian/contracts/obsidian_sidecar.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "sha256": "d9107d39740aed6326afcc8ec3efde74627cfe2cd23eb0ca6d4d650a814ebbb7"
+    },
+    {
+      "name": "VaultEntry/1",
+      "home": "obsidian",
+      "path": "src/obsidian/contracts/vault_entry.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "sha256": "986ac0eef4754709dd1812386c38fffff28aaeab9658513a189be89c2679d452"
+    },
+    {
+      "name": "ShareRecord/1",
+      "home": "obsidian",
+      "path": "src/obsidian/contracts/share_record.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "sha256": "a3f8b436b56dffd6a22d83cc8cd9c705f9468b0fb369c37deb7ad5776ae6f364"
+    },
+    {
+      "name": "KBInput/1",
+      "home": "sequoia",
+      "path": "sequoia/integration/contracts/kb_input.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": null,
+      "note": "Inbound edge (SPEC_KB_INPUT). Documents carry no contract field; the identifying field is kb_input_version. Deliberately open (parse_kb_input ignores unknown keys); four validator rules are not expressible in JSON Schema (Sequoia CONTRACTS.md).",
+      "sha256": "c32d6c3b6ffcc67c087c4c4746f03f1146f3d54ad947010ac79f6c2e3e6d26d9"
+    },
+    {
+      "name": "ApexAuditRecord/1",
+      "home": "sequoia",
+      "path": "sequoia/integration/contracts/apex_audit_record.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": null,
+      "note": "Outbound edge (SPEC_INTEGRATION §3, SPEC_REPLAY §5). Documents carry no contract field; identifying field audit_schema_version (const 0.1.0).",
+      "sha256": "400074ba400ee034d055bbb6242aa0d5f47f443b22e3874daf5d15b7795a8f27"
+    }
+  ],
+  "tool_enums": [
+    {
+      "contract": "RulingRecord/1",
+      "pointer": "/properties/tool/enum",
+      "expect": "roster"
+    },
+    {
+      "contract": "RulingRetraction/1",
+      "pointer": "/properties/tool/enum",
+      "expect": "roster"
+    },
+    {
+      "contract": "ObsidianRequest/1",
+      "pointer": "/$defs/tool/enum",
+      "expect": "roster"
+    },
+    {
+      "contract": "VaultEntry/1",
+      "pointer": "/$defs/tool/enum",
+      "expect": "roster"
+    },
+    {
+      "contract": "PatternPack/1",
+      "pointer": "/properties/consumer/enum",
+      "expect": [
+        "conclave",
+        "sequoia",
+        "verity",
+        "affine",
+        "apex_hub",
+        "obsidian"
+      ],
+      "why": "Locutus produces Pattern Packs; it is never their consumer."
+    },
+    {
+      "contract": "QueryRequest/1",
+      "pointer": "/properties/target_tool/enum",
+      "expect": [
+        "conclave",
+        "sequoia",
+        "verity",
+        "affine",
+        "obsidian"
+      ],
+      "why": "A query asks about the patterns for a tool that rules on items; the hub only displays and Locutus is the one answering."
+    },
+    {
+      "contract": "ForgeRequest/1",
+      "pointer": "/$defs/request/properties/requester/enum",
+      "expect": [
+        "conclave",
+        "sequoia",
+        "verity",
+        "affine",
+        "apex_hub",
+        "locutus"
+      ],
+      "why": "As built at Locutus f0a5d42 Obsidian is not a Forge requester. Open question for the next Locutus change: Obsidian's leak tests could use Forge material; add it there and here together."
+    }
+  ],
+  "mirrors": [
+    {
+      "home": "locutus",
+      "in": "conclave",
+      "root": "conclave_vendor_locutus",
+      "manifest": "VENDORED_FROM.json"
+    },
+    {
+      "home": "obsidian",
+      "in": "conclave",
+      "root": "conclave_vendor_obsidian",
+      "manifest": "VENDORED_FROM.json"
+    }
+  ],
+  "replicas": [
+    {
+      "contract": "RulingRecord/1",
+      "in": "obsidian",
+      "path": "tests/fixtures/locutus/ruling_record.v1.schema.json",
+      "why": "Obsidian emits RulingRecord/1 and must not import Locutus at run time, so its tests validate against this pinned replica (tests/fixtures/locutus/PIN.json)."
+    }
+  ]
+}

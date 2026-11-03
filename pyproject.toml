@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atrium-check"
+version = "0.1.0"
+description = "Checks the Atrium contract registry against the APEX member repos."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pytest-cov>=5"]
+
+[project.scripts]
+atrium-check = "atrium_check.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+branch = true
+source = ["atrium_check"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
