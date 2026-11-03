@@ -166,6 +166,8 @@ Verified against code: the UI emits only when `self.locutus` is set (`src/obsidi
 
 ## Atrium-side gaps (this repo)
 
+**Status in Atrium PR #2:** A1 fixed (all 14 Locutus and Obsidian contracts are pinned in `registry/contracts.v1.json`; Sequoia and the Conclave KB master are still to come). A2 and A3 fixed by README, CHARTER v0.2 and GLOSSARY v0.2. A4 fixed: `atrium_check` compares Conclave's vendored copies and Obsidian's RulingRecord replica with the registry. Its first run found the Obsidian replica stale (pinned at Locutus `f706080`, before the additive `decision.k3.third` field); an Obsidian re-pin PR follows.
+
 - **A1. Registry incomplete.** `CONTRACTS_REGISTRY.md` lists only Obsidian. Locutus (6 contracts), Sequoia (2, in flight), and Conclave's KB master are missing.
 - **A2. Principle lists disagree.** `README.md:13` names Reversibility and Plan/Apply as Principles 1 and 3; `CONSTITUTION.md` Article II names MORTAL SIN and Citation Chain instead. `CHARTER.md:50` says "Six Aims" while the Constitution has Ten. One source should own the list.
 - **A3. Charter lacks the suite rules.** `CHARTER.md` states standalone-first but not replayable, every-input-generalizes, 100%-or-defer, Atrium contract ownership, or SEC-2. BLUEPRINT (line ~257) already says the Charter needs SEC-2 and §2a added.

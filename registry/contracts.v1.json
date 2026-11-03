@@ -233,5 +233,13 @@
       "root": "conclave_vendor_obsidian",
       "manifest": "VENDORED_FROM.json"
     }
+  ],
+  "replicas": [
+    {
+      "contract": "RulingRecord/1",
+      "in": "obsidian",
+      "path": "tests/fixtures/locutus/ruling_record.v1.schema.json",
+      "why": "Obsidian emits RulingRecord/1 and must not import Locutus at run time, so its tests validate against this pinned replica (tests/fixtures/locutus/PIN.json)."
+    }
   ]
 }

@@ -387,3 +387,43 @@ def test_report_json_and_finding_line(suite):
     assert data["findings"][0]["code"] == "FILE_MISSING"
     line = Finding("error", "FILE_MISSING", "Req/2", "gone").line()
     assert line.startswith("ERROR FILE_MISSING") and line.endswith("Req/2: gone")
+
+
+# ----------------------------------------------------------------- single-file replicas
+
+
+def _with_replica(reg, root):
+    target = root / "beta/fixtures/rec.v1.schema.json"
+    target.parent.mkdir(parents=True)
+    target.write_bytes((root / "Alpha/contracts/rec.v1.schema.json").read_bytes())
+    reg["replicas"] = [{"contract": "Rec/1", "in": "beta", "path": "fixtures/rec.v1.schema.json"}]
+    return target
+
+
+def test_replica_identical_is_quiet(suite):
+    reg, _, root = suite
+    _with_replica(reg, root)
+    r = run(reg, root)
+    assert r.findings == [] and r.mirror_files_compared == 3
+    assert run(reg, root, only=["alpha"]).mirror_files_compared == 0
+
+
+def test_replica_stale_and_missing(suite):
+    reg, _, root = suite
+    target = _with_replica(reg, root)
+    target.write_text("{}", encoding="utf-8")
+    r = run(reg, root)
+    assert codes(r) == ["REPLICA_STALE"] and r.passed
+    assert not run(reg, root, strict=True).passed
+    target.unlink()
+    assert codes(run(reg, root)) == ["REPLICA_MISSING"]
+
+
+def test_validate_registry_replicas(suite):
+    reg, _, _ = suite
+    reg["replicas"] = {}
+    assert validate_registry(reg) == ["replicas: must be a list"]
+    reg["replicas"] = ["x", {"contract": "Nope/1", "in": "zeta", "path": ""}]
+    problems = validate_registry(reg)
+    for needle in ["replicas[0]: must be an object", "replicas[1].contract", "replicas[1].in", "replicas[1].path"]:
+        assert any(needle in p for p in problems), needle

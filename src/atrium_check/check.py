@@ -220,6 +220,15 @@ def validate_registry(reg: Any) -> list[str]:
             _require(mi.get("in") in members, problems, f"{subj}.in: not a registered member")
             for key in ("root", "manifest"):
                 _require(isinstance(mi.get(key), str) and mi.get(key), problems, f"{subj}.{key}: required string")
+    replicas = reg.get("replicas", [])
+    if _require(isinstance(replicas, list), problems, "replicas: must be a list"):
+        for i, rp in enumerate(replicas):
+            subj = f"replicas[{i}]"
+            if not _require(isinstance(rp, dict), problems, f"{subj}: must be an object"):
+                continue
+            _require(rp.get("contract") in seen, problems, f"{subj}.contract: not a registered contract")
+            _require(rp.get("in") in members, problems, f"{subj}.in: not a registered member")
+            _require(isinstance(rp.get("path"), str) and rp.get("path"), problems, f"{subj}.path: required string")
     return problems
 
 
@@ -326,7 +335,30 @@ def check(
     for mi in reg.get("mirrors", []):
         if mi["in"] in examined:
             _check_mirror(report, reg, mi, checkouts[mi["in"]])
+
+    by_name = {c["name"]: c for c in reg["contracts"]}
+    for rp in reg.get("replicas", []):
+        if rp["in"] in examined:
+            _check_replica(report, by_name[rp["contract"]], rp, checkouts[rp["in"]])
     return report
+
+
+def _check_replica(report: Report, c: Mapping[str, Any], rp: Mapping[str, Any], root: Path) -> None:
+    """A single-file copy of a contract kept by another member (for example a test fixture)."""
+    subj = f"{rp['in']}:{rp['path']}"
+    f = root / rp["path"]
+    if not f.is_file():
+        report.add("warn", "REPLICA_MISSING", subj, f"replica of {c['name']} does not exist")
+        return
+    report.mirror_files_compared += 1
+    actual = sha256_file(f)
+    if actual != c["sha256"]:
+        report.add(
+            "warn",
+            "REPLICA_STALE",
+            subj,
+            f"{c['name']}: replica sha256 {actual[:12]} != registry {c['sha256'][:12]} (re-pin the replica)",
+        )
 
 
 def _check_contract(report: Report, c: Mapping[str, Any], root: Path) -> Any:

@@ -41,6 +41,10 @@ Any other value, or any drift from these sets, fails the check.
 
 Conclave vendors Locutus (`conclave_vendor_locutus/`) and part of Obsidian (`conclave_vendor_obsidian/`). The check compares every vendored contract file with the registered bytes. A difference is a warning (re-vendor), and an error under `--strict`. A mirror pinned at an older commit whose contract files are all identical is a note only.
 
+## Single-file replicas
+
+A member that must not import another member at run time may keep a pinned copy of one contract file for its tests. Obsidian keeps `tests/fixtures/locutus/ruling_record.v1.schema.json` (pin in `tests/fixtures/locutus/PIN.json`). The check compares each replica with the registered bytes; a difference is a warning (`REPLICA_STALE`), an error under `--strict`.
+
 ## Changing a contract
 
 1. A v1 change is additive only, logged with a date in the home repo's change log (`docs/CONTRACT_CHANGES.md` in Locutus, `CONTRACTS.md` in Obsidian).
