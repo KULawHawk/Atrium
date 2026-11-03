@@ -128,7 +128,7 @@
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
       "const_value": "conclave.tag_proposal.v1",
-      "note": "W-7 manual-tag sibling contract (Locutus fd931cb). Declares the pre-suite name 'conclave.tag_proposal.v1'; a Locutus follow-up can move it to the suite form as #25 did for PhrasingRuling/1.",
+      "note": "W-7 manual-tag proposal sibling contract (Locutus fd931cb). The dotted name 'conclave.tag_proposal.v1' is deliberate: under W-7 design §3.5 the record is owned by Conclave and emitted by the Workbench, so it keeps the Conclave form. Any move to the suite form is a W-7 decision, not a registry follow-up.",
       "sha256": "c4fc65e88f57202b17d7498d86e6d3d3fa7b6ddee13738371e9b30985a114dfe"
     },
     {
@@ -138,7 +138,7 @@
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
       "const_value": "conclave.tag_ruling.v1",
-      "note": "W-7 manual-tag sibling contract (Locutus fd931cb). Declares the pre-suite name 'conclave.tag_ruling.v1'; a Locutus follow-up can move it to the suite form as #25 did for PhrasingRuling/1.",
+      "note": "W-7 manual-tag ruling sibling contract (Locutus fd931cb). The dotted name 'conclave.tag_ruling.v1' is deliberate: under W-7 design §3.5 the record is owned by Conclave and emitted by the Workbench, so it keeps the Conclave form. Any move to the suite form is a W-7 decision, not a registry follow-up.",
       "sha256": "b57457f6790325161c372ccde36aa9c362fc92c905719742ef5817ef689d14f4"
     },
     {
