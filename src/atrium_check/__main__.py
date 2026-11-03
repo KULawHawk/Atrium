@@ -43,7 +43,7 @@ def _parse_overrides(items: list[str]) -> dict[str, Path]:
 def _git_head(path: Path) -> str | None:
     try:
         out = subprocess.run(
-            ["git", "-C", str(path), "rev-parse", "--short=7", "HEAD"],
+            ["git", "-C", str(path), "rev-parse", "HEAD"],
             capture_output=True,
             text=True,
             check=True,
@@ -65,6 +65,11 @@ def build_parser() -> argparse.ArgumentParser:
             s.add_argument("--only", action="append", default=None, metavar="MEMBER", help="limit the run (reported as NOT_EXAMINED)")
             s.add_argument("--strict", action="store_true", help="warnings fail the run")
             s.add_argument("--json", action="store_true", help="print the report as JSON")
+            s.add_argument(
+                "--allow-unpinned-head",
+                action="store_true",
+                help="a checkout not at pinned_commit is a warning, not an error (feature-branch runs)",
+            )
         else:
             s.add_argument("--apply", action="store_true", help="write the planned pins (default: print the plan only)")
     return p
@@ -81,7 +86,10 @@ def main(argv: list[str] | None = None) -> int:
     checkouts = resolve_checkouts(reg, args.repos_root, overrides)
 
     if args.command == "check":
-        report = check(reg, checkouts, only=args.only, strict=args.strict)
+        heads = {m: _git_head(p) for m, p in checkouts.items()}
+        report = check(
+            reg, checkouts, only=args.only, strict=args.strict, heads=heads, allow_unpinned_head=args.allow_unpinned_head
+        )
         if args.json:
             print(json.dumps(report.to_json(), indent=2))
         else:
@@ -93,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
     changes = plan_repin(reg, checkouts)
     commits = {}
     for member, path in sorted(checkouts.items()):
-        head = _git_head(path)
+        head = (_git_head(path) or "")[:7]
         if head and head != reg["members"][member]["pinned_commit"]:
             commits[member] = head
     for name, old, new in changes:

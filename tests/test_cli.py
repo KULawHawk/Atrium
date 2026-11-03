@@ -10,6 +10,28 @@ import pytest
 from atrium_check import __main__ as cli
 from atrium_check.check import load_registry
 
+REAL_GIT_HEAD = cli._git_head
+PINS = {"Alpha": "aaaaaaa", "beta": "bbbbbbb"}  # the fixture suite's pinned commits, by checkout folder
+
+
+@pytest.fixture(autouse=True)
+def heads_at_pins(monkeypatch):
+    """The fake suite's folders are not git checkouts; report them at their pins."""
+    monkeypatch.setattr(cli, "_git_head", lambda p: PINS.get(p.name))
+
+
+def test_check_head_not_pinned(suite, capsys, monkeypatch):
+    _, path, root = suite
+    monkeypatch.setattr(cli, "_git_head", lambda p: {"Alpha": "aaaaaaa", "beta": "eeeeeee"}[p.name])
+    base = ["check", "--registry", str(path), "--repos-root", str(root)]
+    assert cli.main(base) == 1
+    assert "HEAD_NOT_PINNED" in capsys.readouterr().out
+    assert cli.main(base + ["--allow-unpinned-head"]) == 0
+    assert "WARN  HEAD_NOT_PINNED" in capsys.readouterr().out
+    monkeypatch.setattr(cli, "_git_head", lambda p: None)
+    assert cli.main(base) == 0
+    assert "HEAD_UNKNOWN" in capsys.readouterr().out
+
 
 def test_check_pass_text(suite, capsys):
     _, path, root = suite
@@ -71,16 +93,16 @@ def test_repin_unusable_registry(tmp_path, capsys):
 
 
 def test_git_head(tmp_path):
-    assert cli._git_head(tmp_path / "missing") is None
+    assert REAL_GIT_HEAD(tmp_path / "missing") is None
     repo = tmp_path / "r"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
-    assert cli._git_head(repo) is None  # no commit yet
+    assert REAL_GIT_HEAD(repo) is None  # no commit yet
     subprocess.run(
         ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x"],
         check=True,
     )
-    head = cli._git_head(repo)
+    head = REAL_GIT_HEAD(repo)
     assert head is not None and len(head) >= 7
 
 
@@ -89,7 +111,7 @@ def test_git_missing_binary(monkeypatch):
         raise OSError("no git")
 
     monkeypatch.setattr(cli.subprocess, "run", boom)
-    assert cli._git_head(cli.DEFAULT_REGISTRY.parent) is None
+    assert REAL_GIT_HEAD(cli.DEFAULT_REGISTRY.parent) is None
 
 
 def test_git_empty_output(monkeypatch):
@@ -97,7 +119,7 @@ def test_git_empty_output(monkeypatch):
         stdout = "\n"
 
     monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: R())
-    assert cli._git_head(cli.DEFAULT_REGISTRY.parent) is None
+    assert REAL_GIT_HEAD(cli.DEFAULT_REGISTRY.parent) is None
 
 
 def test_default_registry_is_the_committed_one():

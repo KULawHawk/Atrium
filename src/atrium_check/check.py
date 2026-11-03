@@ -21,6 +21,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+try:  # Python 3.11+
+    from re import _parser as _re_parser
+except ImportError:  # pragma: no cover - older interpreters
+    import sre_parse as _re_parser  # type: ignore[no-redef]
+
 REGISTRY_CONTRACT = "AtriumContractRegistry/1"
 SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 ID_PREFIX = "https://apex-suite/"
@@ -125,18 +130,77 @@ def resolve_pointer(doc: Any, pointer: str) -> Any:
     return node
 
 
-def unbounded_anchored_patterns(doc: Any, path: str = "") -> list[str]:
-    """JSON pointers of string schemas whose ``pattern`` ends in ``$`` and that set no ``maxLength``.
+def _anchor_positions(pat: str) -> list[int]:
+    """Indices of each ``$`` in ``pat`` that is an end anchor (not escaped, not inside ``[...]``)."""
+    out: list[int] = []
+    i, in_class = 0, False
+    while i < len(pat):
+        ch = pat[i]
+        if ch == "\\":
+            i += 2
+            continue
+        if in_class:
+            in_class = ch != "]"
+        elif ch == "[":
+            in_class = True
+            if pat[i + 1 : i + 2] == "]":  # a leading ']' is a literal
+                i += 1
+        elif ch == "$":
+            out.append(i)
+        i += 1
+    return out
+
+
+NEWLINE_GUARDS = ("(?!\\n)", "(?![\\s\\S])")
+
+
+def _widths(pat: str) -> tuple[int, int] | None:
+    try:
+        lo, hi = _re_parser.parse(pat).getwidth()
+    except Exception:  # noqa: BLE001 - any parse failure means "cannot prove bounded"
+        return None
+    return lo, hi
+
+
+def newline_leak(node: Mapping[str, Any]) -> str | None:
+    """Why ``node`` (a schema with a string ``pattern``) accepts ``value + "\\n"``, or None.
 
     Python's ``jsonschema`` applies ``pattern`` with ``re.search``, where ``$`` also
     matches just before a final newline, so ``"<64 hex>\\n"`` passes ``^[0-9a-f]{64}$``.
-    A ``maxLength`` closes that gap (Locutus #22 does this for its sha256 fields).
+    The gap is closed only when either
+
+    * every ``$`` anchor is followed by a guard such as ``(?!\\n)``, or
+    * ``maxLength`` is at most the pattern's minimum match width, so the extra
+      character always overflows. A ``maxLength`` above that (for example 128 on a
+      variable-width ``^[a-z_]+$``) does not close it.
     """
-    found: list[str] = []
+    pat = node["pattern"]
+    anchors = _anchor_positions(pat)
+    if not anchors:
+        return None
+    if all(pat.startswith(NEWLINE_GUARDS, a + 1) for a in anchors):
+        return None
+    ml = node.get("maxLength")
+    widths = _widths(pat)
+    if widths is None:
+        return "pattern does not parse, so its width cannot be bounded; add a (?!\\n) guard after '$'"
+    lo, hi = widths
+    if isinstance(ml, int) and not isinstance(ml, bool) and ml <= lo:
+        return None
+    fix = f"add maxLength {lo}" if lo == hi else "add a (?!\\n) guard after '$'"
+    if ml is None:
+        return f"no maxLength; {fix}"
+    return f"maxLength {ml} exceeds the minimum match width {lo}, so a shorter value plus newline still fits; {fix}"
+
+
+def unbounded_anchored_patterns(doc: Any, path: str = "") -> list[tuple[str, str]]:
+    """(JSON pointer, reason) for every string schema whose ``pattern`` accepts a trailing newline."""
+    found: list[tuple[str, str]] = []
     if isinstance(doc, dict):
-        pat = doc.get("pattern")
-        if isinstance(pat, str) and pat.endswith("$") and not pat.endswith("\\$") and "maxLength" not in doc:
-            found.append(path or "/")
+        if isinstance(doc.get("pattern"), str):
+            why = newline_leak(doc)
+            if why is not None:
+                found.append((path or "/", why))
         for k, v in doc.items():
             found.extend(unbounded_anchored_patterns(v, f"{path}/{k}"))
     elif isinstance(doc, list):
@@ -316,8 +380,18 @@ def check(
     *,
     only: Iterable[str] | None = None,
     strict: bool = False,
+    heads: Mapping[str, str | None] | None = None,
+    allow_unpinned_head: bool = False,
 ) -> Report:
-    """Compare the registry with the member checkouts and return a :class:`Report`."""
+    """Compare the registry with the member checkouts and return a :class:`Report`.
+
+    ``heads`` maps a member to the commit its checkout has checked out (None when it
+    is not a git checkout). When given, a checkout whose HEAD is not the member's
+    ``pinned_commit`` is an error (``HEAD_NOT_PINNED``), so a run cannot silently
+    check the wrong commit; ``allow_unpinned_head`` lowers it to a warning for
+    deliberate runs against a feature branch. Without ``heads`` the run says so
+    (``HEAD_NOT_CHECKED``).
+    """
     report = Report(strict=strict)
     members = reg["members"]
     scope = set(only) if only is not None else set(members)
@@ -335,6 +409,7 @@ def check(
             report.members_examined.append(name)
 
     examined = set(report.members_examined)
+    _check_heads(report, members, sorted(examined), heads, allow_unpinned_head)
     docs: dict[str, Any] = {}
     registered_paths: dict[str, set[str]] = {m: set() for m in members}
 
@@ -363,6 +438,31 @@ def check(
         if rp["in"] in examined:
             _check_replica(report, by_name[rp["contract"]], rp, checkouts[rp["in"]])
     return report
+
+
+def _check_heads(
+    report: Report,
+    members: Mapping[str, Any],
+    examined: list[str],
+    heads: Mapping[str, str | None] | None,
+    allow_unpinned_head: bool,
+) -> None:
+    if heads is None:
+        if examined:
+            report.add("note", "HEAD_NOT_CHECKED", ",".join(examined), "checkout commits were not compared with pinned_commit")
+        return
+    for name in examined:
+        pin = members[name]["pinned_commit"]
+        head = heads.get(name)
+        if head is None:
+            report.add("warn", "HEAD_UNKNOWN", name, f"not a git checkout; cannot confirm it is at pinned_commit {pin}")
+        elif not (head.startswith(pin) or pin.startswith(head)):
+            report.add(
+                "warn" if allow_unpinned_head else "error",
+                "HEAD_NOT_PINNED",
+                name,
+                f"checkout is at {head[:12]}, registry pins {pin}; check out the pin, or `repin` if the member moved",
+            )
 
 
 def _check_replica(report: Report, c: Mapping[str, Any], rp: Mapping[str, Any], root: Path) -> None:
@@ -427,13 +527,12 @@ def _check_contract(report: Report, c: Mapping[str, Any], root: Path) -> Any:
         expected_id = f"{ID_PREFIX}{c['home']}/contracts/{Path(c['path']).name}"
         if doc.get("$id") != expected_id:
             report.add("error", "ID_MISMATCH", name, f"$id is {doc.get('$id')!r}, expected {expected_id!r}")
-        for where in unbounded_anchored_patterns(doc):
+        for where, why in unbounded_anchored_patterns(doc):
             report.add(
                 "warn",
                 "PATTERN_UNBOUNDED",
                 name,
-                f"{where}: a '$'-anchored pattern with no maxLength also accepts a trailing newline "
-                "under Python's jsonschema (re.search); add maxLength",
+                f"{where}: accepts a trailing newline under Python's jsonschema (re.search): {why}",
             )
         _, version = _split_name(name)  # type: ignore[misc]
         if f".v{version}." not in Path(c["path"]).name:
