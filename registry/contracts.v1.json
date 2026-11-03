@@ -22,7 +22,7 @@
     "locutus": {
       "repo": "KULawHawk/Locutus",
       "dir": "Locutus",
-      "pinned_commit": "06df8ca",
+      "pinned_commit": "34106ee",
       "contract_dirs": [
         "src/locutus/contracts"
       ]
@@ -119,7 +119,7 @@
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
       "note": "W-8 phrasing lexicon ruling (Locutus #21); contract name moved to the suite form in Locutus #25.",
-      "sha256": "42fbc32497702bf6fe13cf01581116e47970259de9bb6fb0b9880bfa4a0f4c78"
+      "sha256": "13339136e68eb4900a2aea6e8d1a701419f299b21c953672b3504f420defc8f2"
     },
     {
       "name": "EngineFamilies/1",

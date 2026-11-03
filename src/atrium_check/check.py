@@ -151,7 +151,8 @@ def _anchor_positions(pat: str) -> list[int]:
     return out
 
 
-NEWLINE_GUARDS = ("(?!\\n)", "(?![\\s\\S])")
+NEWLINE_GUARDS = ("(?!\\n)", "(?![\\s\\S])")  # straight after a '$'
+LEADING_GUARDS = ("^(?!.*\\n)", "^(?![\\s\\S]*\\n)")  # at the very start: no newline anywhere
 
 
 def _widths(pat: str) -> tuple[int, int] | None:
@@ -169,7 +170,8 @@ def newline_leak(node: Mapping[str, Any]) -> str | None:
     matches just before a final newline, so ``"<64 hex>\\n"`` passes ``^[0-9a-f]{64}$``.
     The gap is closed only when either
 
-    * every ``$`` anchor is followed by a guard such as ``(?!\\n)``, or
+    * every ``$`` anchor is followed by a guard such as ``(?!\\n)``, or the pattern
+      opens with ``^(?!.*\\n)`` (Locutus #25's form), or
     * ``maxLength`` is at most the pattern's minimum match width, so the extra
       character always overflows. A ``maxLength`` above that (for example 128 on a
       variable-width ``^[a-z_]+$``) does not close it.
@@ -178,7 +180,7 @@ def newline_leak(node: Mapping[str, Any]) -> str | None:
     anchors = _anchor_positions(pat)
     if not anchors:
         return None
-    if all(pat.startswith(NEWLINE_GUARDS, a + 1) for a in anchors):
+    if pat.startswith(LEADING_GUARDS) or all(pat.startswith(NEWLINE_GUARDS, a + 1) for a in anchors):
         return None
     ml = node.get("maxLength")
     widths = _widths(pat)

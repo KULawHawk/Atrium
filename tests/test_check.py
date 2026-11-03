@@ -459,6 +459,8 @@ def test_unbounded_anchored_patterns():
         ({"pattern": "^case_[0-9a-f]{12,32}$", "maxLength": 37}, True, "(?!\\n) guard"),
         ({"pattern": "^[a-z]+$(?!\\n)"}, False, None),
         ({"pattern": "^[a-z]+$(?![\\s\\S])"}, False, None),
+        ({"pattern": "^(?!.*\\n)[a-z_]+\\.[a-z_]+$", "maxLength": 128}, False, None),  # Locutus #25 form
+        ({"pattern": "^(?![\\s\\S]*\\n)[a-z]+$"}, False, None),
         ({"pattern": "^(a$(?!\\n)|b$)"}, True, "no maxLength"),  # one unguarded anchor is enough
         ({"pattern": "^(?:a$|b$)"}, True, "add maxLength 1"),  # anchors not at the end are found
         ({"pattern": "^[$]x"}, False, None),  # '$' inside a class is a literal
@@ -485,6 +487,7 @@ def test_newline_leak_agrees_with_jsonschema_where_available():
     cases = [
         ({"pattern": "^[a-z_]+\\.[a-z_]+$", "maxLength": 128}, "ab.cd"),
         ({"pattern": "^[a-z]+$(?!\\n)"}, "abc"),
+        ({"pattern": "^(?!.*\\n)[a-z_]+\\.[a-z_]+$", "maxLength": 128}, "ab.cd"),
         ({"pattern": "^[0-9a-f]{4}$", "maxLength": 4}, "beef"),
     ]
     for node, good in cases:

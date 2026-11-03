@@ -16,7 +16,7 @@ The machine-readable registry is [`registry/contracts.v1.json`](registry/contrac
 | `ForgeRequest/1` | Locutus | `src/locutus/contracts/forge.v1.schema.json` | Shares one file with ForgeOutput/1. |
 | `ForgeOutput/1` | Locutus | `src/locutus/contracts/forge.v1.schema.json` | Every item is partition SYNTHETIC. |
 | `ShapeCheckScope/1` | Locutus | `src/locutus/contracts/shape_check_scope.v1.schema.json` | Scope of a PatternPack artefact of kind `shape_check`; no `contract` field of its own. |
-| `PhrasingRuling/1` | Locutus | `src/locutus/contracts/phrasing_ruling.v1.schema.json` | W-8 lexicon ruling. Suite contract name since Locutus #25; `ruling_id`, `lex_id` and `merged_into` carry `maxLength`. |
+| `PhrasingRuling/1` | Locutus | `src/locutus/contracts/phrasing_ruling.v1.schema.json` | W-8 lexicon ruling. Suite contract name since Locutus #25; `ruling_id` is fixed-width with `maxLength`, `lex_id` and `merged_into` open with a `^(?!.*\n)` guard. |
 | `EngineFamilies/1` | Locutus | `src/locutus/contracts/engine_families.v1.json` | Data contract from the Conclave roster (CL-3 method_family). |
 | `ObsidianRequest/1` | Obsidian | `src/obsidian/contracts/obsidian_request.v1.schema.json` | De-identification request (6.19). |
 | `ObsidianResult/1` | Obsidian | `src/obsidian/contracts/obsidian_result.v1.schema.json` | |
@@ -53,7 +53,7 @@ A member that must not import another member at run time may keep a pinned copy 
 Python's `jsonschema` applies `pattern` with `re.search`, where `$` also matches just before a final newline, so `"<64 hex>\n"` passes `^[0-9a-f]{64}$`. The check reports `PATTERN_UNBOUNDED` (a warning; an error under `--strict`) for every pattern with a `$` anchor that still accepts a trailing newline. A pattern is closed in one of two ways:
 
 - **Fixed width:** `maxLength` at most the pattern's minimum match width (for example 64 on `^[0-9a-f]{64}$`). The extra newline always overflows.
-- **Variable width:** a guard after every `$`, such as `^[a-z_]+$(?!\n)`. A `maxLength` alone does not close a variable-width pattern: 128 on `^[a-z_]+\.[a-z_]+$` still lets `"ab.cd\n"` through. In ECMA-262, where `$` only matches at the very end, the guard never changes the result.
+- **Variable width:** a guard after every `$`, such as `^[a-z_]+$(?!\n)`, or a leading `^(?!.*\n)` that refuses a newline anywhere (Locutus #25's form). A `maxLength` alone does not close a variable-width pattern: 128 on `^[a-z_]+\.[a-z_]+$` still lets `"ab.cd\n"` through. In ECMA-262, where `$` only matches at the very end, the guard never changes the result.
 
 The check finds anchors anywhere in the pattern (inside alternations too), and skips escaped `\$` and `$` inside `[...]`. It measures width with the stdlib regex parser. A pattern it cannot parse is reported, never passed.
 
