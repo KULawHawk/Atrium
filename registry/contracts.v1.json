@@ -22,7 +22,7 @@
     "locutus": {
       "repo": "KULawHawk/Locutus",
       "dir": "Locutus",
-      "pinned_commit": "5d564a8",
+      "pinned_commit": "06df8ca",
       "contract_dirs": [
         "src/locutus/contracts"
       ]
@@ -118,9 +118,8 @@
       "path": "src/locutus/contracts/phrasing_ruling.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "const_value": "locutus.phrasing_ruling.v1",
-      "note": "W-8 phrasing lexicon ruling (Locutus #21). Its contract const uses the dotted form 'locutus.phrasing_ruling.v1', not the suite 'Name/N' form; open question for the next Locutus contract change.",
-      "sha256": "7b4dcf46a36a69f9b4ad7faa9d1efd2e21e2c7036a2ebdb94d49f3b13456af28"
+      "note": "W-8 phrasing lexicon ruling (Locutus #21); contract name moved to the suite form in Locutus #25.",
+      "sha256": "42fbc32497702bf6fe13cf01581116e47970259de9bb6fb0b9880bfa4a0f4c78"
     },
     {
       "name": "EngineFamilies/1",

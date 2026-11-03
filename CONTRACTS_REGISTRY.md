@@ -16,7 +16,7 @@ The machine-readable registry is [`registry/contracts.v1.json`](registry/contrac
 | `ForgeRequest/1` | Locutus | `src/locutus/contracts/forge.v1.schema.json` | Shares one file with ForgeOutput/1. |
 | `ForgeOutput/1` | Locutus | `src/locutus/contracts/forge.v1.schema.json` | Every item is partition SYNTHETIC. |
 | `ShapeCheckScope/1` | Locutus | `src/locutus/contracts/shape_check_scope.v1.schema.json` | Scope of a PatternPack artefact of kind `shape_check`; no `contract` field of its own. |
-| `PhrasingRuling/1` | Locutus | `src/locutus/contracts/phrasing_ruling.v1.schema.json` | W-8 lexicon ruling. Declares `contract: locutus.phrasing_ruling.v1`, not the suite `Name/N` form (registry `const_value`; reported as a note). Open: `ruling_id` and `lex_id` patterns lack `maxLength`. |
+| `PhrasingRuling/1` | Locutus | `src/locutus/contracts/phrasing_ruling.v1.schema.json` | W-8 lexicon ruling. Suite contract name since Locutus #25; `ruling_id`, `lex_id` and `merged_into` carry `maxLength`. |
 | `EngineFamilies/1` | Locutus | `src/locutus/contracts/engine_families.v1.json` | Data contract from the Conclave roster (CL-3 method_family). |
 | `ObsidianRequest/1` | Obsidian | `src/obsidian/contracts/obsidian_request.v1.schema.json` | De-identification request (6.19). |
 | `ObsidianResult/1` | Obsidian | `src/obsidian/contracts/obsidian_result.v1.schema.json` | |
