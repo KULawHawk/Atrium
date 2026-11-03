@@ -28,6 +28,7 @@ def codes(report):
 
 
 def run(reg, root, **kw):
+    kw.setdefault("heads", {m: v["pinned_commit"] for m, v in reg["members"].items()})
     return check(reg, resolve_checkouts(reg, root), **kw)
 
 
@@ -63,7 +64,7 @@ def test_checkout_lookup_is_case_insensitive_and_overrides_win(suite, tmp_path):
 
 def test_missing_member_is_an_error_not_a_skip(suite):
     reg, _, root = suite
-    r = check(reg, {"alpha": root / "Alpha"})
+    r = check(reg, {"alpha": root / "Alpha"}, heads={"alpha": "aaaaaaa"})
     assert codes(r) == ["MEMBER_MISSING"]
     assert not r.passed
     assert r.members_skipped == ["beta"]
@@ -441,8 +442,58 @@ def test_unbounded_anchored_patterns():
         "c": {"type": "string", "pattern": "^x"},
         "d": [{"pattern": "price\\$"}, {"pattern": "^y$"}],
     }
-    assert unbounded_anchored_patterns(doc) == ["/a", "/d/1"]
-    assert unbounded_anchored_patterns({"pattern": "^z$"}) == ["/"]
+    assert [w for w, _ in unbounded_anchored_patterns(doc)] == ["/a", "/d/1"]
+    assert [w for w, _ in unbounded_anchored_patterns({"pattern": "^z$"})] == ["/"]
+
+
+@pytest.mark.parametrize(
+    ("node", "leaks", "hint"),
+    [
+        ({"pattern": "^[0-9a-f]{64}$", "maxLength": 64}, False, None),
+        ({"pattern": "^[0-9a-f]{64}$", "maxLength": 63}, False, None),
+        ({"pattern": "^[0-9a-f]{64}$"}, True, "add maxLength 64"),
+        ({"pattern": "^[0-9a-f]{64}$", "maxLength": 65}, True, "exceeds the minimum match width 64"),
+        ({"pattern": "^[0-9a-f]{64}$", "maxLength": True}, True, "add maxLength 64"),
+        # the blind spot: a maxLength above the minimum width does not close a variable-width pattern
+        ({"pattern": "^[a-z_]+\\.[a-z_]+$", "maxLength": 128}, True, "(?!\\n) guard"),
+        ({"pattern": "^case_[0-9a-f]{12,32}$", "maxLength": 37}, True, "(?!\\n) guard"),
+        ({"pattern": "^[a-z]+$(?!\\n)"}, False, None),
+        ({"pattern": "^[a-z]+$(?![\\s\\S])"}, False, None),
+        ({"pattern": "^(?!.*\\n)[a-z_]+\\.[a-z_]+$", "maxLength": 128}, False, None),  # Locutus #25 form
+        ({"pattern": "^(?![\\s\\S]*\\n)[a-z]+$"}, False, None),
+        ({"pattern": "^(a$(?!\\n)|b$)"}, True, "no maxLength"),  # one unguarded anchor is enough
+        ({"pattern": "^(?:a$|b$)"}, True, "add maxLength 1"),  # anchors not at the end are found
+        ({"pattern": "^[$]x"}, False, None),  # '$' inside a class is a literal
+        ({"pattern": "^[]$]x"}, False, None),  # leading ']' in a class is a literal
+        ({"pattern": "price\\$"}, False, None),  # escaped '$' is a literal
+        ({"pattern": "^a\\\\$"}, True, "add maxLength 2"),  # escaped backslash, then a real anchor
+        ({"pattern": "^($"}, True, "does not parse"),
+        ({"pattern": "^x"}, False, None),
+    ],
+)
+def test_newline_leak(node, leaks, hint):
+    from atrium_check.check import newline_leak
+
+    why = newline_leak(node)
+    assert (why is not None) == leaks
+    if hint:
+        assert hint in why
+
+
+def test_newline_leak_agrees_with_jsonschema_where_available():
+    js = pytest.importorskip("jsonschema")
+    from atrium_check.check import newline_leak
+
+    cases = [
+        ({"pattern": "^[a-z_]+\\.[a-z_]+$", "maxLength": 128}, "ab.cd"),
+        ({"pattern": "^[a-z]+$(?!\\n)"}, "abc"),
+        ({"pattern": "^(?!.*\\n)[a-z_]+\\.[a-z_]+$", "maxLength": 128}, "ab.cd"),
+        ({"pattern": "^[0-9a-f]{4}$", "maxLength": 4}, "beef"),
+    ]
+    for node, good in cases:
+        v = js.Draft202012Validator(node)
+        assert v.is_valid(good)
+        assert v.is_valid(good + "\n") == (newline_leak(node) is not None)
 
 
 def test_pattern_unbounded_is_a_warning(suite):
@@ -480,3 +531,32 @@ def test_validate_registry_const_value(suite):
         "contracts[0].const_value: a string, and only with a const_pointer",
         "contracts[1].const_value: a string, and only with a const_pointer",
     ]
+
+
+# ----------------------------------------------------------------- HEAD vs pinned_commit
+
+
+def test_head_not_pinned_is_an_error(suite):
+    reg, _, root = suite
+    heads = {"alpha": "aaaaaaa1234", "beta": "ccccccc"}
+    r = run(reg, root, heads=heads)
+    assert [(f.severity, f.code, f.subject) for f in r.findings] == [("error", "HEAD_NOT_PINNED", "beta")]
+    assert not r.passed
+    r = run(reg, root, heads=heads, allow_unpinned_head=True)
+    assert [(f.severity, f.code) for f in r.findings] == [("warn", "HEAD_NOT_PINNED")]
+    assert r.passed
+
+
+def test_head_unknown_and_short_heads(suite):
+    reg, _, root = suite
+    reg["members"]["alpha"]["pinned_commit"] = "aaaaaaa1234567"
+    r = run(reg, root, heads={"alpha": "aaaaaaa", "beta": None})
+    assert [(f.severity, f.code, f.subject) for f in r.findings] == [("warn", "HEAD_UNKNOWN", "beta")]
+
+
+def test_heads_omitted_is_reported(suite):
+    reg, _, root = suite
+    r = check(reg, resolve_checkouts(reg, root))
+    assert [(f.severity, f.code, f.subject) for f in r.findings] == [("note", "HEAD_NOT_CHECKED", "alpha,beta")]
+    r = check(reg, {}, only=[])
+    assert all(f.code != "HEAD_NOT_CHECKED" for f in r.findings)
