@@ -203,6 +203,8 @@ def validate_registry(reg: Any) -> list[str]:
         _require(c.get("kind") in KINDS, problems, f"{subj}.kind: must be one of {KINDS}")
         ptr = c.get("const_pointer")
         _require(ptr is None or isinstance(ptr, str), problems, f"{subj}.const_pointer: string or null")
+        cv = c.get("const_value")
+        _require(cv is None or (isinstance(cv, str) and cv and ptr is not None), problems, f"{subj}.const_value: a string, and only with a const_pointer")
         sha = c.get("sha256")
         _require(
             isinstance(sha, str) and len(sha) == 64 and all(ch in "0123456789abcdef" for ch in sha),
@@ -410,8 +412,11 @@ def _check_contract(report: Report, c: Mapping[str, Any], root: Path) -> Any:
         except KeyError:
             report.add("error", "CONST_MISSING", name, f"no value at {c['const_pointer']}")
         else:
-            if const != name:
-                report.add("error", "CONST_MISMATCH", name, f"file declares {const!r} at {c['const_pointer']}")
+            expected = c.get("const_value") or name
+            if const != expected:
+                report.add("error", "CONST_MISMATCH", name, f"file declares {const!r} at {c['const_pointer']}, expected {expected!r}")
+            elif expected != name:
+                report.add("note", "CONST_NONSTANDARD", name, f"declares {const!r}, not the suite form {name!r}")
 
     if c["kind"] == "json_schema":
         if not isinstance(doc, dict):
