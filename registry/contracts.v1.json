@@ -30,7 +30,7 @@
     "obsidian": {
       "repo": "KULawHawk/Obsidian",
       "dir": "Obsidian",
-      "pinned_commit": "d50b5c7",
+      "pinned_commit": "e33e4e5",
       "contract_dirs": [
         "src/obsidian/contracts"
       ]
@@ -38,8 +38,10 @@
     "sequoia": {
       "repo": "KULawHawk/Sequoia",
       "dir": "Sequoia",
-      "pinned_commit": "4dfdad9",
-      "contract_dirs": []
+      "pinned_commit": "bbf7f45",
+      "contract_dirs": [
+        "sequoia/integration/contracts"
+      ]
     }
   },
   "contracts": [
@@ -125,7 +127,7 @@
       "path": "src/obsidian/contracts/obsidian_request.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "sha256": "f07f097f29332d5cf7c4cb7d561c75751dd8c741469b5b367ff923396c243669"
+      "sha256": "f9ca3376ee2db4e44f17e7687f153af7a4346b95ec4fb27fbda345c1d3b6c91f"
     },
     {
       "name": "ObsidianResult/1",
@@ -133,7 +135,7 @@
       "path": "src/obsidian/contracts/obsidian_result.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "sha256": "cc054f6afae693cd5f8ec464add3862eb4f717de3ddd85883326ee16038b5050"
+      "sha256": "f4d5fe0944260bef054740e515c80fad73c343b41f6d19139221be8b499dd9e1"
     },
     {
       "name": "ObsidianSidecar/1",
@@ -141,7 +143,7 @@
       "path": "src/obsidian/contracts/obsidian_sidecar.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "sha256": "1df9e959393dc83fe9cfc4307f0a8de3ce236c4196176207fe473d1e63070433"
+      "sha256": "d9107d39740aed6326afcc8ec3efde74627cfe2cd23eb0ca6d4d650a814ebbb7"
     },
     {
       "name": "VaultEntry/1",
@@ -149,7 +151,7 @@
       "path": "src/obsidian/contracts/vault_entry.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "sha256": "b4a29119feef66fab63fb9c83d5ef0a90fc5494a646e7b36abf37a60e7c56a92"
+      "sha256": "986ac0eef4754709dd1812386c38fffff28aaeab9658513a189be89c2679d452"
     },
     {
       "name": "ShareRecord/1",
@@ -157,7 +159,25 @@
       "path": "src/obsidian/contracts/share_record.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "sha256": "df4e37e149cba8c9203127b426e239f209400c587de3e915fd97ba4cfc474cc2"
+      "sha256": "a3f8b436b56dffd6a22d83cc8cd9c705f9468b0fb369c37deb7ad5776ae6f364"
+    },
+    {
+      "name": "KBInput/1",
+      "home": "sequoia",
+      "path": "sequoia/integration/contracts/kb_input.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": null,
+      "note": "Inbound edge (SPEC_KB_INPUT). Documents carry no contract field; the identifying field is kb_input_version. Deliberately open (parse_kb_input ignores unknown keys); four validator rules are not expressible in JSON Schema (Sequoia CONTRACTS.md).",
+      "sha256": "c32d6c3b6ffcc67c087c4c4746f03f1146f3d54ad947010ac79f6c2e3e6d26d9"
+    },
+    {
+      "name": "ApexAuditRecord/1",
+      "home": "sequoia",
+      "path": "sequoia/integration/contracts/apex_audit_record.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": null,
+      "note": "Outbound edge (SPEC_INTEGRATION §3, SPEC_REPLAY §5). Documents carry no contract field; identifying field audit_schema_version (const 0.1.0).",
+      "sha256": "400074ba400ee034d055bbb6242aa0d5f47f443b22e3874daf5d15b7795a8f27"
     }
   ],
   "tool_enums": [

@@ -427,3 +427,29 @@ def test_validate_registry_replicas(suite):
     problems = validate_registry(reg)
     for needle in ["replicas[0]: must be an object", "replicas[1].contract", "replicas[1].in", "replicas[1].path"]:
         assert any(needle in p for p in problems), needle
+
+
+# ----------------------------------------------------------------- anchored patterns
+
+
+def test_unbounded_anchored_patterns():
+    from atrium_check.check import unbounded_anchored_patterns
+
+    doc = {
+        "a": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "b": {"type": "string", "pattern": "^[0-9a-f]{64}$", "maxLength": 64},
+        "c": {"type": "string", "pattern": "^x"},
+        "d": [{"pattern": "price\\$"}, {"pattern": "^y$"}],
+    }
+    assert unbounded_anchored_patterns(doc) == ["/a", "/d/1"]
+    assert unbounded_anchored_patterns({"pattern": "^z$"}) == ["/"]
+
+
+def test_pattern_unbounded_is_a_warning(suite):
+    reg, _, root = suite
+    reg["mirrors"] = []
+    _rewrite(reg, 0, root, "Alpha", lambda d: d["properties"].update(h={"type": "string", "pattern": "^[0-9a-f]{64}$"}))
+    r = run(reg, root)
+    assert [(f.severity, f.code) for f in r.findings] == [("warn", "PATTERN_UNBOUNDED")]
+    assert "/properties/h" in r.findings[0].message
+    assert r.passed and not run(reg, root, strict=True).passed

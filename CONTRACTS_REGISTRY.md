@@ -22,10 +22,12 @@ The machine-readable registry is [`registry/contracts.v1.json`](registry/contrac
 | `ObsidianSidecar/1` | Obsidian | `src/obsidian/contracts/obsidian_sidecar.v1.schema.json` | Holds no path, name or value. |
 | `VaultEntry/1` | Obsidian | `src/obsidian/contracts/vault_entry.v1.schema.json` | Lives only inside the KDBX 4 vault. |
 | `ShareRecord/1` | Obsidian | `src/obsidian/contracts/share_record.v1.schema.json` | The SEC-8 share log; vault only. |
+| `KBInput/1` | Sequoia | `sequoia/integration/contracts/kb_input.v1.schema.json` | Inbound edge. No `contract` field (identifying field `kb_input_version`); deliberately open, four rules only the validator checks (Sequoia `CONTRACTS.md`). |
+| `ApexAuditRecord/1` | Sequoia | `sequoia/integration/contracts/apex_audit_record.v1.schema.json` | Outbound edge to APEX Layers 5/6. No `contract` field (identifying field `audit_schema_version`). |
 
 Original registry line for Obsidian (6.19, Atrium #1), kept for the record: Obsidian (APEX de-identification module): ObsidianRequest/1, ObsidianResult/1, ObsidianSidecar/1, VaultEntry/1, ShareRecord/1 — owner Atrium; files in KULawHawk/Obsidian src/obsidian/contracts/ (6.19).
 
-**Not yet registered:** Sequoia's two edges (the KB-input artifact, `docs/SPEC_KB_INPUT.md`, and the APEX audit record, `docs/SPEC_INTEGRATION.md` §3) are specified in prose only. They join this table when Sequoia ships them as schema files. Conclave's `conclave_contracts` package holds Conclave-internal models, not cross-tool contracts.
+**Not yet registered:** Conclave's KB master file (the producer side of `KBInput/1`) has no schema file yet. Conclave's `conclave_contracts` package holds Conclave-internal models, not cross-tool contracts.
 
 ## Tool roster and tool enums
 
@@ -44,6 +46,10 @@ Conclave vendors Locutus (`conclave_vendor_locutus/`) and part of Obsidian (`con
 ## Single-file replicas
 
 A member that must not import another member at run time may keep a pinned copy of one contract file for its tests. Obsidian keeps `tests/fixtures/locutus/ruling_record.v1.schema.json` (pin in `tests/fixtures/locutus/PIN.json`). The check compares each replica with the registered bytes; a difference is a warning (`REPLICA_STALE`), an error under `--strict`.
+
+## Pattern lengths
+
+Python's `jsonschema` applies `pattern` with `re.search`, where `$` also matches just before a final newline, so `"<64 hex>\n"` passes `^[0-9a-f]{64}$`. Every `$`-anchored pattern therefore carries a `maxLength`. The check reports `PATTERN_UNBOUNDED` (a warning; an error under `--strict`) for any that does not. Locutus #22, Obsidian #11 and the Sequoia contracts PR add the lengths.
 
 ## Changing a contract
 

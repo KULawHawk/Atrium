@@ -125,6 +125,26 @@ def resolve_pointer(doc: Any, pointer: str) -> Any:
     return node
 
 
+def unbounded_anchored_patterns(doc: Any, path: str = "") -> list[str]:
+    """JSON pointers of string schemas whose ``pattern`` ends in ``$`` and that set no ``maxLength``.
+
+    Python's ``jsonschema`` applies ``pattern`` with ``re.search``, where ``$`` also
+    matches just before a final newline, so ``"<64 hex>\\n"`` passes ``^[0-9a-f]{64}$``.
+    A ``maxLength`` closes that gap (Locutus #22 does this for its sha256 fields).
+    """
+    found: list[str] = []
+    if isinstance(doc, dict):
+        pat = doc.get("pattern")
+        if isinstance(pat, str) and pat.endswith("$") and not pat.endswith("\\$") and "maxLength" not in doc:
+            found.append(path or "/")
+        for k, v in doc.items():
+            found.extend(unbounded_anchored_patterns(v, f"{path}/{k}"))
+    elif isinstance(doc, list):
+        for i, v in enumerate(doc):
+            found.extend(unbounded_anchored_patterns(v, f"{path}/{i}"))
+    return found
+
+
 # --------------------------------------------------------------------------- registry
 
 
@@ -402,6 +422,14 @@ def _check_contract(report: Report, c: Mapping[str, Any], root: Path) -> Any:
         expected_id = f"{ID_PREFIX}{c['home']}/contracts/{Path(c['path']).name}"
         if doc.get("$id") != expected_id:
             report.add("error", "ID_MISMATCH", name, f"$id is {doc.get('$id')!r}, expected {expected_id!r}")
+        for where in unbounded_anchored_patterns(doc):
+            report.add(
+                "warn",
+                "PATTERN_UNBOUNDED",
+                name,
+                f"{where}: a '$'-anchored pattern with no maxLength also accepts a trailing newline "
+                "under Python's jsonschema (re.search); add maxLength",
+            )
         _, version = _split_name(name)  # type: ignore[misc]
         if f".v{version}." not in Path(c["path"]).name:
             report.add("error", "VERSION_FILENAME", name, f"file name {Path(c['path']).name} does not carry .v{version}.")
