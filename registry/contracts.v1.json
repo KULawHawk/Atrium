@@ -30,7 +30,7 @@
     "obsidian": {
       "repo": "KULawHawk/Obsidian",
       "dir": "Obsidian",
-      "pinned_commit": "aef5690",
+      "pinned_commit": "197dbe7",
       "contract_dirs": [
         "src/obsidian/contracts"
       ]
@@ -174,7 +174,7 @@
       "path": "src/obsidian/contracts/obsidian_sidecar.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "sha256": "a92b2ffa89bdf2a792fc081f2aba71030c6d50f2fc0b8d27787c43819b1063fa"
+      "sha256": "bfce5e509fc6d7874cd3916c94399348631a38d6ee32c595026d317e97133176"
     },
     {
       "name": "VaultEntry/1",
