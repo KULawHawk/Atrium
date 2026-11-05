@@ -51,6 +51,8 @@
       "path": "src/locutus/contracts/ruling_record.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
+      "revision": "1.1",
+      "revision_note": "Breaking change recorded (decision 35 ii = A): Locutus L0.2 on 2026-10-23 made issue_signature, bbox_space and pack_sha256 required and engine_family an enum under the v1 label, before any record was on file. Grandfathered as 1.1; the file and its const stay RulingRecord/1. The next tightening must be a v2 file.",
       "sha256": "6a01d77eff46dcc7e5e2c0631169b2fc41d30abbc30a3e4ac1928f70d2e17fd4"
     },
     {

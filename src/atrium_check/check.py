@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -271,6 +272,19 @@ def validate_registry(reg: Any) -> list[str]:
         _require(ptr is None or isinstance(ptr, str), problems, f"{subj}.const_pointer: string or null")
         cv = c.get("const_value")
         _require(cv is None or (isinstance(cv, str) and cv and ptr is not None), problems, f"{subj}.const_value: a string, and only with a const_pointer")
+        rev = c.get("revision")
+        if rev is not None:
+            parts = _split_name(name) if isinstance(name, str) else None
+            _require(
+                isinstance(rev, str)
+                and re.fullmatch(r"[1-9][0-9]*\.[0-9]+", rev) is not None
+                and parts is not None
+                and rev.split(".")[0] == str(parts[1]),
+                problems,
+                f"{subj}.revision: 'M.N' where M is the contract's version",
+            )
+            note = c.get("revision_note")
+            _require(isinstance(note, str) and note.strip(), problems, f"{subj}.revision_note: required with a revision")
         sha = c.get("sha256")
         _require(
             isinstance(sha, str) and len(sha) == 64 and all(ch in "0123456789abcdef" for ch in sha),
@@ -519,6 +533,9 @@ def _check_contract(report: Report, c: Mapping[str, Any], root: Path) -> Any:
                 report.add("error", "CONST_MISMATCH", name, f"file declares {const!r} at {c['const_pointer']}, expected {expected!r}")
             elif expected != name:
                 report.add("note", "CONST_NONSTANDARD", name, f"declares {const!r}, not the suite form {name!r}")
+
+    if c.get("revision") is not None:
+        report.add("note", "CONTRACT_REVISION", name, f"registry revision {c['revision']}: {c['revision_note']}")
 
     if c["kind"] == "json_schema":
         if not isinstance(doc, dict):

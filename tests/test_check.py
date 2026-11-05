@@ -560,3 +560,51 @@ def test_heads_omitted_is_reported(suite):
     assert [(f.severity, f.code, f.subject) for f in r.findings] == [("note", "HEAD_NOT_CHECKED", "alpha,beta")]
     r = check(reg, {}, only=[])
     assert all(f.code != "HEAD_NOT_CHECKED" for f in r.findings)
+
+
+# ----------------------------------------------------------------- registry revisions
+
+
+def test_revision_is_validated_and_noted(suite):
+    reg, _, root = suite
+    reg["contracts"][0]["revision"] = "1.1"
+    reg["contracts"][0]["revision_note"] = "grandfathered tightening"
+    reg["contracts"][1]["revision"] = "1.2"  # a data contract is noted too
+    reg["contracts"][1]["revision_note"] = "data note"
+    assert validate_registry(reg) == []
+    r = run(reg, root)
+    assert [(f.severity, f.code, f.subject) for f in r.findings] == [
+        ("note", "CONTRACT_REVISION", "Rec/1"),
+        ("note", "CONTRACT_REVISION", "Fam/1"),
+    ]
+    assert "1.1: grandfathered tightening" in r.findings[0].message and r.passed
+
+
+@pytest.mark.parametrize(
+    ("rev", "note", "bad"),
+    [
+        ("2.1", "x", "revision"),  # major must equal the contract version (Rec/1)
+        ("1", "x", "revision"),
+        ("1.1.1", "x", "revision"),
+        ("01.1", "x", "revision"),
+        (11, "x", "revision"),
+        ("1.1", None, "revision_note"),
+        ("1.1", "  ", "revision_note"),
+    ],
+)
+def test_validate_registry_revision(suite, rev, note, bad):
+    reg, _, _ = suite
+    reg["contracts"][0]["revision"] = rev
+    if note is not None:
+        reg["contracts"][0]["revision_note"] = note
+    problems = validate_registry(reg)
+    assert any(p.startswith(f"contracts[0].{bad}:") for p in problems), problems
+
+
+def test_revision_with_a_malformed_name(suite):
+    reg, _, _ = suite
+    reg["contracts"][0]["name"] = "nope"
+    reg["contracts"][0]["revision"] = "1.1"
+    reg["contracts"][0]["revision_note"] = "x"
+    problems = validate_registry(reg)
+    assert any(p.startswith("contracts[0].revision:") for p in problems)
