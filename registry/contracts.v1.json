@@ -22,7 +22,7 @@
     "locutus": {
       "repo": "KULawHawk/Locutus",
       "dir": "Locutus",
-      "pinned_commit": "bac70e5",
+      "pinned_commit": "1e9683a",
       "contract_dirs": [
         "src/locutus/contracts"
       ]
@@ -93,7 +93,7 @@
       "path": "src/locutus/contracts/forge.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/$defs/request/properties/contract/const",
-      "sha256": "38920f4d6d916dca8ffe2a5f1060b1d3620a910514ad5b9474b7303668482590",
+      "sha256": "8b19adbea7f93ae1f56b9e7aa48a2f5c0ef18b190d881429ec65587755864dcf",
       "note": "ForgeRequest/1 and ForgeOutput/1 share one schema file (oneOf)."
     },
     {
@@ -102,7 +102,7 @@
       "path": "src/locutus/contracts/forge.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/$defs/output/properties/contract/const",
-      "sha256": "38920f4d6d916dca8ffe2a5f1060b1d3620a910514ad5b9474b7303668482590",
+      "sha256": "8b19adbea7f93ae1f56b9e7aa48a2f5c0ef18b190d881429ec65587755864dcf",
       "note": "ForgeRequest/1 and ForgeOutput/1 share one schema file (oneOf)."
     },
     {
@@ -260,15 +260,7 @@
     {
       "contract": "ForgeRequest/1",
       "pointer": "/$defs/request/properties/requester/enum",
-      "expect": [
-        "conclave",
-        "sequoia",
-        "verity",
-        "affine",
-        "apex_hub",
-        "locutus"
-      ],
-      "why": "As built at Locutus f0a5d42 Obsidian is not a Forge requester. Open question for the next Locutus change: Obsidian's leak tests could use Forge material; add it there and here together."
+      "expect": "roster"
     }
   ],
   "mirrors": [
