@@ -1,7 +1,7 @@
 {
   "registry": "AtriumContractRegistry/1",
   "owner": "Atrium",
-  "updated": "2026-11-03",
+  "updated": "2026-11-05",
   "about": "Every contract that crosses an APEX tool boundary. Atrium is the owner of record; the member repo named in 'home' carries the file. A contract change updates this registry in the same change (python -m atrium_check repin). Human-readable view: CONTRACTS_REGISTRY.md.",
   "tool_roster": [
     "conclave",
@@ -22,7 +22,7 @@
     "locutus": {
       "repo": "KULawHawk/Locutus",
       "dir": "Locutus",
-      "pinned_commit": "1e9683a",
+      "pinned_commit": "0c50649",
       "contract_dirs": [
         "src/locutus/contracts"
       ]
@@ -122,6 +122,15 @@
       "const_pointer": "/properties/contract/const",
       "note": "W-8 phrasing lexicon ruling (Locutus #21); contract name moved to the suite form in Locutus #25.",
       "sha256": "13339136e68eb4900a2aea6e8d1a701419f299b21c953672b3504f420defc8f2"
+    },
+    {
+      "name": "CorrectionRecord/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/correction_record.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "note": "5b.8 Correction Ledger record (Locutus #32); emitted by Sequoia sequoia/correct/ (Sequoia #53), which vendors the bytes under the same sha256 pin.",
+      "sha256": "3578ef55b71cfc3620d2b404d1d2037f1954ab4d3ceacee6b7a773d885051ec0"
     },
     {
       "name": "TagProposal/1",
