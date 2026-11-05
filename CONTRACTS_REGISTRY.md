@@ -26,7 +26,7 @@ The machine-readable registry is [`registry/contracts.v1.json`](registry/contrac
 | `ObsidianSidecar/1` | Obsidian | `src/obsidian/contracts/obsidian_sidecar.v1.schema.json` | Holds no path, name or value. |
 | `VaultEntry/1` | Obsidian | `src/obsidian/contracts/vault_entry.v1.schema.json` | Lives only inside the KDBX 4 vault. |
 | `ShareRecord/1` | Obsidian | `src/obsidian/contracts/share_record.v1.schema.json` | The SEC-8 share log; vault only. |
-| `KBInput/1` | Sequoia | `sequoia/integration/contracts/kb_input.v1.schema.json` | Inbound edge. No `contract` field (identifying field `kb_input_version`); deliberately open, four rules only the validator checks (Sequoia `CONTRACTS.md`). |
+| `KBInput/1` | Sequoia | `sequoia/integration/contracts/kb_input.v1.schema.json` | Inbound edge. No `contract` field (identifying field `kb_input_version`); deliberately open except the closed `context_notes` items, four rules only the validator checks (Sequoia `CONTRACTS.md`). **Registry revision 1.1**: the 2026-11-05 `context_notes` tightening was breaking (see Revisions). |
 | `ApexAuditRecord/1` | Sequoia | `sequoia/integration/contracts/apex_audit_record.v1.schema.json` | Outbound edge to APEX Layers 5/6. No `contract` field (identifying field `audit_schema_version`). |
 | `MissedRuleFlag/1` | Sequoia | `sequoia/integration/contracts/missed_rule_flag.v1.schema.json` | Outbound edge to Conclave Review (5b.3): one JSONL line per missed-rule flag, read by `conclave-review import-sequoia-flags` (Conclave #2368). The dotted name `sequoia.missed_rule_flag.v1` is the one the file has carried since Sequoia #50 (registered with `const_value`). Two hash rules are outside JSON Schema and checked by the consumer (Sequoia `CONTRACTS.md`). |
 
@@ -69,6 +69,7 @@ The check finds anchors anywhere in the pattern (inside alternations too), and s
 A contract entry may carry `revision` (`M.N`, where M is the contract's version) and a required `revision_note`. It records a change that broke the v1 rules but was kept under the same file and `const`, so nothing on disk is renamed. The check reports it as a `CONTRACT_REVISION` note on every run, so the exception stays visible.
 
 - `RulingRecord/1` is at **1.1** (decision 35 (ii) = A, 2026-11-03). On 2026-10-23, Locutus L0.2 made `issue_signature`, `bbox_space` and `pack_sha256` required and turned `engine_family` into an enum, under the v1 label (`docs/CONTRACT_CHANGES.md` in Locutus). No record was on file yet, so the change is grandfathered. **The next tightening must be a v2 file.**
+- `KBInput/1` is at **1.1** (reviewer 3 on Sequoia #56, 2026-11-05, same precedent). Sequoia declared the `context_notes` block as closed note objects, and `parse_kb_input` began refusing other shapes, under the v1 label (`CONTRACTS.md` in Sequoia). The block's only writer, Conclave's translator (#2370), already wrote that shape, so no document on file changes. The file stays `kb_input.v1.schema.json` and `kb_input_version` stays `0.1.0`. **The next tightening must be a v2 file.**
 
 ## Changing a contract
 

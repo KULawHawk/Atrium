@@ -38,7 +38,7 @@
     "sequoia": {
       "repo": "KULawHawk/Sequoia",
       "dir": "Sequoia",
-      "pinned_commit": "beaff26",
+      "pinned_commit": "28c44a7",
       "contract_dirs": [
         "sequoia/integration/contracts"
       ]
@@ -207,8 +207,10 @@
       "path": "sequoia/integration/contracts/kb_input.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": null,
-      "note": "Inbound edge (SPEC_KB_INPUT). Documents carry no contract field; the identifying field is kb_input_version. Deliberately open (parse_kb_input ignores unknown keys); four validator rules are not expressible in JSON Schema (Sequoia CONTRACTS.md).",
-      "sha256": "c32d6c3b6ffcc67c087c4c4746f03f1146f3d54ad947010ac79f6c2e3e6d26d9"
+      "note": "Inbound edge (SPEC_KB_INPUT). Documents carry no contract field; the identifying field is kb_input_version. Deliberately open (parse_kb_input ignores unknown keys) except the closed context_notes items; four validator rules are not expressible in JSON Schema (Sequoia CONTRACTS.md).",
+      "revision": "1.1",
+      "revision_note": "Breaking change recorded (reviewer 3 on Sequoia #56, same precedent as RulingRecord/1 decision 35 ii): on 2026-11-05 Sequoia declared the context_notes block as closed note objects and parse_kb_input began refusing other shapes, under the v1 label. The only writer, Conclave's translator (#2370), already wrote that shape. Grandfathered as 1.1; the file stays kb_input.v1.schema.json and kb_input_version stays 0.1.0. The next tightening must be a v2 file.",
+      "sha256": "555c55349c8da839b0dc230c9720c9fc5ca59bcc514f9e5d14386f6250abe9fe"
     },
     {
       "name": "ApexAuditRecord/1",
