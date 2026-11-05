@@ -38,7 +38,7 @@
     "sequoia": {
       "repo": "KULawHawk/Sequoia",
       "dir": "Sequoia",
-      "pinned_commit": "b73f301",
+      "pinned_commit": "beaff26",
       "contract_dirs": [
         "sequoia/integration/contracts"
       ]
@@ -218,6 +218,16 @@
       "const_pointer": null,
       "note": "Outbound edge (SPEC_INTEGRATION §3, SPEC_REPLAY §5). Documents carry no contract field; identifying field audit_schema_version (const 0.1.0).",
       "sha256": "400074ba400ee034d055bbb6242aa0d5f47f443b22e3874daf5d15b7795a8f27"
+    },
+    {
+      "name": "MissedRuleFlag/1",
+      "home": "sequoia",
+      "path": "sequoia/integration/contracts/missed_rule_flag.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "const_value": "sequoia.missed_rule_flag.v1",
+      "note": "Outbound edge to Conclave Review (SPEC_MISSED_RULE section 4, blueprint 5b.3): one JSONL line per missed-rule flag, written by sequoia.missed_rule.write_flags and read by conclave-review import-sequoia-flags (Conclave #2368). The dotted name is the one the file has carried since Sequoia #50. Not expressible in JSON Schema and checked by the consumer: flag_id is the hash of the identity block and kb_sha256 the hash of the KB bytes.",
+      "sha256": "d6f10a24e75deb8b6c51de2f63e08242d1d39b5d532c2f7910350b237bbd21c8"
     }
   ],
   "tool_enums": [
