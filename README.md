@@ -31,7 +31,7 @@ The principles in §1 are the most important. Every product's design doc subordi
 
 ### Governance core
 
-- [`CONSTITUTION.md`](CONSTITUTION.md) — the supreme authority. Numbered principles + their rationale. Status: RATIFIED v0.3 (2026-05-08).
+- [`CONSTITUTION.md`](CONSTITUTION.md) — the supreme authority. Numbered principles + their rationale. Status: RATIFIED v0.4 (2026-11-05; Article V step 2).
 - [`CHARTER.md`](CHARTER.md) — suite-level goals and scope, the APEX suite charter rules, and the two data paths.
 - [`CONTRACTS_REGISTRY.md`](CONTRACTS_REGISTRY.md) — the cross-tool contracts Atrium owns.
 - [`CONTRIBUTOR_PROTOCOL.md`](CONTRIBUTOR_PROTOCOL.md) — operating rules for human-AI collaborative work, including the conventions (numbered lists, `c` shorthand, wishlist visibility, etc.) that make multi-session work navigable.
@@ -54,7 +54,7 @@ The principles in §1 are the most important. Every product's design doc subordi
 
 | Document | Status |
 |----------|--------|
-| `CONSTITUTION.md` | **RATIFIED v0.3** (2026-05-08); still uses pre-A1 names, alignment needs an Article V amendment |
+| `CONSTITUTION.md` | **RATIFIED v0.4** (2026-11-05); still uses pre-A1 names, alignment needs an Article V amendment |
 | `CHARTER.md` | v0.2; APEX suite charter rules and the two data paths added (2026-10-23 rulings) |
 | `CONTRACTS_REGISTRY.md` + `registry/contracts.v1.json` | living; 19 contracts pinned, checked by `atrium_check` |
 | `CONTRIBUTOR_PROTOCOL.md` | drafted; in active use |
@@ -65,7 +65,7 @@ The principles in §1 are the most important. Every product's design doc subordi
 | `META/CLAUDE_REFLECTION.md` | living document |
 | `META/CLAUDE_LOGIC_GATES.md` | living document (~330 gates) |
 
-The constitution was ratified on 2026-05-08 (v0.3). The next governance milestone is an Article V amendment that brings its roster and authority sections in line with the A1 naming ruling.
+The constitution was ratified on 2026-05-08 (v0.3) and amended on 2026-11-05 (v0.4, Article V approval wording). The next governance milestone is an Article V amendment that brings its roster and authority sections in line with the A1 naming ruling.
 
 ---
 

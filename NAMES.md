@@ -120,7 +120,7 @@ When Jake names something:
 
 ## 5. Cross-references
 
-- `CONSTITUTION.md` — supreme authority; this document is subordinate. The Constitution (RATIFIED v0.3) still uses the pre-A1 names; aligning it needs an Article V amendment.
+- `CONSTITUTION.md` — supreme authority; this document is subordinate. The Constitution (RATIFIED v0.4) still uses the pre-A1 names; aligning it needs an Article V amendment.
 - `CHARTER.md` — the suite charter rules that apply to every APEX member, and the two data paths (A3).
 - `GLOSSARY.md` — defines *terms* (audit log, lineage, bundle, RulingRecord, etc.); this document defines *names* (APEX, Atrium, Ad Astra, Curator, Tracer, etc.). Some entities appear in both.
 - `CONTRACTS_REGISTRY.md` — the cross-tool contracts Atrium owns, one line per module.
