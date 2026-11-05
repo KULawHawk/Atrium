@@ -29,8 +29,10 @@ def test_check_head_not_pinned(suite, capsys, monkeypatch):
     assert cli.main(base + ["--allow-unpinned-head"]) == 0
     assert "WARN  HEAD_NOT_PINNED" in capsys.readouterr().out
     monkeypatch.setattr(cli, "_git_head", lambda p: None)
-    assert cli.main(base) == 0
-    assert "HEAD_UNKNOWN" in capsys.readouterr().out
+    assert cli.main(base) == 1
+    assert "ERROR HEAD_UNKNOWN" in capsys.readouterr().out
+    assert cli.main(base + ["--allow-unpinned-head"]) == 0
+    assert "WARN  HEAD_UNKNOWN" in capsys.readouterr().out
 
 
 def test_check_pass_text(suite, capsys):
@@ -69,14 +71,14 @@ def test_unusable_input_exits_2(suite, capsys, bad):
 
 def test_repin_plan_then_apply(suite, capsys, monkeypatch):
     _, path, root = suite
-    monkeypatch.setattr(cli, "_git_head", lambda p: "ddddddd" if p.name == "Alpha" else None)
+    monkeypatch.setattr(cli, "_git_head", lambda p: "ddddddd" if p.name == "Alpha" else "bbbbbbb")
     p = root / "Alpha/contracts/rec.v1.schema.json"
     p.write_text(p.read_text() + " ", encoding="utf-8")
     base = ["repin", "--registry", str(path), "--repos-root", str(root)]
     before = path.read_text()
     assert cli.main(base) == 0
     out = capsys.readouterr().out
-    assert "PLAN  Rec/1:" in out and "members.alpha.pinned_commit: aaaaaaa -> ddddddd" in out
+    assert "PLAN  Rec/1:" in out and "members.alpha.pinned_commit: aaaaaaa -> ddddddd" in out and "members.beta" not in out
     assert "plan only" in out
     assert path.read_text() == before
     assert cli.main(base + ["--apply"]) == 0

@@ -55,13 +55,13 @@ A member that must not import another member at run time may keep a pinned copy 
 Python's `jsonschema` applies `pattern` with `re.search`, where `$` also matches just before a final newline, so `"<64 hex>\n"` passes `^[0-9a-f]{64}$`. The check reports `PATTERN_UNBOUNDED` (a warning; an error under `--strict`) for every pattern with a `$` anchor that still accepts a trailing newline. A pattern is closed in one of two ways:
 
 - **Fixed width:** `maxLength` at most the pattern's minimum match width (for example 64 on `^[0-9a-f]{64}$`). The extra newline always overflows.
-- **Variable width:** a guard after every `$`, such as `^[a-z_]+$(?!\n)`, or a leading `^(?!.*\n)` that refuses a newline anywhere (Locutus #25's form). A `maxLength` alone does not close a variable-width pattern: 128 on `^[a-z_]+\.[a-z_]+$` still lets `"ab.cd\n"` through. In ECMA-262, where `$` only matches at the very end, the guard never changes the result.
+- **Variable width:** a guard after every `$`, such as `^[a-z_]+$(?!\n)`, or a leading `^(?!.*\n)` that refuses a newline anywhere (Locutus #25's form). The leading guard counts only when the pattern has no top-level `|`: in `^(?!.*\n)a$|b$` it covers the first branch only, so such a pattern falls through to the per-anchor and width checks. A `maxLength` alone does not close a variable-width pattern: 128 on `^[a-z_]+\.[a-z_]+$` still lets `"ab.cd\n"` through. In ECMA-262, where `$` only matches at the very end, the guard never changes the result.
 
 The check finds anchors anywhere in the pattern (inside alternations too), and skips escaped `\$` and `$` inside `[...]`. It measures width with the stdlib regex parser. A pattern it cannot parse is reported, never passed.
 
 ## Checkout commits
 
-`python -m atrium_check check` reads each member checkout's `git HEAD`. A checkout not at its `pinned_commit` is an error (`HEAD_NOT_PINNED`), so a run cannot quietly check the wrong commit. `--allow-unpinned-head` turns it into a warning for a deliberate run against a feature branch. A folder that is not a git checkout is a warning (`HEAD_UNKNOWN`). Library callers that pass no `heads` get a `HEAD_NOT_CHECKED` note.
+`python -m atrium_check check` reads each member checkout's `git HEAD`. A checkout not at its `pinned_commit` is an error (`HEAD_NOT_PINNED`), so a run cannot quietly check the wrong commit. `--allow-unpinned-head` turns it into a warning for a deliberate run against a feature branch. A folder that is not a git checkout is also an error (`HEAD_UNKNOWN`): its commit cannot be shown. `--allow-unpinned-head` lowers both to warnings. Library callers that pass no `heads` get a `HEAD_NOT_CHECKED` note.
 
 ## Changing a contract
 
