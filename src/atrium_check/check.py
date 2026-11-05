@@ -151,6 +151,34 @@ def _anchor_positions(pat: str) -> list[int]:
     return out
 
 
+def _has_top_level_alternation(pat: str) -> bool:
+    """True when ``pat`` has a ``|`` outside every group and character class.
+
+    A leading guard such as ``^(?!.*\\n)`` then covers only the first branch:
+    ``^(?!.*\\n)a$|b$`` still lets ``"b\\n"`` through.
+    """
+    i, in_class, depth = 0, False, 0
+    while i < len(pat):
+        ch = pat[i]
+        if ch == "\\":
+            i += 2
+            continue
+        if in_class:
+            in_class = ch != "]"
+        elif ch == "[":
+            in_class = True
+            if pat[i + 1 : i + 2] == "]":
+                i += 1
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        elif ch == "|" and depth == 0:
+            return True
+        i += 1
+    return False
+
+
 NEWLINE_GUARDS = ("(?!\\n)", "(?![\\s\\S])")  # straight after a '$'
 LEADING_GUARDS = ("^(?!.*\\n)", "^(?![\\s\\S]*\\n)")  # at the very start: no newline anywhere
 
@@ -180,7 +208,7 @@ def newline_leak(node: Mapping[str, Any]) -> str | None:
     anchors = _anchor_positions(pat)
     if not anchors:
         return None
-    if pat.startswith(LEADING_GUARDS) or all(pat.startswith(NEWLINE_GUARDS, a + 1) for a in anchors):
+    if (pat.startswith(LEADING_GUARDS) and not _has_top_level_alternation(pat)) or all(pat.startswith(NEWLINE_GUARDS, a + 1) for a in anchors):
         return None
     ml = node.get("maxLength")
     widths = _widths(pat)
@@ -457,7 +485,12 @@ def _check_heads(
         pin = members[name]["pinned_commit"]
         head = heads.get(name)
         if head is None:
-            report.add("warn", "HEAD_UNKNOWN", name, f"not a git checkout; cannot confirm it is at pinned_commit {pin}")
+            report.add(
+                "warn" if allow_unpinned_head else "error",
+                "HEAD_UNKNOWN",
+                name,
+                f"not a git checkout, so it cannot be shown to be at pinned_commit {pin}",
+            )
         elif not (head.startswith(pin) or pin.startswith(head)):
             report.add(
                 "warn" if allow_unpinned_head else "error",

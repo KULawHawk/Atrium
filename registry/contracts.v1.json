@@ -30,7 +30,7 @@
     "obsidian": {
       "repo": "KULawHawk/Obsidian",
       "dir": "Obsidian",
-      "pinned_commit": "92a2932",
+      "pinned_commit": "aef5690",
       "contract_dirs": [
         "src/obsidian/contracts"
       ]

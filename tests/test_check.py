@@ -461,6 +461,12 @@ def test_unbounded_anchored_patterns():
         ({"pattern": "^[a-z]+$(?![\\s\\S])"}, False, None),
         ({"pattern": "^(?!.*\\n)[a-z_]+\\.[a-z_]+$", "maxLength": 128}, False, None),  # Locutus #25 form
         ({"pattern": "^(?![\\s\\S]*\\n)[a-z]+$"}, False, None),
+        # ATR-5: a leading guard covers only its own branch of a top-level alternation
+        ({"pattern": "^(?!.*\\n)[a-z]+$|^[0-9]+$"}, True, "no maxLength"),
+        ({"pattern": "^(?!.*\\n)(?:[a-z]+|[0-9]+)$"}, False, None),  # '|' inside a group is covered
+        ({"pattern": "^(?!.*\\n)[a|b]+$"}, False, None),  # '|' inside a class is a literal
+        ({"pattern": "^(?!.*\\n)a\\|b$"}, False, None),  # escaped '|' is a literal
+        ({"pattern": "^(?!.*\\n)[]|]+$"}, False, None),  # leading ']' then '|' inside a class
         ({"pattern": "^(a$(?!\\n)|b$)"}, True, "no maxLength"),  # one unguarded anchor is enough
         ({"pattern": "^(?:a$|b$)"}, True, "add maxLength 1"),  # anchors not at the end are found
         ({"pattern": "^[$]x"}, False, None),  # '$' inside a class is a literal
@@ -488,6 +494,7 @@ def test_newline_leak_agrees_with_jsonschema_where_available():
         ({"pattern": "^[a-z_]+\\.[a-z_]+$", "maxLength": 128}, "ab.cd"),
         ({"pattern": "^[a-z]+$(?!\\n)"}, "abc"),
         ({"pattern": "^(?!.*\\n)[a-z_]+\\.[a-z_]+$", "maxLength": 128}, "ab.cd"),
+        ({"pattern": "^(?!.*\\n)[a-z]+$|^[0-9]+$"}, "123"),
         ({"pattern": "^[0-9a-f]{4}$", "maxLength": 4}, "beef"),
     ]
     for node, good in cases:
@@ -551,7 +558,11 @@ def test_head_unknown_and_short_heads(suite):
     reg, _, root = suite
     reg["members"]["alpha"]["pinned_commit"] = "aaaaaaa1234567"
     r = run(reg, root, heads={"alpha": "aaaaaaa", "beta": None})
-    assert [(f.severity, f.code, f.subject) for f in r.findings] == [("warn", "HEAD_UNKNOWN", "beta")]
+    assert [(f.severity, f.code, f.subject) for f in r.findings] == [("error", "HEAD_UNKNOWN", "beta")]
+    assert not r.passed
+    r = run(reg, root, heads={"alpha": "aaaaaaa", "beta": None}, allow_unpinned_head=True)
+    assert [(f.severity, f.code) for f in r.findings] == [("warn", "HEAD_UNKNOWN")]
+    assert r.passed
 
 
 def test_heads_omitted_is_reported(suite):
