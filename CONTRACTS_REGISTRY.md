@@ -34,11 +34,10 @@ Original registry line for Obsidian (6.19, Atrium #1), kept for the record: Obsi
 
 ## Tool roster and tool enums
 
-The roster is `conclave, sequoia, verity, affine, apex_hub, obsidian, locutus`. Four enums must equal it exactly: RulingRecord `tool`, RulingRetraction `tool`, and the Obsidian `$defs/tool` used by ObsidianRequest and VaultEntry. Three are declared subsets, each with its reason in the JSON:
+The roster is `conclave, sequoia, verity, affine, apex_hub, obsidian, locutus`. Five enums must equal it exactly: RulingRecord `tool`, RulingRetraction `tool`, the Obsidian `$defs/tool` used by ObsidianRequest and VaultEntry, and ForgeRequest `requester` (Obsidian added at Locutus `1e9683a`, decision 35 iii). Two are declared subsets, each with its reason in the JSON:
 
 - PatternPack `consumer` leaves out `locutus` (Locutus produces packs).
 - QueryRequest `target_tool` leaves out `apex_hub` and `locutus`.
-- ForgeRequest `requester` leaves out `obsidian`. **Open question:** Obsidian's leak tests could use Forge material; if so, add it in Locutus and here in the same change.
 
 Any other value, or any drift from these sets, fails the check.
 
