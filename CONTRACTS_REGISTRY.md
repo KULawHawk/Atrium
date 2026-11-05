@@ -8,7 +8,7 @@ The machine-readable registry is [`registry/contracts.v1.json`](registry/contrac
 
 | Contract | Home | File | Notes |
 |---|---|---|---|
-| `RulingRecord/1` | Locutus | `src/locutus/contracts/ruling_record.v1.schema.json` | One per human decision, any tool (STRATEGY §2a). |
+| `RulingRecord/1` | Locutus | `src/locutus/contracts/ruling_record.v1.schema.json` | One per human decision, any tool (STRATEGY §2a). **Registry revision 1.1**: the 2026-10-23 L0.2 tightenings were breaking (see Revisions). |
 | `RulingRetraction/1` | Locutus | `src/locutus/contracts/ruling_retraction.v1.schema.json` | Withdraws one earlier RulingRecord (blueprint 4.6). |
 | `PatternPack/1` | Locutus | `src/locutus/contracts/pattern_pack.v1.schema.json` | Signed, hash-pinned patterns shipped back to the tools. |
 | `PartitionManifest/1` | Locutus | `src/locutus/contracts/partition_manifest.v1.schema.json` | Sealed datum lists per partition (the data firewall). |
@@ -62,6 +62,12 @@ The check finds anchors anywhere in the pattern (inside alternations too), and s
 ## Checkout commits
 
 `python -m atrium_check check` reads each member checkout's `git HEAD`. A checkout not at its `pinned_commit` is an error (`HEAD_NOT_PINNED`), so a run cannot quietly check the wrong commit. `--allow-unpinned-head` turns it into a warning for a deliberate run against a feature branch. A folder that is not a git checkout is also an error (`HEAD_UNKNOWN`): its commit cannot be shown. `--allow-unpinned-head` lowers both to warnings. Library callers that pass no `heads` get a `HEAD_NOT_CHECKED` note.
+
+## Revisions
+
+A contract entry may carry `revision` (`M.N`, where M is the contract's version) and a required `revision_note`. It records a change that broke the v1 rules but was kept under the same file and `const`, so nothing on disk is renamed. The check reports it as a `CONTRACT_REVISION` note on every run, so the exception stays visible.
+
+- `RulingRecord/1` is at **1.1** (decision 35 (ii) = A, 2026-11-03). On 2026-10-23, Locutus L0.2 made `issue_signature`, `bbox_space` and `pack_sha256` required and turned `engine_family` into an enum, under the v1 label (`docs/CONTRACT_CHANGES.md` in Locutus). No record was on file yet, so the change is grandfathered. **The next tightening must be a v2 file.**
 
 ## Changing a contract
 
