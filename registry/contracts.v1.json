@@ -16,13 +16,13 @@
     "conclave": {
       "repo": "KULawHawk/Conclave",
       "dir": "Conclave",
-      "pinned_commit": "b66d3b8",
+      "pinned_commit": "418ae5f",
       "contract_dirs": []
     },
     "locutus": {
       "repo": "KULawHawk/Locutus",
       "dir": "Locutus",
-      "pinned_commit": "2de9a14",
+      "pinned_commit": "bac70e5",
       "contract_dirs": [
         "src/locutus/contracts"
       ]
@@ -149,7 +149,7 @@
       "path": "src/locutus/contracts/engine_families.v1.json",
       "kind": "data",
       "const_pointer": "/contract",
-      "sha256": "1465ef5ca432fb9d4a39144b925e297d738ec518dcbc54a6bedac9296bafa035",
+      "sha256": "406f27bcbf24ce8acf3dcaa8cff34888730182fbb674f7617cea40bd5e86bb1c",
       "note": "Data contract, regenerated from the Conclave roster (CL-3 method_family); Conclave ECHO_REGISTRY row (CL-56)."
     },
     {
