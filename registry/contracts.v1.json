@@ -22,7 +22,7 @@
     "locutus": {
       "repo": "KULawHawk/Locutus",
       "dir": "Locutus",
-      "pinned_commit": "6ae556b",
+      "pinned_commit": "fda248c",
       "contract_dirs": [
         "src/locutus/contracts"
       ]
