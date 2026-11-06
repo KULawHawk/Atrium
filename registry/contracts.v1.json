@@ -1,7 +1,7 @@
 {
   "registry": "AtriumContractRegistry/1",
   "owner": "Atrium",
-  "updated": "2026-11-05",
+  "updated": "2026-11-06",
   "about": "Every contract that crosses an APEX tool boundary. Atrium is the owner of record; the member repo named in 'home' carries the file. A contract change updates this registry in the same change (python -m atrium_check repin). Human-readable view: CONTRACTS_REGISTRY.md.",
   "tool_roster": [
     "conclave",
@@ -16,13 +16,13 @@
     "conclave": {
       "repo": "KULawHawk/Conclave",
       "dir": "Conclave",
-      "pinned_commit": "928f1eb",
+      "pinned_commit": "a49cbcc",
       "contract_dirs": []
     },
     "locutus": {
       "repo": "KULawHawk/Locutus",
       "dir": "Locutus",
-      "pinned_commit": "082f8e3",
+      "pinned_commit": "6ae556b",
       "contract_dirs": [
         "src/locutus/contracts"
       ]
@@ -38,7 +38,7 @@
     "sequoia": {
       "repo": "KULawHawk/Sequoia",
       "dir": "Sequoia",
-      "pinned_commit": "28c44a7",
+      "pinned_commit": "45043f2",
       "contract_dirs": [
         "sequoia/integration/contracts"
       ]
@@ -53,7 +53,7 @@
       "const_pointer": "/properties/contract/const",
       "revision": "1.1",
       "revision_note": "Breaking change recorded (decision 35 ii = A): Locutus L0.2 on 2026-10-23 made issue_signature, bbox_space and pack_sha256 required and engine_family an enum under the v1 label, before any record was on file. Grandfathered as 1.1; the file and its const stay RulingRecord/1. The next tightening must be a v2 file.",
-      "sha256": "6a01d77eff46dcc7e5e2c0631169b2fc41d30abbc30a3e4ac1928f70d2e17fd4"
+      "sha256": "c96812e12311d574b20b32907bf0a12e8670cf4db46e0782d15d830d4fdc767f"
     },
     {
       "name": "RulingRetraction/1",
