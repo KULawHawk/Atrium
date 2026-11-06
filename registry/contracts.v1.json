@@ -133,6 +133,15 @@
       "sha256": "3578ef55b71cfc3620d2b404d1d2037f1954ab4d3ceacee6b7a773d885051ec0"
     },
     {
+      "name": "VariantObservation/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/variant_observation.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "note": "Recognition Atlas record (Locutus #46, suite $id + bounded patterns in Locutus #49; Conclave docs/DESIGN_RECOGNITION_REFERENCE_MATRIX.md, #2425). Value-free variant keys and shapes; observed entries are never ground truth. Producer: Conclave harness_adapters emitter (M4, not yet built); store: locutus.atlas.",
+      "sha256": "1b6adf4b137ef9192aeb8a06b77dde08dca380bea747ac5b3672e08a25013cc9"
+    },
+    {
       "name": "TagProposal/1",
       "home": "locutus",
       "path": "src/locutus/contracts/tag_proposal.v1.schema.json",
