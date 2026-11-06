@@ -139,7 +139,7 @@
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
       "note": "Recognition Atlas record (Locutus #46, suite $id + bounded patterns in Locutus #49; Conclave docs/DESIGN_RECOGNITION_REFERENCE_MATRIX.md, #2425). Value-free variant keys and shapes; observed entries are never ground truth. Producer: Conclave harness_adapters emitter (M4, not yet built); store: locutus.atlas.",
-      "sha256": "9dbc60b18d1434f4701fa808600ce7b3ffd5c568bdfd5bbdbddcfe24f9909d5d"
+      "sha256": "1b6adf4b137ef9192aeb8a06b77dde08dca380bea747ac5b3672e08a25013cc9"
     },
     {
       "name": "TagProposal/1",
