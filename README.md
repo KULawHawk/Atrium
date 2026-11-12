@@ -94,3 +94,7 @@ The first product to fully cite Atrium is [`KULawHawk/Curator`](https://github.c
 ## License
 
 TBD. Atrium docs are currently under no public license; treat them as all-rights-reserved by Jake Leese until a formal license is chosen. (Suggested default when the time comes: CC BY 4.0 for documents, MIT for any code that ships in this repo.)
+
+## Pre-merge check
+
+**Merge checklist (required):** before a PR leaves Draft, run `python scripts/check_all.py` and paste its last `CHECK-ALL:` line into the PR body. The reviewer confirms the line names the PR head sha and says `PASS` with `dirty=no`. `FAIL` blocks the merge. `INCOMPLETE` means something the repo needs could not run on that machine (for example Tesseract); re-run it somewhere that has it. It costs nothing on GitHub.
