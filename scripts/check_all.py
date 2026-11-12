@@ -136,7 +136,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.skip_atrium_check:
         ac_txt = "SKIPPED"
         ac_ok = False
+        first_error = ""
     else:
+        first_error = ""
         print(f"\n== atrium_check across {root}", flush=True)
         cmd = [sys.executable, "-m", "atrium_check", "check", "--repos-root", str(root)]
         if not args.strict_pins:
@@ -149,6 +151,10 @@ def main(argv: list[str] | None = None) -> int:
                 print(line)
         summary = next((l for l in reversed(out.splitlines()) if l.startswith("ATRIUM-CHECK")), "")
         ac_ok = ac.returncode == 0
+        first_err = next((l for l in out.splitlines() if l.startswith("ERROR")), "")
+        if first_err:
+            parts = first_err.split(None, 3)  # ERROR CODE subject: detail
+            first_error = " ".join(parts[1:3]).rstrip(":")
         ac_txt = ("PASS" if ac_ok else "FAIL") + (f" ({summary.replace('ATRIUM-CHECK: ', '')})" if summary else "")
 
     if not tests_ok or (not ac_ok and not args.skip_atrium_check):
@@ -163,13 +169,16 @@ def main(argv: list[str] | None = None) -> int:
         notes.append("could not run here (tests for these were skipped): " + ", ".join(missing_hard))
     if missing_soft:
         notes.append("optional, not installed: " + ", ".join(missing_soft))
+    if missing_hard and not tests_ok:
+        notes.append("tests failed AND these were missing, so the failures may be caused by the missing tools; re-run on a machine that has them before trusting this FAIL: " + ", ".join(missing_hard))
     if dirty == "yes":
         notes.append("working tree has uncommitted changes; the result is not tied to the head sha")
     print()
     for n in notes:
         print(f"NOTE: {n}")
+    fe = f" first_error={first_error}" if first_error else ""
     inc = f" missing={','.join(missing_hard)}" if missing_hard else ""
-    print(f"CHECK-ALL: {verdict} repo={name} head={head[:12]} dirty={dirty} tests={tests_txt} atrium_check={ac_txt}{inc}")
+    print(f"CHECK-ALL: {verdict} repo={name} head={head[:12]} dirty={dirty} tests={tests_txt} atrium_check={ac_txt}{inc}{fe}")
     return rc_out
 
 
