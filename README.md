@@ -56,7 +56,7 @@ The principles in §1 are the most important. Every product's design doc subordi
 |----------|--------|
 | `CONSTITUTION.md` | **RATIFIED v0.4** (2026-11-05); still uses pre-A1 names, alignment needs an Article V amendment |
 | `CHARTER.md` | v0.2; APEX suite charter rules and the two data paths added (2026-10-23 rulings) |
-| `CONTRACTS_REGISTRY.md` + `registry/contracts.v1.json` | living; 22 contracts pinned, checked by `atrium_check` |
+| `CONTRACTS_REGISTRY.md` + `registry/contracts.v1.json` | living; 24 contracts pinned, checked by `atrium_check` |
 | `CONTRIBUTOR_PROTOCOL.md` | drafted; in active use |
 | `GLOSSARY.md` | v0.2; APEX suite terms added |
 | `ONBOARDING.md` | drafted |

@@ -16,13 +16,13 @@
     "conclave": {
       "repo": "KULawHawk/Conclave",
       "dir": "Conclave",
-      "pinned_commit": "a49cbcc",
+      "pinned_commit": "2e7048b",
       "contract_dirs": []
     },
     "locutus": {
       "repo": "KULawHawk/Locutus",
       "dir": "Locutus",
-      "pinned_commit": "fda248c",
+      "pinned_commit": "1f2c199",
       "contract_dirs": [
         "src/locutus/contracts"
       ]
@@ -30,7 +30,7 @@
     "obsidian": {
       "repo": "KULawHawk/Obsidian",
       "dir": "Obsidian",
-      "pinned_commit": "d118c30",
+      "pinned_commit": "f36b7a2",
       "contract_dirs": [
         "src/obsidian/contracts"
       ]
@@ -140,6 +140,24 @@
       "const_pointer": "/properties/contract/const",
       "note": "Recognition Atlas record (Locutus #46, suite $id + bounded patterns in Locutus #49; Conclave docs/DESIGN_RECOGNITION_REFERENCE_MATRIX.md, #2425). Value-free variant keys and shapes; observed entries are never ground truth. Producer: Conclave harness_adapters emitter (M4, not yet built); store: locutus.atlas.",
       "sha256": "1b6adf4b137ef9192aeb8a06b77dde08dca380bea747ac5b3672e08a25013cc9"
+    },
+    {
+      "name": "LensReadScore/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/lens_read_score.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "note": "Learned Lens weighting W3 (Locutus #52; Conclave docs/DESIGN_LEARNED_LENS_WEIGHTING.md §2 item 1). One value-free row per engine per scored human ruling: read correct/wrong, dissent against the shipped or plurality reference, content type. Producer: locutus.competence. Consumer: Conclave Observatory ladders (W4, not yet built).",
+      "sha256": "a8ed1e36c60e5a637d9cacf830921b306ef5f2787dd1a63ff69263aa9697d873"
+    },
+    {
+      "name": "LensCompetence/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/lens_competence.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": "/properties/contract/const",
+      "note": "Learned Lens weighting W3 (Locutus #52). Per (engine, content type, partition) counts summed from LensReadScore/1 rows, with per-source breakdown. Counts only: no ladder state, no promotion. Producer: locutus.competence. Consumer: Conclave Observatory ladders (W4, not yet built).",
+      "sha256": "5db3ddb84db880a29ee0a7288457bcb919366bc155a959d0cfc4a632477b8fbb"
     },
     {
       "name": "TagProposal/1",
