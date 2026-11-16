@@ -52,7 +52,7 @@ Conclave vendors Locutus (`conclave_vendor_locutus/`) and part of Obsidian (`con
 
 ## Single-file replicas
 
-A member that must not import another member at run time may keep a pinned copy of one contract file for its tests. Obsidian keeps `tests/fixtures/locutus/ruling_record.v1.schema.json` (pin in `tests/fixtures/locutus/PIN.json`). The check compares each replica with the registered bytes; a difference is a warning (`REPLICA_STALE`), an error under `--strict`.
+A member that must not import another member at run time may keep a pinned copy of one contract file for its tests. Obsidian keeps `tests/fixtures/locutus/ruling_record.v1.schema.json` (pin in `tests/fixtures/locutus/PIN.json`). Sequoia keeps `tests/correct/correction_record.v1.schema.json` (a copy of Locutus's CorrectionRecord/1, registered 2026-11-16). The check compares each replica with the registered bytes; a difference is a warning (`REPLICA_STALE`), an error under `--strict`.
 
 ## Pattern lengths
 
