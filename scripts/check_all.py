@@ -143,6 +143,11 @@ def main(argv: list[str] | None = None) -> int:
         cmd = [sys.executable, "-m", "atrium_check", "check", "--repos-root", str(root)]
         if not args.strict_pins:
             cmd.append("--allow-unpinned-head")
+        if name != "atrium":
+            # Check the checkout whose tests just ran. Without this, a repo-dir that is not
+            # <repos-root>/<registry dir> (a worktree, a renamed clone) is tested here but a
+            # different checkout, under --repos-root, is what atrium_check validates.
+            cmd += ["--repo", f"{name}={repo}"]
         env_path = str(ATRIUM_ROOT / "src")
         ac = subprocess.run(cmd, cwd=ATRIUM_ROOT, env={**os.environ, "PYTHONPATH": env_path}, capture_output=True, text=True)
         out = ac.stdout + ac.stderr
