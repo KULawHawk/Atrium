@@ -22,7 +22,7 @@
     "locutus": {
       "repo": "KULawHawk/Locutus",
       "dir": "Locutus",
-      "pinned_commit": "1f2c199",
+      "pinned_commit": "20e2be8",
       "contract_dirs": [
         "src/locutus/contracts"
       ]
@@ -53,7 +53,7 @@
       "const_pointer": "/properties/contract/const",
       "revision": "1.1",
       "revision_note": "Breaking change recorded (decision 35 ii = A): Locutus L0.2 on 2026-10-23 made issue_signature, bbox_space and pack_sha256 required and engine_family an enum under the v1 label, before any record was on file. Grandfathered as 1.1; the file and its const stay RulingRecord/1. The next tightening must be a v2 file.",
-      "sha256": "c96812e12311d574b20b32907bf0a12e8670cf4db46e0782d15d830d4fdc767f"
+      "sha256": "8c792cabf615ecf03e032bc7934e6a4dce503f911414b9a56a3f093813064954"
     },
     {
       "name": "RulingRetraction/1",
