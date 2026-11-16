@@ -43,14 +43,20 @@ def _parse_overrides(items: list[str]) -> dict[str, Path]:
 def _git_head(path: Path) -> str | None:
     try:
         out = subprocess.run(
-            ["git", "-C", str(path), "rev-parse", "HEAD"],
+            ["git", "-C", str(path), "rev-parse", "--show-prefix", "HEAD"],
             capture_output=True,
             text=True,
             check=True,
         )
     except (OSError, subprocess.CalledProcessError):
         return None
-    return out.stdout.strip() or None
+    # First line: the path of `path` below its repository root ("" at the root). A folder
+    # that is merely inside some other git work tree (an unpacked copy, a stray parent
+    # repo) would otherwise report that other repository's HEAD as its own.
+    prefix, _, head = out.stdout.partition("\n")
+    if prefix.strip():
+        return None
+    return head.strip() or None
 
 
 def build_parser() -> argparse.ArgumentParser:

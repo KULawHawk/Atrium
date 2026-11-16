@@ -163,3 +163,16 @@ def test_repin_names_the_members_it_could_not_repin(suite, capsys, monkeypatch):
     (root / "beta").rename(root / "gone")
     assert cli.main(["repin", "--registry", str(path), "--repos-root", str(root)]) == 0
     assert "not repinned, no checkout found: beta" in capsys.readouterr().out
+
+
+def test_git_head_of_a_folder_inside_another_repo_is_unknown(tmp_path):
+    outer = tmp_path / "outer"
+    inner = outer / "locutus"  # an unpacked copy, no .git of its own
+    inner.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(outer)], check=True)
+    subprocess.run(
+        ["git", "-C", str(outer), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x"],
+        check=True,
+    )
+    assert REAL_GIT_HEAD(outer) is not None
+    assert REAL_GIT_HEAD(inner) is None
