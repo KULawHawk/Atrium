@@ -685,3 +685,12 @@ def test_mirror_manifest_with_non_string_upstream_commit_is_a_warning_not_a_cras
     reg, _, root = suite
     write_json(root / "beta/vendor_alpha/VENDORED_FROM.json", {"upstream_commit": bad})
     assert "MIRROR_MANIFEST" in codes(run(reg, root))
+
+
+@pytest.mark.parametrize("ptr", ["/a/\u00b2", "/a/\u0663", "/a/01", "/a/00", "/a/-", "/a/ 1", "/a/1\n"])
+def test_pointer_array_index_follows_rfc_6901(ptr):
+    """Unicode digits ('\u00b2' crashed int(); '\u0663' read as 3) and leading zeros are not array indexes."""
+    with pytest.raises(KeyError):
+        resolve_pointer({"a": [0, 1, 2, 3]}, ptr)
+    assert resolve_pointer({"a": [0, 1, 2, 3]}, "/a/0") == 0
+    assert resolve_pointer({"a": [0, 1, 2, 3]}, "/a/3") == 3

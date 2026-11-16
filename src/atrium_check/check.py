@@ -124,7 +124,7 @@ def resolve_pointer(doc: Any, pointer: str) -> Any:
     for raw in pointer[1:].split("/"):
         token = raw.replace("~1", "/").replace("~0", "~")
         if isinstance(node, list):
-            if not token.isdigit() or int(token) >= len(node):
+            if re.fullmatch(r"0|[1-9][0-9]*", token) is None or int(token) >= len(node):  # RFC 6901: ASCII, no leading zero
                 raise KeyError(pointer)
             node = node[int(token)]
         elif isinstance(node, dict) and token in node:
