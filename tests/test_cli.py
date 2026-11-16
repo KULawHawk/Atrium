@@ -176,3 +176,15 @@ def test_git_head_of_a_folder_inside_another_repo_is_unknown(tmp_path):
     )
     assert REAL_GIT_HEAD(outer) is not None
     assert REAL_GIT_HEAD(inner) is None
+
+
+def test_repin_does_not_rewrite_a_pin_that_already_names_the_head(suite, capsys, monkeypatch):
+    """check accepts a longer pin that starts with the head; repin must agree, not shorten it forever."""
+    _, path, root = suite
+    reg = json.loads(path.read_text())
+    reg["members"]["alpha"]["pinned_commit"] = "aaaaaaa" + "1" * 5  # 12 chars
+    path.write_text(json.dumps(reg), encoding="utf-8")
+    monkeypatch.setattr(cli, "_git_head", lambda p: ("aaaaaaa1" + "1" * 32) if p.name == "Alpha" else "bbbbbbb")
+    assert cli.main(["repin", "--registry", str(path), "--repos-root", str(root)]) == 0
+    out = capsys.readouterr().out
+    assert "nothing to change" in out and "pinned_commit" not in out

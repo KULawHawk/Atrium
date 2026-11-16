@@ -25,6 +25,7 @@ from atrium_check.check import (
     load_registry,
     plan_repin,
     resolve_checkouts,
+    same_commit,
 )
 
 DEFAULT_REGISTRY = Path(__file__).resolve().parents[2] / "registry" / "contracts.v1.json"
@@ -123,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
     commits = {}
     for member, path in sorted(checkouts.items()):
         head = (_git_head(path) or "")[:7]
-        if head and head != reg["members"][member]["pinned_commit"]:
+        if head and not same_commit(head, reg["members"][member]["pinned_commit"]):
             commits[member] = head
     for name, old, new in changes:
         print(f"PLAN  {name}: {old[:12]} -> {new[:12]}")

@@ -520,7 +520,7 @@ def _check_heads(
                 name,
                 f"not a git checkout, so it cannot be shown to be at pinned_commit {pin}",
             )
-        elif not _same_commit(head, pin):
+        elif not same_commit(head, pin):
             report.add(
                 "warn" if allow_unpinned_head else "error",
                 "HEAD_NOT_PINNED",
@@ -690,7 +690,7 @@ def _check_mirror(report: Report, reg: Mapping[str, Any], mi: Mapping[str, Any],
                 f"{c['name']}: vendored sha256 {actual[:12]} != registry {c['sha256'][:12]} (re-vendor)",
             )
     home_pin = reg["members"][mi["home"]]["pinned_commit"]
-    if pinned and not _same_commit(pinned, home_pin):
+    if pinned and not same_commit(pinned, home_pin):
         level = "warn" if stale else "note"
         report.add(
             level,
@@ -701,7 +701,7 @@ def _check_mirror(report: Report, reg: Mapping[str, Any], mi: Mapping[str, Any],
         )
 
 
-def _same_commit(a: str, b: str) -> bool:
+def same_commit(a: str, b: str) -> bool:
     n = min(len(a), len(b))
     return n >= 7 and a[:n].lower() == b[:n].lower()  # a pin shorter than 7 never matches
 
