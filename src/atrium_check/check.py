@@ -635,6 +635,9 @@ def _check_enum(report: Report, e: Mapping[str, Any], doc: Any, roster: list[str
     if not isinstance(values, list):
         report.add("error", "ENUM_POINTER_MISSING", subj, "pointer does not resolve to a list")
         return
+    if not all(isinstance(v, str) for v in values):
+        report.add("error", "ENUM_NOT_STRINGS", subj, "every enum value must be a tool name (string)")
+        return
     if len(set(values)) != len(values):
         report.add("error", "ENUM_DUPLICATE", subj, "duplicate tool value")
     unknown = sorted(set(values) - set(roster))
@@ -662,6 +665,9 @@ def _check_mirror(report: Report, reg: Mapping[str, Any], mi: Mapping[str, Any],
             report.add("warn", "MIRROR_MANIFEST", subj, f"{mi['manifest']}: {exc}")
         else:
             pinned = manifest.get("upstream_commit") if isinstance(manifest, dict) else None
+            if pinned is not None and not isinstance(pinned, str):
+                report.add("warn", "MIRROR_MANIFEST", subj, f"{mi['manifest']}: upstream_commit must be a string, got {type(pinned).__name__}")
+                pinned = None
     else:
         report.add("warn", "MIRROR_MANIFEST", subj, f"{mi['manifest']} not found")
 

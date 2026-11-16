@@ -670,3 +670,18 @@ def test_uppercase_head_still_matches_the_pin(suite):
     reg, _, root = suite
     r = run(reg, root, heads={"alpha": "AAAAAAA" + "0" * 33, "beta": "bbbbbbb"})
     assert "HEAD_NOT_PINNED" not in codes(r)
+
+
+def test_enum_with_non_string_values_is_a_finding_not_a_crash(suite):
+    reg, _, root = suite
+    reg["mirrors"] = []
+    _rewrite(reg, 0, root, "Alpha", lambda d: d["properties"]["tool"].update(enum=[{"name": "alpha"}, ["beta"]]))
+    r = run(reg, root)
+    assert "ENUM_NOT_STRINGS" in codes(r) and not r.passed
+
+
+@pytest.mark.parametrize("bad", [1234567, ["aaaaaaa"], {"sha": "aaaaaaa"}, True])
+def test_mirror_manifest_with_non_string_upstream_commit_is_a_warning_not_a_crash(suite, bad):
+    reg, _, root = suite
+    write_json(root / "beta/vendor_alpha/VENDORED_FROM.json", {"upstream_commit": bad})
+    assert "MIRROR_MANIFEST" in codes(run(reg, root))
