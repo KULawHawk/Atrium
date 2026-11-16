@@ -252,6 +252,11 @@ def _require(cond: bool, problems: list[str], message: str) -> bool:
     return cond
 
 
+def _is_key(value: Any, container: Any) -> bool:
+    """``value in container`` that treats an unhashable value (list, dict) as simply absent."""
+    return isinstance(value, str) and value in container
+
+
 def validate_registry(reg: Any) -> list[str]:
     """Return every structural problem in a registry document (empty when valid)."""
     problems: list[str] = []
@@ -296,7 +301,7 @@ def validate_registry(reg: Any) -> list[str]:
         if _require(isinstance(name, str) and _split_name(name) is not None, problems, f"{subj}.name: must look like 'Name/<int>'"):
             _require(name not in seen, problems, f"{subj}.name: duplicate contract {name}")
             seen.add(name)
-        _require(c.get("home") in members, problems, f"{subj}.home: not a registered member")
+        _require(_is_key(c.get("home"), members), problems, f"{subj}.home: not a registered member")
         _require(isinstance(c.get("path"), str) and c.get("path"), problems, f"{subj}.path: required string")
         _require(c.get("kind") in KINDS, problems, f"{subj}.kind: must be one of {KINDS}")
         ptr = c.get("const_pointer")
@@ -329,7 +334,7 @@ def validate_registry(reg: Any) -> list[str]:
             subj = f"tool_enums[{i}]"
             if not _require(isinstance(e, dict), problems, f"{subj}: must be an object"):
                 continue
-            _require(e.get("contract") in seen, problems, f"{subj}.contract: not a registered contract")
+            _require(_is_key(e.get("contract"), seen), problems, f"{subj}.contract: not a registered contract")
             _require(isinstance(e.get("pointer"), str), problems, f"{subj}.pointer: required string")
             exp = e.get("expect")
             _require(
@@ -349,8 +354,8 @@ def validate_registry(reg: Any) -> list[str]:
             subj = f"mirrors[{i}]"
             if not _require(isinstance(mi, dict), problems, f"{subj}: must be an object"):
                 continue
-            _require(mi.get("home") in members, problems, f"{subj}.home: not a registered member")
-            _require(mi.get("in") in members, problems, f"{subj}.in: not a registered member")
+            _require(_is_key(mi.get("home"), members), problems, f"{subj}.home: not a registered member")
+            _require(_is_key(mi.get("in"), members), problems, f"{subj}.in: not a registered member")
             for key in ("root", "manifest"):
                 _require(isinstance(mi.get(key), str) and mi.get(key), problems, f"{subj}.{key}: required string")
     replicas = reg.get("replicas", [])
@@ -359,8 +364,8 @@ def validate_registry(reg: Any) -> list[str]:
             subj = f"replicas[{i}]"
             if not _require(isinstance(rp, dict), problems, f"{subj}: must be an object"):
                 continue
-            _require(rp.get("contract") in seen, problems, f"{subj}.contract: not a registered contract")
-            _require(rp.get("in") in members, problems, f"{subj}.in: not a registered member")
+            _require(_is_key(rp.get("contract"), seen), problems, f"{subj}.contract: not a registered contract")
+            _require(_is_key(rp.get("in"), members), problems, f"{subj}.in: not a registered member")
             _require(isinstance(rp.get("path"), str) and rp.get("path"), problems, f"{subj}.path: required string")
     return problems
 

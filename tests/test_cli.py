@@ -127,3 +127,12 @@ def test_git_empty_output(monkeypatch):
 def test_default_registry_is_the_committed_one():
     assert cli.DEFAULT_REGISTRY.is_file()
     assert load_registry(cli.DEFAULT_REGISTRY)["owner"] == "Atrium"
+
+
+def test_registry_with_unhashable_reference_exits_2_not_a_traceback(suite, tmp_path, capsys):
+    reg, _, root = suite
+    reg["contracts"][0]["home"] = ["alpha"]
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps(reg), encoding="utf-8")
+    assert cli.main(["check", "--registry", str(bad), "--repos-root", str(root)]) == 2
+    assert "ATRIUM-CHECK: ERROR" in capsys.readouterr().err

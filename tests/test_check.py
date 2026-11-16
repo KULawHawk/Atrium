@@ -633,3 +633,20 @@ def test_crlf_checkout_hashes_like_the_committed_lf_file(suite):
     r = run(reg, root)
     assert "PIN_DRIFT" not in codes(r) and "MIRROR_STALE" not in codes(r)
     assert r.passed
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda r: r["contracts"][0].__setitem__("home", ["alpha"]),
+        lambda r: r["tool_enums"][0].__setitem__("contract", ["Rec/1"]),
+        lambda r: r["mirrors"][0].__setitem__("home", {"x": 1}),
+        lambda r: r["mirrors"][0].__setitem__("in", ["beta"]),
+        lambda r: r.__setitem__("replicas", [{"contract": ["Rec/1"], "in": "beta", "path": "x.json"}]),
+        lambda r: r.__setitem__("replicas", [{"contract": "Rec/1", "in": {"b": 1}, "path": "x.json"}]),
+    ],
+)
+def test_unhashable_reference_is_a_problem_not_a_crash(suite, mutate):
+    reg, _, _ = suite
+    mutate(reg)
+    assert validate_registry(reg)  # reported, never a TypeError
