@@ -282,6 +282,13 @@ def validate_registry(reg: Any) -> list[str]:
             continue
         for key in ("repo", "dir", "pinned_commit"):
             _require(isinstance(m.get(key), str) and m.get(key), problems, f"{subj}.{key}: required string")
+        pin = m.get("pinned_commit")
+        if isinstance(pin, str) and pin:
+            _require(
+                re.fullmatch(r"[0-9a-f]{7,40}", pin) is not None,
+                problems,
+                f"{subj}.pinned_commit: 7 to 40 lowercase hex characters (a shorter pin matches almost any HEAD)",
+            )
         dirs = m.get("contract_dirs")
         _require(
             isinstance(dirs, list) and all(isinstance(d, str) and d for d in dirs),
@@ -513,7 +520,7 @@ def _check_heads(
                 name,
                 f"not a git checkout, so it cannot be shown to be at pinned_commit {pin}",
             )
-        elif not (head.startswith(pin) or pin.startswith(head)):
+        elif not _same_commit(head, pin):
             report.add(
                 "warn" if allow_unpinned_head else "error",
                 "HEAD_NOT_PINNED",
@@ -690,7 +697,7 @@ def _check_mirror(report: Report, reg: Mapping[str, Any], mi: Mapping[str, Any],
 
 def _same_commit(a: str, b: str) -> bool:
     n = min(len(a), len(b))
-    return n >= 7 and a[:n].lower() == b[:n].lower()
+    return n >= 7 and a[:n].lower() == b[:n].lower()  # a pin shorter than 7 never matches
 
 
 # --------------------------------------------------------------------------- repin

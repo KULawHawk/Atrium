@@ -650,3 +650,23 @@ def test_unhashable_reference_is_a_problem_not_a_crash(suite, mutate):
     reg, _, _ = suite
     mutate(reg)
     assert validate_registry(reg)  # reported, never a TypeError
+
+
+@pytest.mark.parametrize("pin", ["a", "aaa", "zzzzzzz", "AAAAAAA", "aaaaaaa\n"])
+def test_pinned_commit_must_be_a_real_abbreviated_sha(suite, pin):
+    reg, _, _ = suite
+    reg["members"]["alpha"]["pinned_commit"] = pin
+    assert any("pinned_commit" in p for p in validate_registry(reg))
+
+
+def test_one_character_pin_does_not_match_an_unrelated_head(suite):
+    reg, _, root = suite
+    reg["members"]["alpha"]["pinned_commit"] = "a"  # bypass validation: the head check must hold on its own
+    r = run(reg, root, heads={"alpha": "a" + "1" * 39, "beta": "bbbbbbb"})
+    assert "HEAD_NOT_PINNED" in codes(r)
+
+
+def test_uppercase_head_still_matches_the_pin(suite):
+    reg, _, root = suite
+    r = run(reg, root, heads={"alpha": "AAAAAAA" + "0" * 33, "beta": "bbbbbbb"})
+    assert "HEAD_NOT_PINNED" not in codes(r)
