@@ -55,6 +55,13 @@ NEEDS = {
     "atrium": {"hard": [("module", "jsonschema")], "soft": []},
 }
 
+#: Extra environment for a member's test run. Tighten-only: each entry turns a silent skip into a failure.
+#: Sequoia: without z3-solver its optional z3 modules skip and coverage quietly drops below the 100% bar;
+#: SEQUOIA_REQUIRE_Z3=1 (Sequoia #61) makes the missing solver a test failure instead. Older Sequoia ignores it.
+CHILD_ENV = {
+    "sequoia": {"SEQUOIA_REQUIRE_Z3": "1"},
+}
+
 
 def _have(kind: str, name: str) -> bool:
     if kind == "binary":
@@ -111,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # pytest's own `pythonpath = ["src"]` is not seen by tests that spawn a child python, so mirror it.
     src = repo / "src"
-    penv = {**os.environ}
+    penv = {**os.environ, **CHILD_ENV.get(name, {})}
     if src.is_dir():
         penv["PYTHONPATH"] = os.pathsep.join(filter(None, [str(src), penv.get("PYTHONPATH", "")]))
     print(f"== {name}: pytest ({repo})", flush=True)
