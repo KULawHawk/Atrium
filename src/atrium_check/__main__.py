@@ -25,6 +25,7 @@ from atrium_check.check import (
     load_registry,
     plan_repin,
     resolve_checkouts,
+    same_commit,
 )
 
 DEFAULT_REGISTRY = Path(__file__).resolve().parents[2] / "registry" / "contracts.v1.json"
@@ -43,14 +44,20 @@ def _parse_overrides(items: list[str]) -> dict[str, Path]:
 def _git_head(path: Path) -> str | None:
     try:
         out = subprocess.run(
-            ["git", "-C", str(path), "rev-parse", "HEAD"],
+            ["git", "-C", str(path), "rev-parse", "--show-prefix", "HEAD"],
             capture_output=True,
             text=True,
             check=True,
         )
     except (OSError, subprocess.CalledProcessError):
         return None
-    return out.stdout.strip() or None
+    # First line: the path of `path` below its repository root ("" at the root). A folder
+    # that is merely inside some other git work tree (an unpacked copy, a stray parent
+    # repo) would otherwise report that other repository's HEAD as its own.
+    prefix, _, head = out.stdout.partition("\n")
+    if prefix.strip():
+        return None
+    return head.strip() or None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -83,6 +90,15 @@ def main(argv: list[str] | None = None) -> int:
     except (RegistryError, ValueError) as exc:
         print(f"ATRIUM-CHECK: ERROR {exc}", file=sys.stderr)
         return 2
+    unknown = sorted(set(overrides) - set(reg["members"]))
+    if unknown:
+        # An override naming no member used to be dropped silently, and the run then
+        # checked whatever --repos-root held instead of the checkout the caller meant.
+        print(
+            f"ATRIUM-CHECK: ERROR --repo names no registered member: {unknown} (members: {sorted(reg['members'])}; names are case-sensitive)",
+            file=sys.stderr,
+        )
+        return 2
     checkouts = resolve_checkouts(reg, args.repos_root, overrides)
 
     if args.command == "check":
@@ -98,11 +114,17 @@ def main(argv: list[str] | None = None) -> int:
             print(report.summary())
         return 0 if report.passed else 1
 
+    if not checkouts:
+        print("ATRIUM-REPIN: ERROR no member checkout found (check --repos-root / --repo); nothing was examined", file=sys.stderr)
+        return 2
+    absent = sorted(set(reg["members"]) - set(checkouts))
+    if absent:
+        print(f"WARN  not repinned, no checkout found: {', '.join(absent)}")
     changes = plan_repin(reg, checkouts)
     commits = {}
     for member, path in sorted(checkouts.items()):
         head = (_git_head(path) or "")[:7]
-        if head and head != reg["members"][member]["pinned_commit"]:
+        if head and not same_commit(head, reg["members"][member]["pinned_commit"]):
             commits[member] = head
     for name, old, new in changes:
         print(f"PLAN  {name}: {old[:12]} -> {new[:12]}")

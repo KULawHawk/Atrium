@@ -127,3 +127,64 @@ def test_git_empty_output(monkeypatch):
 def test_default_registry_is_the_committed_one():
     assert cli.DEFAULT_REGISTRY.is_file()
     assert load_registry(cli.DEFAULT_REGISTRY)["owner"] == "Atrium"
+
+
+def test_registry_with_unhashable_reference_exits_2_not_a_traceback(suite, tmp_path, capsys):
+    reg, _, root = suite
+    reg["contracts"][0]["home"] = ["alpha"]
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps(reg), encoding="utf-8")
+    assert cli.main(["check", "--registry", str(bad), "--repos-root", str(root)]) == 2
+    assert "ATRIUM-CHECK: ERROR" in capsys.readouterr().err
+
+
+def test_repo_override_naming_no_member_is_refused_not_ignored(suite, tmp_path, capsys):
+    _, path, root = suite
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    # 'Alpha' is the folder name; the member is 'alpha'. The override used to vanish and repos-root was checked instead.
+    assert cli.main(["check", "--registry", str(path), "--repos-root", str(root), "--repo", f"Alpha={elsewhere}"]) == 2
+    assert "names no registered member" in capsys.readouterr().err
+    assert cli.main(["repin", "--registry", str(path), "--repos-root", str(root), "--repo", f"Alpha={elsewhere}"]) == 2
+
+
+def test_repin_with_no_checkouts_is_an_error_not_nothing_to_change(suite, tmp_path, capsys):
+    _, path, _ = suite
+    before = path.read_text()
+    assert cli.main(["repin", "--registry", str(path), "--repos-root", str(tmp_path / "typo"), "--apply"]) == 2
+    captured = capsys.readouterr()
+    assert "nothing to change" not in captured.out and "ERROR" in captured.err
+    assert path.read_text() == before
+
+
+def test_repin_names_the_members_it_could_not_repin(suite, capsys, monkeypatch):
+    _, path, root = suite
+    monkeypatch.setattr(cli, "_git_head", lambda p: "ddddddd")
+    (root / "beta").rename(root / "gone")
+    assert cli.main(["repin", "--registry", str(path), "--repos-root", str(root)]) == 0
+    assert "not repinned, no checkout found: beta" in capsys.readouterr().out
+
+
+def test_git_head_of_a_folder_inside_another_repo_is_unknown(tmp_path):
+    outer = tmp_path / "outer"
+    inner = outer / "locutus"  # an unpacked copy, no .git of its own
+    inner.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(outer)], check=True)
+    subprocess.run(
+        ["git", "-C", str(outer), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x"],
+        check=True,
+    )
+    assert REAL_GIT_HEAD(outer) is not None
+    assert REAL_GIT_HEAD(inner) is None
+
+
+def test_repin_does_not_rewrite_a_pin_that_already_names_the_head(suite, capsys, monkeypatch):
+    """check accepts a longer pin that starts with the head; repin must agree, not shorten it forever."""
+    _, path, root = suite
+    reg = json.loads(path.read_text())
+    reg["members"]["alpha"]["pinned_commit"] = "aaaaaaa" + "1" * 5  # 12 chars
+    path.write_text(json.dumps(reg), encoding="utf-8")
+    monkeypatch.setattr(cli, "_git_head", lambda p: ("aaaaaaa1" + "1" * 32) if p.name == "Alpha" else "bbbbbbb")
+    assert cli.main(["repin", "--registry", str(path), "--repos-root", str(root)]) == 0
+    out = capsys.readouterr().out
+    assert "nothing to change" in out and "pinned_commit" not in out
