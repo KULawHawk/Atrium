@@ -619,3 +619,17 @@ def test_revision_with_a_malformed_name(suite):
     reg["contracts"][0]["revision_note"] = "x"
     problems = validate_registry(reg)
     assert any(p.startswith("contracts[0].revision:") for p in problems)
+
+
+# ----------------------------------------------------------------- line endings
+
+
+def test_crlf_checkout_hashes_like_the_committed_lf_file(suite):
+    """Git for Windows (core.autocrlf=true) checks JSON out with CRLF; the pin is of the committed LF bytes."""
+    reg, _, root = suite
+    for rel in ("Alpha/contracts/rec.v1.schema.json", "beta/vendor_alpha/contracts/rec.v1.schema.json"):
+        f = root / rel
+        f.write_bytes(f.read_bytes().replace(b"\n", b"\r\n"))
+    r = run(reg, root)
+    assert "PIN_DRIFT" not in codes(r) and "MIRROR_STALE" not in codes(r)
+    assert r.passed

@@ -108,7 +108,10 @@ class RegistryError(ValueError):
 
 
 def sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    """sha256 of the file with CRLF folded to LF, so a Windows checkout (core.autocrlf=true)
+    hashes the same as the committed bytes the registry pins. JSON cannot carry a raw CR inside
+    a string, so only insignificant whitespace is folded."""
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def resolve_pointer(doc: Any, pointer: str) -> Any:
