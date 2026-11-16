@@ -136,3 +136,30 @@ def test_registry_with_unhashable_reference_exits_2_not_a_traceback(suite, tmp_p
     bad.write_text(json.dumps(reg), encoding="utf-8")
     assert cli.main(["check", "--registry", str(bad), "--repos-root", str(root)]) == 2
     assert "ATRIUM-CHECK: ERROR" in capsys.readouterr().err
+
+
+def test_repo_override_naming_no_member_is_refused_not_ignored(suite, tmp_path, capsys):
+    _, path, root = suite
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    # 'Alpha' is the folder name; the member is 'alpha'. The override used to vanish and repos-root was checked instead.
+    assert cli.main(["check", "--registry", str(path), "--repos-root", str(root), "--repo", f"Alpha={elsewhere}"]) == 2
+    assert "names no registered member" in capsys.readouterr().err
+    assert cli.main(["repin", "--registry", str(path), "--repos-root", str(root), "--repo", f"Alpha={elsewhere}"]) == 2
+
+
+def test_repin_with_no_checkouts_is_an_error_not_nothing_to_change(suite, tmp_path, capsys):
+    _, path, _ = suite
+    before = path.read_text()
+    assert cli.main(["repin", "--registry", str(path), "--repos-root", str(tmp_path / "typo"), "--apply"]) == 2
+    captured = capsys.readouterr()
+    assert "nothing to change" not in captured.out and "ERROR" in captured.err
+    assert path.read_text() == before
+
+
+def test_repin_names_the_members_it_could_not_repin(suite, capsys, monkeypatch):
+    _, path, root = suite
+    monkeypatch.setattr(cli, "_git_head", lambda p: "ddddddd")
+    (root / "beta").rename(root / "gone")
+    assert cli.main(["repin", "--registry", str(path), "--repos-root", str(root)]) == 0
+    assert "not repinned, no checkout found: beta" in capsys.readouterr().out

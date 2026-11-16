@@ -83,6 +83,15 @@ def main(argv: list[str] | None = None) -> int:
     except (RegistryError, ValueError) as exc:
         print(f"ATRIUM-CHECK: ERROR {exc}", file=sys.stderr)
         return 2
+    unknown = sorted(set(overrides) - set(reg["members"]))
+    if unknown:
+        # An override naming no member used to be dropped silently, and the run then
+        # checked whatever --repos-root held instead of the checkout the caller meant.
+        print(
+            f"ATRIUM-CHECK: ERROR --repo names no registered member: {unknown} (members: {sorted(reg['members'])}; names are case-sensitive)",
+            file=sys.stderr,
+        )
+        return 2
     checkouts = resolve_checkouts(reg, args.repos_root, overrides)
 
     if args.command == "check":
@@ -98,6 +107,12 @@ def main(argv: list[str] | None = None) -> int:
             print(report.summary())
         return 0 if report.passed else 1
 
+    if not checkouts:
+        print("ATRIUM-REPIN: ERROR no member checkout found (check --repos-root / --repo); nothing was examined", file=sys.stderr)
+        return 2
+    absent = sorted(set(reg["members"]) - set(checkouts))
+    if absent:
+        print(f"WARN  not repinned, no checkout found: {', '.join(absent)}")
     changes = plan_repin(reg, checkouts)
     commits = {}
     for member, path in sorted(checkouts.items()):
