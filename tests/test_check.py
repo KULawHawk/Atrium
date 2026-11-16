@@ -694,3 +694,18 @@ def test_pointer_array_index_follows_rfc_6901(ptr):
         resolve_pointer({"a": [0, 1, 2, 3]}, ptr)
     assert resolve_pointer({"a": [0, 1, 2, 3]}, "/a/0") == 0
     assert resolve_pointer({"a": [0, 1, 2, 3]}, "/a/3") == 3
+
+
+def test_pattern_properties_key_that_accepts_a_trailing_newline_is_flagged():
+    js = pytest.importorskip("jsonschema")
+    from atrium_check.check import unbounded_anchored_patterns
+
+    leaky = {"type": "object", "patternProperties": {"^[a-z]+$": {"type": "integer"}}, "additionalProperties": False}
+    assert js.Draft202012Validator(leaky).is_valid({"abc\n": 1})  # the gap is real
+    assert [p for p, _ in unbounded_anchored_patterns(leaky)] == ["/patternProperties/^[a-z]+$"]
+    guarded = {**leaky, "patternProperties": {"^[a-z]+$(?!\\n)": {"type": "integer"}}}
+    assert not js.Draft202012Validator(guarded).is_valid({"abc\n": 1})
+    assert unbounded_anchored_patterns(guarded) == []
+    bounded = {**leaky, "patternProperties": {"^[a-z]{3}$": {}}, "propertyNames": {"maxLength": 3}}
+    assert not js.Draft202012Validator(bounded).is_valid({"abc\n": 1})
+    assert unbounded_anchored_patterns(bounded) == []

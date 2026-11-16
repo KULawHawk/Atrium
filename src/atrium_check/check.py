@@ -235,6 +235,18 @@ def unbounded_anchored_patterns(doc: Any, path: str = "") -> list[tuple[str, str
             why = newline_leak(doc)
             if why is not None:
                 found.append((path or "/", why))
+        pp = doc.get("patternProperties")
+        if isinstance(pp, dict):
+            # The keys of patternProperties are regexes applied with re.search to property
+            # names: `^[a-z]+$` lets {"abc\n": ...} through exactly as it does for a string value.
+            names = doc.get("propertyNames")
+            for key in pp:
+                node: dict[str, Any] = {"pattern": key}
+                if isinstance(names, dict) and "maxLength" in names:
+                    node["maxLength"] = names["maxLength"]
+                why = newline_leak(node)
+                if why is not None:
+                    found.append((f"{path}/patternProperties/{key}", why))
         for k, v in doc.items():
             found.extend(unbounded_anchored_patterns(v, f"{path}/{k}"))
     elif isinstance(doc, list):
