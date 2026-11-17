@@ -8,7 +8,7 @@ The machine-readable registry is [`registry/contracts.v1.json`](registry/contrac
 
 | Contract | Home | File | Notes |
 |---|---|---|---|
-| `RulingRecord/1` | Locutus | `src/locutus/contracts/ruling_record.v1.schema.json` | One per human decision, any tool (STRATEGY §2a). **Registry revision 1.1**: the 2026-10-23 L0.2 tightenings were breaking (see Revisions). |
+| `RulingRecord/1` | Locutus | `src/locutus/contracts/ruling_record.v1.schema.json` | One per human decision, any tool (STRATEGY §2a). **Registry revision 1.2**: the 2026-10-23 L0.2 tightenings were breaking (1.1), then the additive `nothing_missed` outcome (1.2; see Revisions). |
 | `RulingRetraction/1` | Locutus | `src/locutus/contracts/ruling_retraction.v1.schema.json` | Withdraws one earlier RulingRecord (blueprint 4.6). |
 | `PatternPack/1` | Locutus | `src/locutus/contracts/pattern_pack.v1.schema.json` | Signed, hash-pinned patterns shipped back to the tools. |
 | `PartitionManifest/1` | Locutus | `src/locutus/contracts/partition_manifest.v1.schema.json` | Sealed datum lists per partition (the data firewall). |
@@ -71,7 +71,7 @@ The check finds anchors anywhere in the pattern (inside alternations too), and s
 
 A contract entry may carry `revision` (`M.N`, where M is the contract's version) and a required `revision_note`. It records a change that broke the v1 rules but was kept under the same file and `const`, so nothing on disk is renamed. The check reports it as a `CONTRACT_REVISION` note on every run, so the exception stays visible.
 
-- `RulingRecord/1` is at **1.1** (decision 35 (ii) = A, 2026-11-03). On 2026-10-23, Locutus L0.2 made `issue_signature`, `bbox_space` and `pack_sha256` required and turned `engine_family` into an enum, under the v1 label (`docs/CONTRACT_CHANGES.md` in Locutus). No record was on file yet, so the change is grandfathered. **The next tightening must be a v2 file.**
+- `RulingRecord/1` is at **1.1** (decision 35 (ii) = A, 2026-11-03). On 2026-10-23, Locutus L0.2 made `issue_signature`, `bbox_space` and `pack_sha256` required and turned `engine_family` into an enum, under the v1 label (`docs/CONTRACT_CHANGES.md` in Locutus). No record was on file yet, so the change is grandfathered. **The next tightening must be a v2 file.** Revision **1.2** (Decision 71 = A, 2026-11-17, Locutus #57): additive `decision.outcome` value `nothing_missed` and optional `decision.searched`; no field tightened, every 1.1 record still valid. Consumers pinned to the 1.1 bytes (Obsidian's replica, Conclave's vendored copy) reject the new outcome until they re-pin. The eventual direction is RulingRecord/2 with a general attestation block (Jake, Decision 71); a v1 `nothing_missed` record maps into it one-to-one.
 - `KBInput/1` is at **1.1** (reviewer 3 on Sequoia #56, 2026-11-05, same precedent). Sequoia declared the `context_notes` block as closed note objects, and `parse_kb_input` began refusing other shapes, under the v1 label (`CONTRACTS.md` in Sequoia). The block's only writer, Conclave's translator (#2370), already wrote that shape, so no document on file changes. The file stays `kb_input.v1.schema.json` and `kb_input_version` stays `0.1.0`. **The next tightening must be a v2 file.**
 
 ## Changing a contract
