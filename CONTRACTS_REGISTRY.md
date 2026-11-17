@@ -8,7 +8,7 @@ The machine-readable registry is [`registry/contracts.v1.json`](registry/contrac
 
 | Contract | Home | File | Notes |
 |---|---|---|---|
-| `RulingRecord/1` | Locutus | `src/locutus/contracts/ruling_record.v1.schema.json` | One per human decision, any tool (STRATEGY §2a). **Registry revision 1.2**: the 2026-10-23 L0.2 tightenings were breaking (1.1), then the additive `nothing_missed` outcome (1.2; see Revisions). |
+| `RulingRecord/1` | Locutus | `src/locutus/contracts/ruling_record.v1.schema.json` | One per human decision, any tool (STRATEGY §2a). **Registry revision 1.3**: the 2026-10-23 L0.2 tightenings were breaking (1.1), then the additive `nothing_missed` outcome (1.2), then the additive optional `selection.confidence` and `confidence_source` (1.3, Locutus #71); see Revisions. |
 | `RulingRetraction/1` | Locutus | `src/locutus/contracts/ruling_retraction.v1.schema.json` | Withdraws one earlier RulingRecord (blueprint 4.6). |
 | `PatternPack/1` | Locutus | `src/locutus/contracts/pattern_pack.v1.schema.json` | Signed, hash-pinned patterns shipped back to the tools. |
 | `PartitionManifest/1` | Locutus | `src/locutus/contracts/partition_manifest.v1.schema.json` | Sealed datum lists per partition (the data firewall). |
