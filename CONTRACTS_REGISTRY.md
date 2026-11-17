@@ -24,6 +24,7 @@ The machine-readable registry is [`registry/contracts.v1.json`](registry/contrac
 | `TagProposal/1` | Locutus | `src/locutus/contracts/tag_proposal.v1.schema.json` | W-7 manual-tag proposal. The dotted name `conclave.tag_proposal.v1` is deliberate (registered with `const_value`): under W-7 design §3.5 the record is owned by Conclave and emitted by the Workbench, and any move to the suite form is a W-7 decision. Every pattern is newline-bounded since Locutus #26. |
 | `TagRuling/1` | Locutus | `src/locutus/contracts/tag_ruling.v1.schema.json` | W-7 manual-tag ruling. The dotted name `conclave.tag_ruling.v1` is deliberate (registered with `const_value`): under W-7 design §3.5 the record is owned by Conclave and emitted by the Workbench, and any move to the suite form is a W-7 decision. Every pattern is newline-bounded since Locutus #26. |
 | `EngineFamilies/1` | Locutus | `src/locutus/contracts/engine_families.v1.json` | Data contract from the Conclave roster (CL-3 method_family). |
+| `EngineFamilies/2` | Locutus | `src/locutus/contracts/engine_families.v2.json` | Reader lineage as shared components, pairwise; owner decision 81 (A). Conclave use OFF until the first keyed PC run. |
 | `ObsidianRequest/1` | Obsidian | `src/obsidian/contracts/obsidian_request.v1.schema.json` | De-identification request (6.19). |
 | `ObsidianResult/1` | Obsidian | `src/obsidian/contracts/obsidian_result.v1.schema.json` | |
 | `ObsidianSidecar/1` | Obsidian | `src/obsidian/contracts/obsidian_sidecar.v1.schema.json` | Holds no path, name or value. |
