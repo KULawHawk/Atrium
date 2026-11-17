@@ -379,6 +379,23 @@ def test_plan_and_apply_repin(suite):
     assert "PIN_DRIFT" not in [f.code for f in run(again, root, only=["alpha"]).findings]
 
 
+def test_apply_repin_writes_lf_line_endings_even_where_text_mode_writes_crlf(suite, monkeypatch):
+    """On Windows, text mode turns "\n" into "\r\n" unless told otherwise; the registry must stay LF."""
+    reg, path, root = suite
+    real = Path.write_text
+
+    def windows_write_text(self, data, encoding=None, errors=None, newline=None):
+        if newline is None:  # what Windows text mode does with the default newline
+            data = data.replace("\n", "\r\n")
+        return real(self, data, encoding=encoding, errors=errors, newline="")
+
+    monkeypatch.setattr(Path, "write_text", windows_write_text)
+    p = root / "Alpha/contracts/rec.v1.schema.json"
+    real(p, p.read_text() + " ", encoding="utf-8")
+    apply_repin(path, reg, plan_repin(reg, resolve_checkouts(reg, root)))
+    assert b"\r\n" not in path.read_bytes()
+
+
 def test_report_json_and_finding_line(suite):
     reg, _, root = suite
     (root / "beta/contracts/req.v2.schema.json").unlink()
