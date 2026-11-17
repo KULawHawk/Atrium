@@ -135,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
     counts = _counts("".join(lines))
     passed, skipped = counts.get("passed", 0), counts.get("skipped", 0)
     failed = counts.get("failed", 0) + counts.get("error", 0)
-    tests_ok = rc == 0 and passed > 0
+    tests_ok = rc == 0 and passed > 0 and failed == 0  # a plugin can force exit 0 despite failures
     tests_txt = f"{passed} passed/{skipped} skipped" + (f"/{failed} failed" if failed else "")
     if rc == 5 or passed == 0 and rc == 0:
         tests_txt += " (NO TESTS RAN)"

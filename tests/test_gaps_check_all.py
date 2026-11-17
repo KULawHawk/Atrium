@@ -79,7 +79,6 @@ def test_tests_not_clean_is_never_pass(monkeypatch, capsys, tmp_path, out, rc, n
     assert needle in line
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: check_all.py prints CHECK-ALL: PASS when pytest exits 0 but reports failed/error tests")
 @pytest.mark.parametrize(
     "out",
     ["1 failed, 5 passed in 0.1s\n", "5 passed, 1 error in 0.1s\n"],
