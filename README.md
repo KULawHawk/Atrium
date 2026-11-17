@@ -41,6 +41,7 @@ The principles in §1 are the most important. Every product's design doc subordi
 ### Naming and structural decisions
 
 - [`NAMES.md`](NAMES.md) — brand registry. Pins APEX as the suite, Atrium as the integration layer, Ad Astra as the portfolio name, and registers every suite member (Conclave, Sequoia, Verity, Affine, Locutus, Obsidian, Chaise, the APEX hub), plus "Tracer" as Curator's Migration capability brand.
+- [`design/GUI_RULE_NOTES.md`](design/GUI_RULE_NOTES.md) — ruling notes Jake has approved in writing against `GUI_DESIGN_PRINCIPLES.md` (kept locally, not yet in this repo); Note 1 allows a bounded group confirm for pattern-backed clusters only.
 - [`INSTALL_PATH_DESIGN.md`](INSTALL_PATH_DESIGN.md) — the standardized on-disk layout for installed runtime data under the `AdAstra` portfolio root (its "Ad Astra suite" wording predates the A1 ruling). Per-product subdirs under a single portfolio-level root.
 
 ### Meta
