@@ -619,3 +619,93 @@ def test_revision_with_a_malformed_name(suite):
     reg["contracts"][0]["revision_note"] = "x"
     problems = validate_registry(reg)
     assert any(p.startswith("contracts[0].revision:") for p in problems)
+
+
+# ----------------------------------------------------------------- line endings
+
+
+def test_crlf_checkout_hashes_like_the_committed_lf_file(suite):
+    """Git for Windows (core.autocrlf=true) checks JSON out with CRLF; the pin is of the committed LF bytes."""
+    reg, _, root = suite
+    for rel in ("Alpha/contracts/rec.v1.schema.json", "beta/vendor_alpha/contracts/rec.v1.schema.json"):
+        f = root / rel
+        f.write_bytes(f.read_bytes().replace(b"\n", b"\r\n"))
+    r = run(reg, root)
+    assert "PIN_DRIFT" not in codes(r) and "MIRROR_STALE" not in codes(r)
+    assert r.passed
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda r: r["contracts"][0].__setitem__("home", ["alpha"]),
+        lambda r: r["tool_enums"][0].__setitem__("contract", ["Rec/1"]),
+        lambda r: r["mirrors"][0].__setitem__("home", {"x": 1}),
+        lambda r: r["mirrors"][0].__setitem__("in", ["beta"]),
+        lambda r: r.__setitem__("replicas", [{"contract": ["Rec/1"], "in": "beta", "path": "x.json"}]),
+        lambda r: r.__setitem__("replicas", [{"contract": "Rec/1", "in": {"b": 1}, "path": "x.json"}]),
+    ],
+)
+def test_unhashable_reference_is_a_problem_not_a_crash(suite, mutate):
+    reg, _, _ = suite
+    mutate(reg)
+    assert validate_registry(reg)  # reported, never a TypeError
+
+
+@pytest.mark.parametrize("pin", ["a", "aaa", "zzzzzzz", "AAAAAAA", "aaaaaaa\n"])
+def test_pinned_commit_must_be_a_real_abbreviated_sha(suite, pin):
+    reg, _, _ = suite
+    reg["members"]["alpha"]["pinned_commit"] = pin
+    assert any("pinned_commit" in p for p in validate_registry(reg))
+
+
+def test_one_character_pin_does_not_match_an_unrelated_head(suite):
+    reg, _, root = suite
+    reg["members"]["alpha"]["pinned_commit"] = "a"  # bypass validation: the head check must hold on its own
+    r = run(reg, root, heads={"alpha": "a" + "1" * 39, "beta": "bbbbbbb"})
+    assert "HEAD_NOT_PINNED" in codes(r)
+
+
+def test_uppercase_head_still_matches_the_pin(suite):
+    reg, _, root = suite
+    r = run(reg, root, heads={"alpha": "AAAAAAA" + "0" * 33, "beta": "bbbbbbb"})
+    assert "HEAD_NOT_PINNED" not in codes(r)
+
+
+def test_enum_with_non_string_values_is_a_finding_not_a_crash(suite):
+    reg, _, root = suite
+    reg["mirrors"] = []
+    _rewrite(reg, 0, root, "Alpha", lambda d: d["properties"]["tool"].update(enum=[{"name": "alpha"}, ["beta"]]))
+    r = run(reg, root)
+    assert "ENUM_NOT_STRINGS" in codes(r) and not r.passed
+
+
+@pytest.mark.parametrize("bad", [1234567, ["aaaaaaa"], {"sha": "aaaaaaa"}, True])
+def test_mirror_manifest_with_non_string_upstream_commit_is_a_warning_not_a_crash(suite, bad):
+    reg, _, root = suite
+    write_json(root / "beta/vendor_alpha/VENDORED_FROM.json", {"upstream_commit": bad})
+    assert "MIRROR_MANIFEST" in codes(run(reg, root))
+
+
+@pytest.mark.parametrize("ptr", ["/a/\u00b2", "/a/\u0663", "/a/01", "/a/00", "/a/-", "/a/ 1", "/a/1\n"])
+def test_pointer_array_index_follows_rfc_6901(ptr):
+    """Unicode digits ('\u00b2' crashed int(); '\u0663' read as 3) and leading zeros are not array indexes."""
+    with pytest.raises(KeyError):
+        resolve_pointer({"a": [0, 1, 2, 3]}, ptr)
+    assert resolve_pointer({"a": [0, 1, 2, 3]}, "/a/0") == 0
+    assert resolve_pointer({"a": [0, 1, 2, 3]}, "/a/3") == 3
+
+
+def test_pattern_properties_key_that_accepts_a_trailing_newline_is_flagged():
+    js = pytest.importorskip("jsonschema")
+    from atrium_check.check import unbounded_anchored_patterns
+
+    leaky = {"type": "object", "patternProperties": {"^[a-z]+$": {"type": "integer"}}, "additionalProperties": False}
+    assert js.Draft202012Validator(leaky).is_valid({"abc\n": 1})  # the gap is real
+    assert [p for p, _ in unbounded_anchored_patterns(leaky)] == ["/patternProperties/^[a-z]+$"]
+    guarded = {**leaky, "patternProperties": {"^[a-z]+$(?!\\n)": {"type": "integer"}}}
+    assert not js.Draft202012Validator(guarded).is_valid({"abc\n": 1})
+    assert unbounded_anchored_patterns(guarded) == []
+    bounded = {**leaky, "patternProperties": {"^[a-z]{3}$": {}}, "propertyNames": {"maxLength": 3}}
+    assert not js.Draft202012Validator(bounded).is_valid({"abc\n": 1})
+    assert unbounded_anchored_patterns(bounded) == []

@@ -108,7 +108,10 @@ class RegistryError(ValueError):
 
 
 def sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    """sha256 of the file with CRLF folded to LF, so a Windows checkout (core.autocrlf=true)
+    hashes the same as the committed bytes the registry pins. JSON cannot carry a raw CR inside
+    a string, so only insignificant whitespace is folded."""
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def resolve_pointer(doc: Any, pointer: str) -> Any:
@@ -121,7 +124,7 @@ def resolve_pointer(doc: Any, pointer: str) -> Any:
     for raw in pointer[1:].split("/"):
         token = raw.replace("~1", "/").replace("~0", "~")
         if isinstance(node, list):
-            if not token.isdigit() or int(token) >= len(node):
+            if re.fullmatch(r"0|[1-9][0-9]*", token) is None or int(token) >= len(node):  # RFC 6901: ASCII, no leading zero
                 raise KeyError(pointer)
             node = node[int(token)]
         elif isinstance(node, dict) and token in node:
@@ -232,6 +235,18 @@ def unbounded_anchored_patterns(doc: Any, path: str = "") -> list[tuple[str, str
             why = newline_leak(doc)
             if why is not None:
                 found.append((path or "/", why))
+        pp = doc.get("patternProperties")
+        if isinstance(pp, dict):
+            # The keys of patternProperties are regexes applied with re.search to property
+            # names: `^[a-z]+$` lets {"abc\n": ...} through exactly as it does for a string value.
+            names = doc.get("propertyNames")
+            for key in pp:
+                node: dict[str, Any] = {"pattern": key}
+                if isinstance(names, dict) and "maxLength" in names:
+                    node["maxLength"] = names["maxLength"]
+                why = newline_leak(node)
+                if why is not None:
+                    found.append((f"{path}/patternProperties/{key}", why))
         for k, v in doc.items():
             found.extend(unbounded_anchored_patterns(v, f"{path}/{k}"))
     elif isinstance(doc, list):
@@ -247,6 +262,11 @@ def _require(cond: bool, problems: list[str], message: str) -> bool:
     if not cond:
         problems.append(message)
     return cond
+
+
+def _is_key(value: Any, container: Any) -> bool:
+    """``value in container`` that treats an unhashable value (list, dict) as simply absent."""
+    return isinstance(value, str) and value in container
 
 
 def validate_registry(reg: Any) -> list[str]:
@@ -274,6 +294,13 @@ def validate_registry(reg: Any) -> list[str]:
             continue
         for key in ("repo", "dir", "pinned_commit"):
             _require(isinstance(m.get(key), str) and m.get(key), problems, f"{subj}.{key}: required string")
+        pin = m.get("pinned_commit")
+        if isinstance(pin, str) and pin:
+            _require(
+                re.fullmatch(r"[0-9a-f]{7,40}", pin) is not None,
+                problems,
+                f"{subj}.pinned_commit: 7 to 40 lowercase hex characters (a shorter pin matches almost any HEAD)",
+            )
         dirs = m.get("contract_dirs")
         _require(
             isinstance(dirs, list) and all(isinstance(d, str) and d for d in dirs),
@@ -293,7 +320,7 @@ def validate_registry(reg: Any) -> list[str]:
         if _require(isinstance(name, str) and _split_name(name) is not None, problems, f"{subj}.name: must look like 'Name/<int>'"):
             _require(name not in seen, problems, f"{subj}.name: duplicate contract {name}")
             seen.add(name)
-        _require(c.get("home") in members, problems, f"{subj}.home: not a registered member")
+        _require(_is_key(c.get("home"), members), problems, f"{subj}.home: not a registered member")
         _require(isinstance(c.get("path"), str) and c.get("path"), problems, f"{subj}.path: required string")
         _require(c.get("kind") in KINDS, problems, f"{subj}.kind: must be one of {KINDS}")
         ptr = c.get("const_pointer")
@@ -326,7 +353,7 @@ def validate_registry(reg: Any) -> list[str]:
             subj = f"tool_enums[{i}]"
             if not _require(isinstance(e, dict), problems, f"{subj}: must be an object"):
                 continue
-            _require(e.get("contract") in seen, problems, f"{subj}.contract: not a registered contract")
+            _require(_is_key(e.get("contract"), seen), problems, f"{subj}.contract: not a registered contract")
             _require(isinstance(e.get("pointer"), str), problems, f"{subj}.pointer: required string")
             exp = e.get("expect")
             _require(
@@ -346,8 +373,8 @@ def validate_registry(reg: Any) -> list[str]:
             subj = f"mirrors[{i}]"
             if not _require(isinstance(mi, dict), problems, f"{subj}: must be an object"):
                 continue
-            _require(mi.get("home") in members, problems, f"{subj}.home: not a registered member")
-            _require(mi.get("in") in members, problems, f"{subj}.in: not a registered member")
+            _require(_is_key(mi.get("home"), members), problems, f"{subj}.home: not a registered member")
+            _require(_is_key(mi.get("in"), members), problems, f"{subj}.in: not a registered member")
             for key in ("root", "manifest"):
                 _require(isinstance(mi.get(key), str) and mi.get(key), problems, f"{subj}.{key}: required string")
     replicas = reg.get("replicas", [])
@@ -356,8 +383,8 @@ def validate_registry(reg: Any) -> list[str]:
             subj = f"replicas[{i}]"
             if not _require(isinstance(rp, dict), problems, f"{subj}: must be an object"):
                 continue
-            _require(rp.get("contract") in seen, problems, f"{subj}.contract: not a registered contract")
-            _require(rp.get("in") in members, problems, f"{subj}.in: not a registered member")
+            _require(_is_key(rp.get("contract"), seen), problems, f"{subj}.contract: not a registered contract")
+            _require(_is_key(rp.get("in"), members), problems, f"{subj}.in: not a registered member")
             _require(isinstance(rp.get("path"), str) and rp.get("path"), problems, f"{subj}.path: required string")
     return problems
 
@@ -505,7 +532,7 @@ def _check_heads(
                 name,
                 f"not a git checkout, so it cannot be shown to be at pinned_commit {pin}",
             )
-        elif not (head.startswith(pin) or pin.startswith(head)):
+        elif not same_commit(head, pin):
             report.add(
                 "warn" if allow_unpinned_head else "error",
                 "HEAD_NOT_PINNED",
@@ -620,6 +647,9 @@ def _check_enum(report: Report, e: Mapping[str, Any], doc: Any, roster: list[str
     if not isinstance(values, list):
         report.add("error", "ENUM_POINTER_MISSING", subj, "pointer does not resolve to a list")
         return
+    if not all(isinstance(v, str) for v in values):
+        report.add("error", "ENUM_NOT_STRINGS", subj, "every enum value must be a tool name (string)")
+        return
     if len(set(values)) != len(values):
         report.add("error", "ENUM_DUPLICATE", subj, "duplicate tool value")
     unknown = sorted(set(values) - set(roster))
@@ -647,6 +677,9 @@ def _check_mirror(report: Report, reg: Mapping[str, Any], mi: Mapping[str, Any],
             report.add("warn", "MIRROR_MANIFEST", subj, f"{mi['manifest']}: {exc}")
         else:
             pinned = manifest.get("upstream_commit") if isinstance(manifest, dict) else None
+            if pinned is not None and not isinstance(pinned, str):
+                report.add("warn", "MIRROR_MANIFEST", subj, f"{mi['manifest']}: upstream_commit must be a string, got {type(pinned).__name__}")
+                pinned = None
     else:
         report.add("warn", "MIRROR_MANIFEST", subj, f"{mi['manifest']} not found")
 
@@ -669,7 +702,7 @@ def _check_mirror(report: Report, reg: Mapping[str, Any], mi: Mapping[str, Any],
                 f"{c['name']}: vendored sha256 {actual[:12]} != registry {c['sha256'][:12]} (re-vendor)",
             )
     home_pin = reg["members"][mi["home"]]["pinned_commit"]
-    if pinned and not _same_commit(pinned, home_pin):
+    if pinned and not same_commit(pinned, home_pin):
         level = "warn" if stale else "note"
         report.add(
             level,
@@ -680,9 +713,9 @@ def _check_mirror(report: Report, reg: Mapping[str, Any], mi: Mapping[str, Any],
         )
 
 
-def _same_commit(a: str, b: str) -> bool:
+def same_commit(a: str, b: str) -> bool:
     n = min(len(a), len(b))
-    return n >= 7 and a[:n].lower() == b[:n].lower()
+    return n >= 7 and a[:n].lower() == b[:n].lower()  # a pin shorter than 7 never matches
 
 
 # --------------------------------------------------------------------------- repin

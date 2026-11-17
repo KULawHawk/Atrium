@@ -1,7 +1,7 @@
 {
   "registry": "AtriumContractRegistry/1",
   "owner": "Atrium",
-  "updated": "2026-11-06",
+  "updated": "2026-11-16",
   "about": "Every contract that crosses an APEX tool boundary. Atrium is the owner of record; the member repo named in 'home' carries the file. A contract change updates this registry in the same change (python -m atrium_check repin). Human-readable view: CONTRACTS_REGISTRY.md.",
   "tool_roster": [
     "conclave",
@@ -16,13 +16,13 @@
     "conclave": {
       "repo": "KULawHawk/Conclave",
       "dir": "Conclave",
-      "pinned_commit": "2e7048b",
+      "pinned_commit": "732755f",
       "contract_dirs": []
     },
     "locutus": {
       "repo": "KULawHawk/Locutus",
       "dir": "Locutus",
-      "pinned_commit": "20e2be8",
+      "pinned_commit": "aff3db6",
       "contract_dirs": [
         "src/locutus/contracts"
       ]
@@ -30,7 +30,7 @@
     "obsidian": {
       "repo": "KULawHawk/Obsidian",
       "dir": "Obsidian",
-      "pinned_commit": "f36b7a2",
+      "pinned_commit": "4fec4de",
       "contract_dirs": [
         "src/obsidian/contracts"
       ]
@@ -38,7 +38,7 @@
     "sequoia": {
       "repo": "KULawHawk/Sequoia",
       "dir": "Sequoia",
-      "pinned_commit": "45043f2",
+      "pinned_commit": "c683908",
       "contract_dirs": [
         "sequoia/integration/contracts"
       ]
@@ -51,8 +51,8 @@
       "path": "src/locutus/contracts/ruling_record.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "revision": "1.1",
-      "revision_note": "Breaking change recorded (decision 35 ii = A): Locutus L0.2 on 2026-10-23 made issue_signature, bbox_space and pack_sha256 required and engine_family an enum under the v1 label, before any record was on file. Grandfathered as 1.1; the file and its const stay RulingRecord/1. The next tightening must be a v2 file.",
+      "revision": "1.2",
+      "revision_note": "Breaking change recorded (decision 35 ii = A): Locutus L0.2 on 2026-10-23 made issue_signature, bbox_space and pack_sha256 required and engine_family an enum under the v1 label, before any record was on file. Grandfathered as 1.1; the file and its const stay RulingRecord/1. The next tightening must be a v2 file. Revision 1.2 (Decision 71 = A, 2026-11-17): additive decision.outcome nothing_missed and optional decision.searched (Locutus #57); no field tightened, every 1.1 record still valid; consumers that pin the old bytes (Obsidian replica, Conclave vendor) reject the new outcome until they re-pin.",
       "sha256": "8c792cabf615ecf03e032bc7934e6a4dce503f911414b9a56a3f093813064954"
     },
     {
@@ -331,6 +331,12 @@
       "in": "obsidian",
       "path": "tests/fixtures/locutus/ruling_record.v1.schema.json",
       "why": "Obsidian emits RulingRecord/1 and must not import Locutus at run time, so its tests validate against this pinned replica (tests/fixtures/locutus/PIN.json)."
+    },
+    {
+      "contract": "CorrectionRecord/1",
+      "in": "sequoia",
+      "path": "tests/correct/correction_record.v1.schema.json",
+      "why": "Sequoia's correction tests validate CorrectionRecord/1 against this pinned copy of the Locutus schema (tests/correct/test_correction.py) rather than importing Locutus; registering it turns a Locutus change that leaves the copy stale into an atrium_check finding (inspection 2026-11-12, C-7 d)."
     }
   ]
 }
