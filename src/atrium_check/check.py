@@ -754,5 +754,5 @@ def apply_repin(
         reg["members"][member]["pinned_commit"] = commit
     text = json.dumps(reg, indent=2, ensure_ascii=False) + "\n"
     tmp = Path(registry_path).with_suffix(".json.tmp")
-    tmp.write_text(text, encoding="utf-8")
+    tmp.write_text(text, encoding="utf-8", newline="\n")  # LF on every OS (Windows text mode would write CRLF)
     tmp.replace(registry_path)
