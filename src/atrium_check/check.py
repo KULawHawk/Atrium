@@ -626,7 +626,8 @@ def _check_unregistered(report: Report, member: str, m: Mapping[str, Any], root:
         if not base.is_dir():
             report.add("error", "CONTRACT_DIR_MISSING", member, f"{d} does not exist")
             continue
-        for f in sorted(base.glob("*.json")):
+        # Case-insensitive on every OS (glob is case-sensitive on POSIX, so X.JSON would slip through).
+        for f in sorted(e for e in base.iterdir() if e.name.lower().endswith(".json")):
             rel = f.relative_to(root).as_posix()
             if rel not in registered:
                 report.add(

@@ -7,7 +7,6 @@ nothing here reads the committed registry or a real member checkout.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -274,16 +273,20 @@ def test_case_only_difference_in_registry_path_never_passes(suite):
     assert "UNREGISTERED_FILE" in _codes(r)
 
 
-@pytest.mark.xfail(
-    condition=os.name != "nt",
-    strict=True,
-    reason="BUG: _check_unregistered globs '*.json' case-sensitively on POSIX, so an unregistered X.JSON passes",
-)
 def test_unregistered_file_with_uppercase_extension_is_flagged(suite):
     reg, _, root = suite
     (root / "Alpha/contracts/extra.v1.JSON").write_text("{}", encoding="utf-8")
     r = _run(reg, root)
     assert "UNREGISTERED_FILE" in _codes(r)
+
+
+def test_unregistered_scan_extension_match_is_case_insensitive_but_exact(suite):
+    reg, _, root = suite
+    for name in ("mixed.v1.Json", "notes.md", "data.jsonl", "README"):
+        (root / "Alpha/contracts" / name).write_text("{}", encoding="utf-8")
+    r = _run(reg, root)
+    msgs = [f.message for f in r.findings if f.code == "UNREGISTERED_FILE"]
+    assert msgs == ["contracts/mixed.v1.Json is a contract file the Atrium registry does not name"]
 
 
 def test_case_insensitive_checkout_lookup_ignores_files(suite):
