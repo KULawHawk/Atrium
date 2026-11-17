@@ -1,7 +1,7 @@
 {
   "registry": "AtriumContractRegistry/1",
   "owner": "Atrium",
-  "updated": "2026-11-16",
+  "updated": "2026-11-17",
   "about": "Every contract that crosses an APEX tool boundary. Atrium is the owner of record; the member repo named in 'home' carries the file. A contract change updates this registry in the same change (python -m atrium_check repin). Human-readable view: CONTRACTS_REGISTRY.md.",
   "tool_roster": [
     "conclave",
@@ -22,7 +22,7 @@
     "locutus": {
       "repo": "KULawHawk/Locutus",
       "dir": "Locutus",
-      "pinned_commit": "4ddd39c",
+      "pinned_commit": "b7ab9ad",
       "contract_dirs": [
         "src/locutus/contracts"
       ]
@@ -113,6 +113,24 @@
       "const_pointer": null,
       "sha256": "3ed5a2015fdc87b709212a5b26d89ebf01070531ef414693aff200bc96239a9b",
       "note": "Scope schema for a PatternPack/1 artefact of kind shape_check; it validates a sub-object, so it carries no contract const."
+    },
+    {
+      "name": "AtlasConfusionScope/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/atlas_confusion_scope.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": null,
+      "sha256": "ee771fc4186fb12903ee1f14404dc873a4acb2335d14c5b899d08b6d00fe94a0",
+      "note": "Scope schema for a PatternPack/1 artefact of kind confusion_entry: one verified Recognition Atlas confusion row (strong-level key, engine@version, value-free read_as). Validates a sub-object, so it carries no contract const. Consumer: Conclave votingengine atlas consumer (M5, default off)."
+    },
+    {
+      "name": "AtlasCoverageScope/1",
+      "home": "locutus",
+      "path": "src/locutus/contracts/atlas_coverage_scope.v1.schema.json",
+      "kind": "json_schema",
+      "const_pointer": null,
+      "sha256": "193fb1687a18262a2f834dc711ada03caef36dc9fbe9fd2612a159d2f2f7f9b7",
+      "note": "Scope schema for a PatternPack/1 artefact of kind risk_score: one known Recognition Atlas key with observation and value-verified counts (drives NOVEL/BETWEEN labels). Validates a sub-object, so it carries no contract const. Consumer: Conclave votingengine atlas consumer (M5, default off)."
     },
     {
       "name": "PhrasingRuling/1",
