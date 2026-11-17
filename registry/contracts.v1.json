@@ -189,6 +189,15 @@
       "note": "Data contract, regenerated from the Conclave roster (CL-3 method_family); Conclave ECHO_REGISTRY row (CL-56)."
     },
     {
+      "name": "EngineFamilies/2",
+      "home": "locutus",
+      "path": "src/locutus/contracts/engine_families.v2.json",
+      "kind": "data",
+      "const_pointer": "/contract",
+      "sha256": "24f807f5b68559bfb82af83ab04dc28d1be1421037de0bb46b313dd34f51bb46",
+      "note": "Reader lineage as per-engine shared-component lists (pairwise, never transitive; graded overlap via locutus.families.lineage_overlap). Owner decision 81 (A, 2026-11-17): published now, Conclave use OFF until the first keyed PC run is measured. EngineFamilies/1 unchanged."
+    },
+    {
       "name": "ObsidianRequest/1",
       "home": "obsidian",
       "path": "src/obsidian/contracts/obsidian_request.v1.schema.json",
