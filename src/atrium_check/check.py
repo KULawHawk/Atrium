@@ -391,7 +391,8 @@ def validate_registry(reg: Any) -> list[str]:
 
 def _split_name(name: str) -> tuple[str, int] | None:
     base, sep, ver = name.rpartition("/")
-    if not sep or not base or not ver.isdigit() or ver.startswith("0"):
+    # ASCII digits only: "²".isdigit() is True but int("²") raises.
+    if not sep or not base or not (ver.isascii() and ver.isdigit()) or ver.startswith("0"):
         return None
     return base, int(ver)
 

@@ -187,7 +187,6 @@ def test_validate_registry_non_ascii_digit_version_is_a_problem_not_a_crash_via_
     assert cli.main(["check", "--registry", str(p), "--repos-root", str(root)]) == 2
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: _split_name crashes (ValueError) on 'Name/²' instead of reporting a problem")
 def test_validate_registry_superscript_version_returns_a_problem(suite):
     reg, _, _ = suite
     reg["contracts"][0]["name"] = "Rec/²"
