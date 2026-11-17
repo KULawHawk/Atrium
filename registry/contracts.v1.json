@@ -249,6 +249,15 @@
       "sha256": "555c55349c8da839b0dc230c9720c9fc5ca59bcc514f9e5d14386f6250abe9fe"
     },
     {
+      "name": "KBInput/2",
+      "home": "sequoia",
+      "path": "sequoia/integration/contracts/kb_input.v2.schema.json",
+      "kind": "json_schema",
+      "const_pointer": null,
+      "note": "Inbound edge v2 (SPEC_KB_INPUT \u00a72.6-2.9; owner decision 72, 2026-11-17: A with B built in). kb_input_version 0.2.0; required closed metadata.conclave_certification block (certifiable, research_mode, strictness, bundle digest, generation, sealed) and required unresolved_elements. Sequoia reads 0.1.0 and 0.2.0 (dual-read); only a sealed, certifiable, current v2 KB can bind a live forest. v1 may carry the same block as optional informational metadata and never goes live. Generation-ordering and page rules are validator-only (Sequoia CONTRACTS.md).",
+      "sha256": "dab13597600e5aad8147e03aeb7b958ad91e1041371beba8edf227c44223ad06"
+    },
+    {
       "name": "ApexAuditRecord/1",
       "home": "sequoia",
       "path": "sequoia/integration/contracts/apex_audit_record.v1.schema.json",
@@ -346,6 +355,12 @@
       "in": "sequoia",
       "path": "tests/correct/correction_record.v1.schema.json",
       "why": "Sequoia's correction tests validate CorrectionRecord/1 against this pinned copy of the Locutus schema (tests/correct/test_correction.py) rather than importing Locutus; registering it turns a Locutus change that leaves the copy stale into an atrium_check finding (inspection 2026-11-12, C-7 d)."
+    },
+    {
+      "contract": "KBInput/2",
+      "in": "conclave",
+      "path": "conclave_sequoia_bridge/contracts/kb_input.v2.schema.json",
+      "why": "Conclave's translator writes KBInput/2 and validates its output against this pinned replica (conclave_sequoia_bridge/contracts/PIN.json) without importing Sequoia; registering it closes inspection 2026-11-12 C-8."
     }
   ]
 }
