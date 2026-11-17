@@ -207,6 +207,15 @@
       "note": "Data contract, regenerated from the Conclave roster (CL-3 method_family); Conclave ECHO_REGISTRY row (CL-56)."
     },
     {
+      "name": "EngineFamilies/2",
+      "home": "locutus",
+      "path": "src/locutus/contracts/engine_families.v2.json",
+      "kind": "data",
+      "const_pointer": "/contract",
+      "sha256": "24f807f5b68559bfb82af83ab04dc28d1be1421037de0bb46b313dd34f51bb46",
+      "note": "Reader lineage as per-engine shared-component lists (pairwise, never transitive; graded overlap via locutus.families.lineage_overlap). Owner decision 81 (A, 2026-11-17): published now, Conclave use OFF until the first keyed PC run is measured. EngineFamilies/1 unchanged."
+    },
+    {
       "name": "ObsidianRequest/1",
       "home": "obsidian",
       "path": "src/obsidian/contracts/obsidian_request.v1.schema.json",
@@ -256,6 +265,15 @@
       "revision": "1.1",
       "revision_note": "Breaking change recorded (reviewer 3 on Sequoia #56, same precedent as RulingRecord/1 decision 35 ii): on 2026-11-05 Sequoia declared the context_notes block as closed note objects and parse_kb_input began refusing other shapes, under the v1 label. The only writer, Conclave's translator (#2370), already wrote that shape. Grandfathered as 1.1; the file stays kb_input.v1.schema.json and kb_input_version stays 0.1.0. The next tightening must be a v2 file.",
       "sha256": "555c55349c8da839b0dc230c9720c9fc5ca59bcc514f9e5d14386f6250abe9fe"
+    },
+    {
+      "name": "KBInput/2",
+      "home": "sequoia",
+      "path": "sequoia/integration/contracts/kb_input.v2.schema.json",
+      "kind": "json_schema",
+      "const_pointer": null,
+      "note": "Inbound edge v2 (SPEC_KB_INPUT \u00a72.6-2.9; owner decision 72, 2026-11-17: A with B built in). kb_input_version 0.2.0; required closed metadata.conclave_certification block (certifiable, research_mode, strictness, bundle digest, generation, sealed) and required unresolved_elements. Sequoia reads 0.1.0 and 0.2.0 (dual-read); only a sealed, certifiable, current v2 KB can bind a live forest. v1 may carry the same block as optional informational metadata and never goes live. Generation-ordering and page rules are validator-only (Sequoia CONTRACTS.md).",
+      "sha256": "dab13597600e5aad8147e03aeb7b958ad91e1041371beba8edf227c44223ad06"
     },
     {
       "name": "ApexAuditRecord/1",
@@ -355,6 +373,12 @@
       "in": "sequoia",
       "path": "tests/correct/correction_record.v1.schema.json",
       "why": "Sequoia's correction tests validate CorrectionRecord/1 against this pinned copy of the Locutus schema (tests/correct/test_correction.py) rather than importing Locutus; registering it turns a Locutus change that leaves the copy stale into an atrium_check finding (inspection 2026-11-12, C-7 d)."
+    },
+    {
+      "contract": "KBInput/2",
+      "in": "conclave",
+      "path": "conclave_sequoia_bridge/contracts/kb_input.v2.schema.json",
+      "why": "Conclave's translator writes KBInput/2 and validates its output against this pinned replica (conclave_sequoia_bridge/contracts/PIN.json) without importing Sequoia; registering it closes inspection 2026-11-12 C-8."
     }
   ]
 }
