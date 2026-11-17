@@ -30,6 +30,7 @@ The machine-readable registry is [`registry/contracts.v1.json`](registry/contrac
 | `VaultEntry/1` | Obsidian | `src/obsidian/contracts/vault_entry.v1.schema.json` | Lives only inside the KDBX 4 vault. |
 | `ShareRecord/1` | Obsidian | `src/obsidian/contracts/share_record.v1.schema.json` | The SEC-8 share log; vault only. |
 | `KBInput/1` | Sequoia | `sequoia/integration/contracts/kb_input.v1.schema.json` | Inbound edge. No `contract` field (identifying field `kb_input_version`); deliberately open except the closed `context_notes` items, four rules only the validator checks (Sequoia `CONTRACTS.md`). **Registry revision 1.1**: the 2026-11-05 `context_notes` tightening was breaking (see Revisions). |
+| `KBInput/2` | Sequoia | `sequoia/integration/contracts/kb_input.v2.schema.json` | Inbound edge v2 (owner decision 72, 2026-11-17: A with B built in). `kb_input_version` `0.2.0`; required closed `metadata.conclave_certification` block and `unresolved_elements`. Sequoia dual-reads v1 and v2; only a sealed, certifiable, current v2 KB can bind a live forest; v1 may carry the block as optional information and never goes live. Replica in Conclave (`conclave_sequoia_bridge/contracts/`). |
 | `ApexAuditRecord/1` | Sequoia | `sequoia/integration/contracts/apex_audit_record.v1.schema.json` | Outbound edge to APEX Layers 5/6. No `contract` field (identifying field `audit_schema_version`). |
 | `MissedRuleFlag/1` | Sequoia | `sequoia/integration/contracts/missed_rule_flag.v1.schema.json` | Outbound edge to Conclave Review (5b.3): one JSONL line per missed-rule flag, read by `conclave-review import-sequoia-flags` (Conclave #2368). The dotted name `sequoia.missed_rule_flag.v1` is the one the file has carried since Sequoia #50 (registered with `const_value`). Two hash rules are outside JSON Schema and checked by the consumer (Sequoia `CONTRACTS.md`). |
 
@@ -52,7 +53,7 @@ Conclave vendors Locutus (`conclave_vendor_locutus/`) and part of Obsidian (`con
 
 ## Single-file replicas
 
-A member that must not import another member at run time may keep a pinned copy of one contract file for its tests. Obsidian keeps `tests/fixtures/locutus/ruling_record.v1.schema.json` (pin in `tests/fixtures/locutus/PIN.json`). Sequoia keeps `tests/correct/correction_record.v1.schema.json` (a copy of Locutus's CorrectionRecord/1, registered 2026-11-16). The check compares each replica with the registered bytes; a difference is a warning (`REPLICA_STALE`), an error under `--strict`.
+A member that must not import another member at run time may keep a pinned copy of one contract file for its tests. Obsidian keeps `tests/fixtures/locutus/ruling_record.v1.schema.json` (pin in `tests/fixtures/locutus/PIN.json`). Sequoia keeps `tests/correct/correction_record.v1.schema.json` (a copy of Locutus's CorrectionRecord/1, registered 2026-11-16). Conclave keeps `conclave_sequoia_bridge/contracts/kb_input.v2.schema.json` (Sequoia's KBInput/2, pin in `conclave_sequoia_bridge/contracts/PIN.json`, registered 2026-11-17). The check compares each replica with the registered bytes; a difference is a warning (`REPLICA_STALE`), an error under `--strict`.
 
 ## Pattern lengths
 
