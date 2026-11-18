@@ -162,7 +162,9 @@ def main(argv: list[str] | None = None) -> int:
             if line.startswith(("ERROR", "WARN", "ATRIUM-CHECK")):
                 print(line)
         summary = next((l for l in reversed(out.splitlines()) if l.startswith("ATRIUM-CHECK")), "")
-        ac_ok = ac.returncode == 0
+        # Green only when atrium_check exits 0 AND says so: an exit 0 with no summary line, or with a
+        # summary that is not PASS, is never read as a pass (Jake 11/17: no false OK, no silent failure).
+        ac_ok = ac.returncode == 0 and summary.startswith("ATRIUM-CHECK: PASS")
         first_err = next((l for l in out.splitlines() if l.startswith("ERROR")), "")
         if first_err:
             parts = first_err.split(None, 3)  # ERROR CODE subject: detail

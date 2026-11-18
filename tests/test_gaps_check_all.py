@@ -253,3 +253,11 @@ def test_find_repo_name(folder, expected, tmp_path):
 )
 def test_counts_parser(text, expected):
     assert check_all._counts(text) == expected
+
+
+@pytest.mark.parametrize("ac_out", ["", "some other output\n", "ATRIUM-CHECK: FAIL errors=1\n",
+                                    "ATRIUM-CHECK: PASS errors=0\nATRIUM-CHECK: FAIL errors=1\n"])
+def test_atrium_check_exit_0_without_a_final_pass_summary_is_fail(monkeypatch, capsys, tmp_path, ac_out):
+    """No false OK: exit 0 alone never makes atrium_check green; its last summary line must say PASS."""
+    code, line, _ = _drive(monkeypatch, capsys, tmp_path, ac_out=ac_out, ac_rc=0)
+    assert code == 1 and line.startswith("CHECK-ALL: FAIL") and "atrium_check=FAIL" in line
