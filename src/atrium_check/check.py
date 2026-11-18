@@ -391,7 +391,8 @@ def validate_registry(reg: Any) -> list[str]:
 
 def _split_name(name: str) -> tuple[str, int] | None:
     base, sep, ver = name.rpartition("/")
-    if not sep or not base or not ver.isdigit() or ver.startswith("0"):
+    # ASCII digits only: "²".isdigit() is True but int("²") raises.
+    if not sep or not base or not (ver.isascii() and ver.isdigit()) or ver.startswith("0"):
         return None
     return base, int(ver)
 
@@ -410,31 +411,50 @@ def load_registry(path: Path) -> dict[str, Any]:
 # --------------------------------------------------------------------------- checkouts
 
 
+class Checkouts(dict):
+    """``dict`` of member name -> checkout directory, plus ``ambiguous``.
+
+    ``ambiguous`` maps a member to the directories under ``repos_root`` that all match
+    its ``dir`` case-insensitively (e.g. ``Alpha/`` and ``alpha/``). Such a member is
+    left out of the mapping, never resolved to one of them, and :func:`check` reports it.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.ambiguous: dict[str, list[Path]] = {}
+
+
 def resolve_checkouts(
     reg: Mapping[str, Any],
     repos_root: Path | None = None,
     overrides: Mapping[str, Path] | None = None,
-) -> dict[str, Path]:
+) -> Checkouts:
     """Map member name -> checkout directory.
 
     An explicit override wins. Otherwise ``repos_root/<dir>`` is used, matched
     case-insensitively (the cloud checkouts are lower-case, Jake's PC uses the
-    registry's spelling). A member with no existing directory is left out.
+    registry's spelling). A member with no existing directory is left out. A member
+    with more than one directory matching case-insensitively is left out too and
+    recorded in ``.ambiguous`` (fail closed: no silent pick between them).
     """
-    found: dict[str, Path] = {}
+    found = Checkouts()
     overrides = dict(overrides or {})
-    listing: dict[str, Path] = {}
+    listing: dict[str, list[Path]] = {}
     if repos_root is not None and Path(repos_root).is_dir():
-        listing = {p.name.lower(): p for p in Path(repos_root).iterdir() if p.is_dir()}
+        for p in sorted(Path(repos_root).iterdir()):
+            if p.is_dir():
+                listing.setdefault(p.name.lower(), []).append(p)
     for name, m in reg["members"].items():
         if name in overrides:
             p = Path(overrides[name])
             if p.is_dir():
                 found[name] = p
             continue
-        p = listing.get(m["dir"].lower())
-        if p is not None:
-            found[name] = p
+        matches = listing.get(m["dir"].lower(), [])
+        if len(matches) == 1:
+            found[name] = matches[0]
+        elif matches:
+            found.ambiguous[name] = matches
     return found
 
 
@@ -474,7 +494,13 @@ def check(
         if name not in scope:
             report.members_skipped.append(name)
         elif name not in checkouts:
-            report.add("error", "MEMBER_MISSING", name, f"no checkout found for {members[name]['repo']}")
+            twins = getattr(checkouts, "ambiguous", {}).get(name)
+            if twins:
+                listed = ", ".join(p.name for p in twins)
+                msg = f"ambiguous checkout for {members[name]['repo']}: {listed} differ only by case; none was examined"
+            else:
+                msg = f"no checkout found for {members[name]['repo']}"
+            report.add("error", "MEMBER_MISSING", name, msg)
             report.members_skipped.append(name)
         else:
             report.members_examined.append(name)
@@ -625,7 +651,8 @@ def _check_unregistered(report: Report, member: str, m: Mapping[str, Any], root:
         if not base.is_dir():
             report.add("error", "CONTRACT_DIR_MISSING", member, f"{d} does not exist")
             continue
-        for f in sorted(base.glob("*.json")):
+        # Case-insensitive on every OS (glob is case-sensitive on POSIX, so X.JSON would slip through).
+        for f in sorted(e for e in base.iterdir() if e.name.lower().endswith(".json")):
             rel = f.relative_to(root).as_posix()
             if rel not in registered:
                 report.add(

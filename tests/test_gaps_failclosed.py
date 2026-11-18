@@ -7,7 +7,6 @@ nothing here reads the committed registry or a real member checkout.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -187,7 +186,6 @@ def test_validate_registry_non_ascii_digit_version_is_a_problem_not_a_crash_via_
     assert cli.main(["check", "--registry", str(p), "--repos-root", str(root)]) == 2
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: _split_name crashes (ValueError) on 'Name/²' instead of reporting a problem")
 def test_validate_registry_superscript_version_returns_a_problem(suite):
     reg, _, _ = suite
     reg["contracts"][0]["name"] = "Rec/²"
@@ -275,16 +273,20 @@ def test_case_only_difference_in_registry_path_never_passes(suite):
     assert "UNREGISTERED_FILE" in _codes(r)
 
 
-@pytest.mark.xfail(
-    condition=os.name != "nt",
-    strict=True,
-    reason="BUG: _check_unregistered globs '*.json' case-sensitively on POSIX, so an unregistered X.JSON passes",
-)
 def test_unregistered_file_with_uppercase_extension_is_flagged(suite):
     reg, _, root = suite
     (root / "Alpha/contracts/extra.v1.JSON").write_text("{}", encoding="utf-8")
     r = _run(reg, root)
     assert "UNREGISTERED_FILE" in _codes(r)
+
+
+def test_unregistered_scan_extension_match_is_case_insensitive_but_exact(suite):
+    reg, _, root = suite
+    for name in ("mixed.v1.Json", "notes.md", "data.jsonl", "README"):
+        (root / "Alpha/contracts" / name).write_text("{}", encoding="utf-8")
+    r = _run(reg, root)
+    msgs = [f.message for f in r.findings if f.code == "UNREGISTERED_FILE"]
+    assert msgs == ["contracts/mixed.v1.Json is a contract file the Atrium registry does not name"]
 
 
 def test_case_insensitive_checkout_lookup_ignores_files(suite):
@@ -296,7 +298,6 @@ def test_case_insensitive_checkout_lookup_ignores_files(suite):
     assert "alpha" not in resolve_checkouts(reg, tmp)
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: two checkouts differing only by case ('Alpha', 'alpha') are resolved silently to whichever iterdir lists last")
 def test_two_checkouts_differing_only_by_case_are_not_silently_resolved(suite, tmp_path):
     if not _case_sensitive_fs(tmp_path):
         pytest.xfail("case-insensitive file system cannot hold both directories")  # still an xfail, never an xpass
@@ -307,6 +308,24 @@ def test_two_checkouts_differing_only_by_case_are_not_silently_resolved(suite, t
         (twin / rel).write_bytes((root / "Alpha" / rel).read_bytes())
     r = _run(reg, root)
     assert not r.passed  # the ambiguity should be an error, not a coin flip
+
+
+def test_ambiguous_checkout_is_reported_and_not_examined(suite, monkeypatch):
+    """Runs on every OS: the twin listing is simulated, so a case-insensitive FS covers it too."""
+    reg, _, root = suite
+    twin = root / "ALPHA"
+    real_iterdir, real_is_dir = Path.iterdir, Path.is_dir
+    monkeypatch.setattr(Path, "iterdir", lambda self: iter([*real_iterdir(self), twin]) if self == root else real_iterdir(self))
+    monkeypatch.setattr(Path, "is_dir", lambda self: True if self == twin else real_is_dir(self))
+    checkouts = resolve_checkouts(reg, root)
+    assert "alpha" not in checkouts and sorted(p.name for p in checkouts.ambiguous["alpha"]) == ["ALPHA", "Alpha"]
+    assert "beta" in checkouts and "beta" not in checkouts.ambiguous
+    r = check(reg, checkouts)
+    msgs = [f.message for f in r.findings if f.code == "MEMBER_MISSING" and f.subject == "alpha"]
+    assert len(msgs) == 1 and "ambiguous checkout" in msgs[0] and "ALPHA, Alpha" in msgs[0]
+    assert "alpha" in r.members_skipped and not r.passed
+    # an explicit override still resolves the ambiguity deliberately
+    assert resolve_checkouts(reg, root, {"alpha": root / "Alpha"})["alpha"] == root / "Alpha"
 
 
 # ----------------------------------------------------------------- heads / pins
