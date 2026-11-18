@@ -22,7 +22,7 @@
     "locutus": {
       "repo": "KULawHawk/Locutus",
       "dir": "Locutus",
-      "pinned_commit": "ab56338",
+      "pinned_commit": "d5bbd6e",
       "contract_dirs": [
         "src/locutus/contracts"
       ]
@@ -212,8 +212,8 @@
       "path": "src/locutus/contracts/engine_families.v2.json",
       "kind": "data",
       "const_pointer": "/contract",
-      "sha256": "53146e8e2f7fd0ef210b4a2fc0c640a18f2056a83b8254251180297be077a89d",
-      "note": "Reader lineage as per-engine shared-component lists (pairwise, never transitive; graded overlap via locutus.families.lineage_overlap). Owner decision 81 (A, 2026-11-17): published now, Conclave use OFF until the first keyed PC run is measured. Decision 103 (A, 2026-11-17): pdfium_render component; optional shared_inputs (the Poppler stage-1 raster) reported but excluded from overlap unless the caller sets shared_input_weight (0..1, default 0). EngineFamilies/1 unchanged."
+      "sha256": "1215b4965eef89eba67382bf85b81c341c0341c0e201cc7856aa3869db8353cc",
+      "note": "Reader lineage as per-engine shared-component lists (pairwise, never transitive; graded overlap via locutus.families.lineage_overlap). Owner decision 81 (A, 2026-11-17): published now, Conclave use OFF until the first keyed PC run is measured. Decision 103 (A, 2026-11-17): pdfium_render component; optional shared_inputs (the Poppler stage-1 raster) reported but excluded from overlap unless the caller sets shared_input_weight (0..1, default 0). EngineFamilies/1 unchanged. Decision 174 (A, 2026-11-18): one shared_inputs description reworded so it names no Conclave folder (text only, Locutus #77)."
     },
     {
       "name": "ObsidianRequest/1",
