@@ -350,3 +350,39 @@ func TestClampLines(t *testing.T) {
 		t.Fatal("length not capped by letters")
 	}
 }
+
+type slowReader struct {
+	release chan struct{}
+	err     error
+}
+
+func (s slowReader) ScreenText() ([]string, error) {
+	<-s.release
+	return []string{"late"}, s.err
+}
+
+func TestWithTimeout(t *testing.T) {
+	sr := slowReader{release: make(chan struct{})}
+	r := WithTimeout(sr, 20*time.Millisecond)
+	if _, err := r.ScreenText(); !errors.Is(err, ErrReadTimeout) {
+		t.Fatal(err)
+	}
+	if _, err := r.ScreenText(); !errors.Is(err, ErrReadBusy) {
+		t.Fatal(err)
+	}
+	close(sr.release)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		l, err := r.ScreenText()
+		if err == nil {
+			if len(l) != 1 || l[0] != "late" {
+				t.Fatal(l)
+			}
+			break
+		}
+		if !errors.Is(err, ErrReadBusy) || time.Now().After(deadline) {
+			t.Fatal(err)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}

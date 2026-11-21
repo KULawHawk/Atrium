@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/config"
@@ -43,6 +44,47 @@ type Capturer interface {
 // the PC). It is optional: a nil reader, or ScreenTextEvery 0, means no screen text.
 type TextReader interface {
 	ScreenText() ([]string, error)
+}
+
+// ReadTimeout bounds one screen-text read, so a hung app cannot stall the loop.
+var ReadTimeout = 5 * time.Second
+
+// ErrReadTimeout and ErrReadBusy are the timed reader's refusals.
+var (
+	ErrReadTimeout = errors.New("the front window did not answer in time; skipped")
+	ErrReadBusy    = errors.New("the previous read is still waiting on the front window; skipped")
+)
+
+type timedReader struct {
+	r    TextReader
+	d    time.Duration
+	busy atomic.Bool
+}
+
+// WithTimeout wraps r so each read gives up after d. A read that hangs is left
+// to finish on its own; until it does, later reads are skipped (never stacked).
+func WithTimeout(r TextReader, d time.Duration) TextReader { return &timedReader{r: r, d: d} }
+
+func (t *timedReader) ScreenText() ([]string, error) {
+	if !t.busy.CompareAndSwap(false, true) {
+		return nil, ErrReadBusy
+	}
+	type res struct {
+		lines []string
+		err   error
+	}
+	ch := make(chan res, 1)
+	go func() {
+		defer t.busy.Store(false)
+		l, err := t.r.ScreenText()
+		ch <- res{l, err}
+	}()
+	select {
+	case r := <-ch:
+		return r.lines, r.err
+	case <-time.After(t.d):
+		return nil, ErrReadTimeout
+	}
 }
 
 // Screen text limits per frame.
@@ -124,7 +166,9 @@ func Loop(ctx context.Context, c Capturer, lc LoopConfig, out io.Writer, now fun
 	defer tText.Stop()
 	defer tShot.Stop()
 	var screenC <-chan time.Time
+	reader := lc.Reader
 	if lc.ScreenTextEvery > 0 && lc.Reader != nil {
+		reader = WithTimeout(lc.Reader, ReadTimeout)
 		tScreen := time.NewTicker(lc.ScreenTextEvery)
 		defer tScreen.Stop()
 		screenC = tScreen.C
@@ -165,7 +209,7 @@ func Loop(ctx context.Context, c Capturer, lc LoopConfig, out io.Writer, now fun
 				return err
 			}
 		case <-screenC:
-			if err := send(screenText(c, lc.Reader, rules, state)); err != nil {
+			if err := send(screenText(c, reader, rules, state)); err != nil {
 				return err
 			}
 		case <-tShot.C:

@@ -53,6 +53,7 @@ The page can show the words in the front window, read through Windows UI Automat
 
 - **Off until T-10 passes on the PC.** `screen_text_seconds` in `private\config.json` is 0 by default. When on, it is 2–3600.
 - **Same withholding as pictures.** A window matching a deny rule (patient words, DOB/MRN, dates, key and password windows) sends no text, only `paused: <reason>`. The service re-checks that and the lock state itself.
+- **Only what is on screen.** It reads the visible part of text areas (not the whole document), skips password boxes entirely, walks at most 400 window parts level by level, and gives up on a window that does not answer within 5 seconds.
 - **Limits.** At most 200 lines of 300 characters each. Every line goes through the same key redaction as logs.
 - **Discarded on window change.** If the front window changed while it was being read, the text is thrown away.
 - **Never in the copied file.** `status.json` shows the hold note instead of screen text, like window titles. This stays until a patient filter exists.
