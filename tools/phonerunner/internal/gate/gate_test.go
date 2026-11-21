@@ -77,6 +77,11 @@ func TestRefusalLogIsRateLimited(t *testing.T) {
 	var lines []map[string]any
 	log := func(_ string, f map[string]any) { lines = append(lines, f) }
 	g := New(fakeWho{id: Identity{NodeID: "nPC", Login: "jake@x"}}, []string{"nPHONE"}, "jake@x", log)
+	defer func() {
+		if len(lines) == 0 || lines[0]["login"] != "j***@x" {
+			t.Errorf("logged login not masked: %v", lines)
+		}
+	}()
 	now := time.Date(2026, 11, 21, 3, 0, 0, 0, time.UTC)
 	g.SetClock(func() time.Time { return now })
 	h := g.Middleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
@@ -102,7 +107,7 @@ func TestRefusalLogIsRateLimited(t *testing.T) {
 }
 
 func TestMaskLogin(t *testing.T) {
-	for in, want := range map[string]string{"": "", "someone@example.com": "s***@example.com", "plain": "p***", "@x": "@***"} {
+	for in, want := range map[string]string{"": "", "someone@example.com": "s***@example.com", "plain": "p***", "@x": "@***", "émile@x.fr": "é***@x.fr"} {
 		if got := MaskLogin(in); got != want {
 			t.Errorf("MaskLogin(%q) = %q, want %q", in, got, want)
 		}
