@@ -3,9 +3,13 @@
 //
 //	phonerunner-copyoff stage --outbox <dir>
 //	    PASS staged batch N: <folder> manifest sha256 <hash> (...)
-//	    -> send that folder to the share, then:
+//	    -> send that folder to the share, check every file's sha256 ON THE SHARE
+//	       against MANIFEST.json, and only if all match:
 //	phonerunner-copyoff ack --outbox <dir> --manifest <hash>
-//	    PASS ack written: N log bytes confirmed copied off the PC
+//	    PASS ack recorded (lane's report): batch N, N log bytes
+//
+// ack re-checks only the PC-side copy; it cannot see the share. The ack it writes
+// is the lane's report that the share-side hashes matched, and is labelled so.
 //
 // --store defaults to C:\ProgramData\PhoneRunner. Pictures are never copied by
 // this tool (they are in a folder it cannot read).
@@ -52,7 +56,7 @@ func run(args []string, out io.Writer, now func() time.Time) int {
 			fmt.Fprintln(out, "FAIL", err)
 			return 1
 		}
-		note := "new batch"
+		note := "new batch; send it, verify share-side sha256 against MANIFEST.json, then ack"
 		if r.Reused {
 			note = "already staged, not yet acknowledged: send it, then ack"
 		}
@@ -74,6 +78,6 @@ func run(args []string, out io.Writer, now func() time.Time) int {
 		fmt.Fprintln(out, "PASS ack refreshed: nothing new since the last batch")
 		return 0
 	}
-	fmt.Fprintf(out, "PASS ack written: batch %d, %d log bytes confirmed copied off the PC\n", r.Manifest.Batch, r.Manifest.LogTo)
+	fmt.Fprintf(out, "PASS ack recorded (lane's report that share-side hashes matched): batch %d, %d log bytes\n", r.Manifest.Batch, r.Manifest.LogTo)
 	return 0
 }

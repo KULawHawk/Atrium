@@ -7,8 +7,9 @@
 //	stage  -> copies new log lines (re-checked by the key filter) and the latest
 //	          status and heartbeat into outbox\batch_NNNNNN\, with a MANIFEST.json
 //	          listing every file's size and sha256
-//	(lane) -> sends that batch folder to the share
-//	ack    -> given the manifest's sha256, re-checks every file is unchanged and
+//	(lane) -> sends that batch folder to the share, then checks the share-side
+//	          sha256 of every file against MANIFEST.json; only if all match:
+//	ack    -> given the manifest's sha256, re-checks every PC-side file is unchanged and
 //	          writes the store's ack\copy_ack.json so the phone page shows the
 //	          copy is current
 //
@@ -44,7 +45,7 @@ const MaxChunk = 8 << 20
 const MaxFile = 10 << 20
 
 // CopierLabel marks the ack as the lane's own claim, not proof.
-const CopierLabel = "pc lane (claim: batch sent to share)"
+const CopierLabel = "pc lane report: batch sent and share-side hashes matched MANIFEST.json"
 
 // FileEntry is one file in a batch.
 type FileEntry struct {
@@ -342,7 +343,7 @@ func (c *Copier) Ack(manifestSHA string) (Result, error) {
 		if logSize != st.LogOffset {
 			return Result{}, errors.New("copyoff: new log lines since the last batch: run stage, send, then ack the new batch")
 		}
-		if err := c.writeAck(st.LogOffset); err != nil {
+		if err := c.writeAck(st.LogOffset, st.Batches, manifestSHA); err != nil {
 			return Result{}, err
 		}
 		return Result{ManifestSHA: manifestSHA, Refreshed: true}, nil
@@ -366,7 +367,7 @@ func (c *Copier) Ack(manifestSHA string) (Result, error) {
 			return Result{}, fmt.Errorf("copyoff: batch file %s changed since staging (%s, expected %s): stop and tell Jake", f.Name, got, f.SHA256)
 		}
 	}
-	if err := c.writeAck(st.Staged.LogTo); err != nil {
+	if err := c.writeAck(st.Staged.LogTo, st.Staged.Batch, manifestSHA); err != nil {
 		return Result{}, err
 	}
 	res := Result{Dir: st.Staged.Dir, ManifestSHA: manifestSHA, Manifest: m}
@@ -379,8 +380,8 @@ func (c *Copier) Ack(manifestSHA string) (Result, error) {
 	return res, nil
 }
 
-func (c *Copier) writeAck(copied int64) error {
-	a := store.Ack{At: c.Now().UTC(), CopiedBytes: copied, Copier: CopierLabel}
+func (c *Copier) writeAck(copied int64, batch int, manifestSHA string) error {
+	a := store.Ack{At: c.Now().UTC(), CopiedBytes: copied, Copier: CopierLabel, Batch: batch, ManifestSHA: manifestSHA}
 	data, _ := json.MarshalIndent(a, "", "  ")
 	return writeAtomic(filepath.Join(c.Store, "ack", "copy_ack.json"), data)
 }

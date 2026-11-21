@@ -200,3 +200,21 @@ func TestWriteSessionSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestLogsHeldFromStatusFile(t *testing.T) {
+	s, st, _, _ := setup(t)
+	s.cfg.WatchedLogs[1].MayCopy = true // "missing" log: its error may be copied
+	page := s.Refresh(context.Background())
+	if len(page.Logs[0].Lines) == 0 {
+		t.Fatal("page lost the log lines")
+	}
+	b, _ := os.ReadFile(filepath.Join(st.Root(), "status.json"))
+	var file Status
+	json.Unmarshal(b, &file)
+	if len(file.Logs[0].Lines) != 0 || file.Logs[0].Error != LogHold || strings.Contains(string(b), "PROGRESS") {
+		t.Fatalf("log lines left in status.json: %s", b)
+	}
+	if file.Logs[1].Error == LogHold || file.Logs[1].Error == "" {
+		t.Fatalf("may_copy log not passed through: %+v", file.Logs[1])
+	}
+}

@@ -100,3 +100,11 @@ func TestRefusalLogIsRateLimited(t *testing.T) {
 		t.Fatal("stale skip count")
 	}
 }
+
+func TestMaskLogin(t *testing.T) {
+	for in, want := range map[string]string{"": "", "someone@example.com": "s***@example.com", "plain": "p***", "@x": "@***"} {
+		if got := MaskLogin(in); got != want {
+			t.Errorf("MaskLogin(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

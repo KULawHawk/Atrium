@@ -43,7 +43,7 @@ func TestRun(t *testing.T) {
 	if rc, out := call("ack", "--store", st.Root(), "--outbox", outbox, "--manifest", "x"); rc != 1 || !strings.HasPrefix(out, "FAIL") {
 		t.Fatalf("%d %s", rc, out)
 	}
-	if rc, out := call("ack", "--store", st.Root(), "--outbox", outbox, "--manifest", sha); rc != 0 || !strings.HasPrefix(out, "PASS ack written") {
+	if rc, out := call("ack", "--store", st.Root(), "--outbox", outbox, "--manifest", sha); rc != 0 || !strings.HasPrefix(out, "PASS ack recorded") {
 		t.Fatalf("%d %s", rc, out)
 	}
 	if rc, out := call("ack", "--store", st.Root(), "--outbox", outbox, "--manifest", sha); rc != 0 || !strings.Contains(out, "refreshed") {

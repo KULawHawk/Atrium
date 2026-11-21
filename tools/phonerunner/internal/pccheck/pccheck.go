@@ -3,6 +3,8 @@
 //
 //	T-11 LogIntact: after a crash or reboot, every log line is whole, valid JSON,
 //	     in order (a restart starts the sequence again at 1), with no torn line.
+//	     This is the log half of T-11; the "item shown Interrupted, never PASS"
+//	     half arrives with the Run button, which is when items exist.
 //	T-06 Refused:   a request from a device that is not the paired phone (for
 //	     example the PC itself) gets the 403 "Not allowed" page and nothing else.
 package pccheck

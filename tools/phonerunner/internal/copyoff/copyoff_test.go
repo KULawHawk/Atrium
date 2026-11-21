@@ -86,7 +86,7 @@ func TestFullCycle(t *testing.T) {
 		t.Fatal(a)
 	}
 	ack := readAck(t, c)
-	if ack.CopiedBytes != r.Manifest.LogTo || ack.Copier != CopierLabel {
+	if ack.CopiedBytes != r.Manifest.LogTo || ack.Copier != CopierLabel || ack.Batch != 1 || ack.ManifestSHA != r.ManifestSHA {
 		t.Fatalf("ack %+v", ack)
 	}
 	if s := st.ReadAck(5 * time.Minute); s.Problem != "" || !s.Fresh {

@@ -173,3 +173,12 @@ func TestAppendWriteError(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestReadAckOverClaim(t *testing.T) {
+	s := open(t)
+	_ = s.Append("a", nil)
+	_ = s.WriteJSON("ack/copy_ack.json", Ack{At: time.Date(2026, 11, 21, 3, 0, 0, 0, time.UTC), CopiedBytes: 1 << 30, Copier: "x"})
+	if st := s.ReadAck(5 * time.Minute); !strings.Contains(st.Problem, "claims") {
+		t.Fatalf("over-claim not flagged: %+v", st)
+	}
+}
