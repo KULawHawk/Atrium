@@ -26,3 +26,13 @@ It installs nothing, changes no Windows setting, deletes nothing, and reads no k
 ## Never automated (the person's own steps)
 
 Windows security boxes, sign-ins, signups and agreements (including any HIPAA agreement), API keys (Windows Credential Manager only), Windows Hello, the phone-tool passkey, and any Windows setting change. No patient data is shipped or tested.
+
+## Phase 1: prerequisites (`Install-Prereqs.ps1`)
+
+Installs what is missing, leaves what is present alone: Python 3.13 (per user), Git, GitHub CLI,
+Tesseract OCR, Poppler (per user), VC++ runtime. Everything comes through winget, which checks
+each download against its signed manifest's sha256. `-DryRun` only says what it would do.
+Windows security boxes and winget's agreement question are the person's own answers; `-AssumeYes`
+exists only for the clean-Windows test machine. Nothing is deleted and no Windows setting or
+permanent PATH is changed by this script. Log: `<InstallRoot>\.adastra\install_log\`; found paths:
+`<InstallRoot>\.adastra\prereqs.json`. Last line `NESTEGG-PREREQS: PASS` or `FAIL n`.

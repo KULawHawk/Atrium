@@ -73,3 +73,56 @@ def test_cmd_runs_the_check_beside_it() -> None:
     text = CMD.read_text(encoding="ascii")
     assert '"%~dp0Check-AdAstra.ps1"' in text
     assert b"\r\n" in CMD.read_bytes()  # cmd.exe files keep CRLF
+
+
+# --- Phase 1: Install-Prereqs.ps1 -------------------------------------------------------------
+PREREQS = NESTEGG / "Install-Prereqs.ps1"
+
+PHASE1_FORBIDDEN = {k: v for k, v in FORBIDDEN.items() if k != "installs"}
+PHASE1_FORBIDDEN["downloads by itself"] = r"\b(Invoke-WebRequest|Start-BitsTransfer|curl|wget|DownloadFile)\b"
+PHASE1_FORBIDDEN["writes PATH permanently"] = r"SetEnvironmentVariable"
+
+
+def test_prereqs_is_ascii_and_never_deletes_or_changes_settings() -> None:
+    PREREQS.read_text(encoding="ascii")
+    code = "\n".join(_code_lines(PREREQS))
+    hits = {why: re.findall(pat, code, flags=re.IGNORECASE) for why, pat in PHASE1_FORBIDDEN.items()}
+    assert {k: v for k, v in hits.items() if v} == {}
+
+
+def test_prereqs_installs_only_through_winget_with_exact_ids() -> None:
+    code = "\n".join(_code_lines(PREREQS))
+    assert "@('install', '--id', $WingetId, '--exact', '--source', 'winget')" in code
+    ids = re.findall(r"^\s*Ensure '[^']+'\s+\$\{function:Find-\w+\}\s+'([^']+)'", code, flags=re.M)
+    assert ids == [
+        "Python.Python.3.13",
+        "Git.Git",
+        "GitHub.cli",
+        "UB-Mannheim.TesseractOCR",
+        "oschwartz10612.Poppler",
+        "Microsoft.VCRedist.2015+.x64",
+    ]
+
+
+def test_agreements_are_answered_only_behind_assume_yes() -> None:
+    code = "\n".join(_code_lines(PREREQS))
+    lines = [ln for ln in code.splitlines() if "accept-package-agreements" in ln or "accept-source-agreements" in ln]
+    assert len(lines) == 1 and lines[0].strip().startswith("if ($AssumeYes)")
+    for f in NESTEGG.glob("*.cmd"):
+        assert "AssumeYes" not in f.read_text(encoding="ascii"), f
+
+
+def test_dry_run_writes_nothing() -> None:
+    code = PREREQS.read_text(encoding="ascii")
+    # Every write (log folder, log lines, prereqs.json) sits behind "if (-not $DryRun)" or the
+    # log path, which is only set inside that block; the installer call returns early on DryRun.
+    assert code.count("if (-not $DryRun) {") == 2
+    assert "if ($DryRun) { Row 'TODO'" in code
+    assert code.index("$script:log = Join-Path $logDir") > code.index("if (-not $DryRun) {")
+
+
+def test_prereqs_ends_on_one_verdict_line() -> None:
+    code = PREREQS.read_text(encoding="ascii")
+    assert "'NESTEGG-PREREQS: PASS'" in code
+    assert '"NESTEGG-PREREQS: FAIL $($script:fails)"' in code
+    assert code.rstrip().endswith("Say $final")

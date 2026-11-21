@@ -52,7 +52,10 @@ try {
 # --- Account and UAC (read only; nothing is changed) --------------------------------------------
 try {
     $id = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $isAdminGroup = ($id.Groups | Where-Object { $_.Value -eq 'S-1-5-32-544' }) -ne $null
+    # WindowsIdentity.Groups leaves out a deny-only SID, and an unelevated administrator's
+    # token carries Administrators (S-1-5-32-544) as deny-only, so ask whoami instead.
+    $isAdminGroup = $false
+    try { $isAdminGroup = [bool]((& whoami /groups /fo csv 2>$null) -match 'S-1-5-32-544') } catch { }
     $elevated = (New-Object Security.Principal.WindowsPrincipal($id)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     Row 'INFO' 'Account' ("administrator group: {0}; this window elevated: {1}" -f $isAdminGroup, $elevated)
     if ($elevated) { Row 'INFO' 'Elevation' 'this check does not need admin; the installer runs as the normal user' }
@@ -134,9 +137,10 @@ try {
 } catch { Row 'INFO' 'GPU' 'could not list display adapters' }
 
 # --- Windows Hello / TPM (report only; used by Obsidian recovery) ----------------------------
-$tpmOut = Try-Cmd 'tpmtool' @('getdeviceinformation')
-if ($tpmOut) { Row 'INFO' 'TPM' 'tpmtool answered (TPM present); Windows Hello setup stays the person''s own step' }
-else { Row 'INFO' 'TPM' 'not confirmed without admin; Obsidian''s Hello recovery layer needs TPM 2.0 + Hello set up by the person' }
+$tpm = $null
+try { $tpm = Get-PnpDevice -Class SecurityDevices -PresentOnly -ErrorAction Stop | Where-Object { $_.FriendlyName -match 'Trusted Platform Module' } | Select-Object -First 1 } catch { $tpm = $null }
+if ($tpm) { Row 'INFO' 'TPM' ("{0} ({1}); Windows Hello setup stays the person's own step" -f $tpm.FriendlyName, $tpm.Status) }
+else { Row 'INFO' 'TPM' 'no TPM listed under security devices; Obsidian''s Hello recovery layer needs TPM 2.0 + Hello set up by the person' }
 
 # --- Network reach (HEAD requests; nothing downloaded) ---------------------------------------
 foreach ($u in @('https://github.com', 'https://pypi.org/simple/', 'https://files.pythonhosted.org', 'https://huggingface.co')) {

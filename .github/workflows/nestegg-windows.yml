@@ -41,3 +41,37 @@ jobs:
         with:
           name: nestegg-check-log
           path: ${{ runner.temp }}/nestegg_check.log
+
+  phase1-prereqs:
+    # Really installs on the throwaway runner. -AssumeYes answers winget's agreement question
+    # ONLY here; "Install AdAstra.cmd" never passes it, so on a real PC the person answers it.
+    # The runner has no UAC box (it is an elevated service account), so this cannot test the
+    # Windows security boxes; those stay the person's own clicks and are tested by reading.
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Phase 1 dry run, then install, then run again (second run must install nothing)
+        shell: powershell
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'AdAstra'
+          $f = "tools\nestegg\Install-Prereqs.ps1"
+          $dry = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -DryRun *>&1 | Tee-Object -Variable d
+          if (Test-Path $root) { Write-Host 'FAIL: the dry run created the install folder'; exit 1 }
+          $one = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -AssumeYes *>&1 | Tee-Object -Variable o
+          $v1 = ($o | Where-Object { "$_" -match '^NESTEGG-PREREQS: ' } | Select-Object -Last 1)
+          Write-Host "first run: $v1"
+          if ("$v1" -ne 'NESTEGG-PREREQS: PASS') { exit 1 }
+          if (-not (Test-Path (Join-Path $root '.adastra\prereqs.json'))) { Write-Host 'FAIL: prereqs.json not written'; exit 1 }
+          $two = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root *>&1 | Tee-Object -Variable t
+          $v2 = ($t | Where-Object { "$_" -match '^NESTEGG-PREREQS: ' } | Select-Object -Last 1)
+          if ("$v2" -ne 'NESTEGG-PREREQS: PASS') { Write-Host "FAIL: second run $v2"; exit 1 }
+          if ($t | Where-Object { "$_" -match 'installing winget package' }) { Write-Host 'FAIL: second run installed something'; exit 1 }
+          Get-Content (Join-Path $root '.adastra\prereqs.json')
+          Write-Host 'NESTEGG-PHASE1-WINDOWS: PASS'
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nestegg-prereqs-logs
+          path: ${{ runner.temp }}/AdAstra/.adastra
