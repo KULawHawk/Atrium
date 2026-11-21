@@ -204,7 +204,7 @@
       "kind": "data",
       "const_pointer": "/contract",
       "sha256": "a82133081aa2ce62877b77cc802f5289cbb100d6a8c81ce55626d85eaabe018e",
-      "note": "Data contract, regenerated from the Conclave roster (CL-3 method_family); Conclave ECHO_REGISTRY row (CL-56). Decisions 268 + 302 (A, 2026-11-21): gains htrqwen, glmocr, htrhosted (Locutus #81)."
+      "note": "Data contract, regenerated from the Conclave roster (CL-3 method_family); Conclave ECHO_REGISTRY row (CL-56)."
     },
     {
       "name": "EngineFamilies/2",
@@ -213,7 +213,7 @@
       "kind": "data",
       "const_pointer": "/contract",
       "sha256": "e505db8604ca0a24bb2b552d87488940d96293b864d105cd590eae524a3e189f",
-      "note": "Reader lineage as per-engine shared-component lists (pairwise, never transitive; graded overlap via locutus.families.lineage_overlap). Owner decision 81 (A, 2026-11-17): published now, Conclave use OFF until the first keyed PC run is measured. Decision 103 (A, 2026-11-17): pdfium_render component; optional shared_inputs (the Poppler stage-1 raster) reported but excluded from overlap unless the caller sets shared_input_weight (0..1, default 0). EngineFamilies/1 unchanged. Decision 174 (A, 2026-11-18): one shared_inputs description reworded so it names no Conclave folder (text only, Locutus #77). Decisions 302 + 305 (A, 2026-11-21): gains htrqwen, glmocr, htrhosted; new components qwen_vl (visionlocal, htrqwen) and gemini (htrhosted) (Locutus #81)."
+      "note": "Reader lineage as per-engine shared-component lists (pairwise, never transitive; graded overlap via locutus.families.lineage_overlap). Owner decision 81 (A, 2026-11-17): published now, Conclave use OFF until the first keyed PC run is measured. Decision 103 (A, 2026-11-17): pdfium_render component; optional shared_inputs (the Poppler stage-1 raster) reported but excluded from overlap unless the caller sets shared_input_weight (0..1, default 0). EngineFamilies/1 unchanged. Decision 174 (A, 2026-11-18): one shared_inputs description reworded so it names no Conclave folder (text only, Locutus #77)."
     },
     {
       "name": "ObsidianRequest/1",
