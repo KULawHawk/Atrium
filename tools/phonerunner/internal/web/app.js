@@ -20,6 +20,10 @@ async function tick() {
     $("win").textContent = ss.window && ss.window.title ? ss.window.title : "—";
     $("exe").textContent = ss.window && ss.window.exe ? "(" + ss.window.exe.split("\\").pop() + ")" : "";
     $("paused").textContent = ss.shot_paused || "";
+    const st = $("stext");
+    if (st) {
+      st.textContent = ss.text_paused ? ss.text_paused : (ss.screen_text && ss.screen_text.length ? ss.screen_text.join("\n") : "—");
+    }
     $("sessnote").textContent = ss.last_error ? "Watcher problem: " + ss.last_error : ss.note;
     if (ss.last_shot_at && ss.last_shot_at !== lastShot && !ss.last_shot_at.startsWith("0001")) {
       lastShot = ss.last_shot_at;

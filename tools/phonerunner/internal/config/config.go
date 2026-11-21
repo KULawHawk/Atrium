@@ -50,6 +50,7 @@ type Config struct {
 	AllowedLogin         string       `json:"allowed_login"`
 	CaptureTextSeconds   int          `json:"capture_text_seconds"`
 	CaptureShotSeconds   int          `json:"capture_shot_seconds"`
+	ScreenTextSeconds    int          `json:"screen_text_seconds"` // 0 = off (default until PC test T-10 passes)
 	HeartbeatSeconds     int          `json:"heartbeat_seconds"`
 	CopyAckMaxAgeSeconds int          `json:"copy_ack_max_age_seconds"`
 	NtfyServer           string       `json:"ntfy_server"`
@@ -95,12 +96,13 @@ func DefaultDenyRules() []DenyRule {
 type Session struct {
 	CaptureTextSeconds int        `json:"capture_text_seconds"`
 	CaptureShotSeconds int        `json:"capture_shot_seconds"`
+	ScreenTextSeconds  int        `json:"screen_text_seconds"`
 	DenyRules          []DenyRule `json:"deny_rules"`
 }
 
 // SessionSettings returns what the session process needs and nothing else.
 func (c Config) SessionSettings() Session {
-	return Session{CaptureTextSeconds: c.CaptureTextSeconds, CaptureShotSeconds: c.CaptureShotSeconds, DenyRules: c.DenyRules}
+	return Session{CaptureTextSeconds: c.CaptureTextSeconds, CaptureShotSeconds: c.CaptureShotSeconds, ScreenTextSeconds: c.ScreenTextSeconds, DenyRules: c.DenyRules}
 }
 
 // LoadSession reads and validates a session settings file. Unknown fields (for
@@ -117,7 +119,7 @@ func LoadSession(path string) (Session, error) {
 		return Session{}, fmt.Errorf("config: %w", err)
 	}
 	c := Defaults()
-	c.CaptureTextSeconds, c.CaptureShotSeconds, c.DenyRules = s.CaptureTextSeconds, s.CaptureShotSeconds, s.DenyRules
+	c.CaptureTextSeconds, c.CaptureShotSeconds, c.ScreenTextSeconds, c.DenyRules = s.CaptureTextSeconds, s.CaptureShotSeconds, s.ScreenTextSeconds, s.DenyRules
 	if err := c.Validate(); err != nil {
 		return Session{}, err
 	}
@@ -170,6 +172,9 @@ func (c Config) Validate() error {
 	check("capture_text_seconds", c.CaptureTextSeconds, 1, 3600)
 	check("capture_shot_seconds", c.CaptureShotSeconds, 2, 3600)
 	check("heartbeat_seconds", c.HeartbeatSeconds, 5, 600)
+	if c.ScreenTextSeconds != 0 {
+		check("screen_text_seconds", c.ScreenTextSeconds, 2, 3600)
+	}
 	check("copy_ack_max_age_seconds", c.CopyAckMaxAgeSeconds, 60, 3600)
 	if c.NtfyTopic != "" && len(c.NtfyTopic) < 24 {
 		problems = append(problems, "ntfy_topic must be at least 24 random characters (it is a bearer secret)")

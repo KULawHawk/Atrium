@@ -116,14 +116,22 @@ func RunPerms(elevated func() (bool, error), read Reader, list Lister, programDi
 // would be): opening private\config.json and listing private\, tsnet\ and
 // captures\ must each be refused with access denied. A path that does not exist
 // proves nothing and fails.
-func CheckDenied(elevated func() (bool, error), open func(string) error, list Lister, root string) Result {
+func CheckDenied(self Self, open func(string) error, list Lister, root string) Result {
 	const test = "T-07b"
-	el, err := elevated()
+	el, err := self.Elevated()
 	if err != nil {
 		return fail(test, "cannot tell whether this window is elevated: %v", err)
 	}
 	if el {
 		return fail(test, "run this half from a normal (not elevated) window: admin rights would open the files")
+	}
+	sid, il, err := self.Identity()
+	if err != nil {
+		return fail(test, "cannot tell which account this check runs as: %v", err)
+	}
+	who := fmt.Sprintf("[ran as %s, %s integrity]", sid, il)
+	if il != "Medium" {
+		return fail(test, "%s: run from a normal window at Medium integrity, the level agents run at", who)
 	}
 	var bad []string
 	judge := func(what string, err error) {
@@ -142,9 +150,9 @@ func CheckDenied(elevated func() (bool, error), open func(string) error, list Li
 		judge("list "+d+"\\", err)
 	}
 	if len(bad) > 0 {
-		return fail(test, "%d problem(s): %s", len(bad), strings.Join(bad, "; "))
+		return fail(test, "%s: %d problem(s): %s", who, len(bad), strings.Join(bad, "; "))
 	}
-	return Result{Test: test, Pass: true, Detail: "normal window: config.json and the private, tsnet and captures folders all refused with access denied"}
+	return Result{Test: test, Pass: true, Detail: who + ": normal window: config.json and the private, tsnet and captures folders all refused with access denied"}
 }
 
 // Targets lists what T-07 checks for an install. ack\ is left out on purpose: it
