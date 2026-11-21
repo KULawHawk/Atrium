@@ -1,10 +1,12 @@
-// Command phonerunner-check runs PC install tests that need no elevation and
-// change nothing. Each prints one PASS or FAIL line.
+// Command phonerunner-check runs PC install tests that change nothing. Each prints one PASS or FAIL line.
 //
 //	phonerunner-check log [--store <dir>]   T-11: the event log is whole and in order
 //	phonerunner-check refused --url <page>  T-06: this PC is refused by the page
 //	phonerunner-check perms                 T-07: agents cannot change the programs or
-//	                                        store, nor read its private folders
+//	                                        store, nor read its private folders (run
+//	                                        ELEVATED: only admins can read those entries)
+//	phonerunner-check denied                T-07b: a normal window is refused config.json
+//	                                        and the private folders (run NOT elevated)
 //	phonerunner-check locked                T-16: agents cannot open the running session
 //	                                        part for injection (run NOT elevated)
 package main
@@ -33,10 +35,18 @@ type deps struct {
 	proc   pccheck.Proc
 }
 
+func openClose(p string) error {
+	f, err := os.Open(p)
+	if err != nil {
+		return err
+	}
+	return f.Close()
+}
+
 func run(args []string, out io.Writer, d deps) int {
-	known := map[string]bool{"log": true, "refused": true, "perms": true, "locked": true}
+	known := map[string]bool{"log": true, "refused": true, "perms": true, "denied": true, "locked": true}
 	if len(args) == 0 || !known[args[0]] {
-		fmt.Fprintln(out, "FAIL usage: phonerunner-check log [--store <dir>] | refused --url <page address> | perms [--program-dir <dir>] [--store <dir>] | locked")
+		fmt.Fprintln(out, "FAIL usage: phonerunner-check log [--store <dir>] | refused --url <page address> | perms [--program-dir <dir>] [--store <dir>] | denied [--store <dir>] | locked")
 		return 2
 	}
 	fs := flag.NewFlagSet("phonerunner-check "+args[0], flag.ContinueOnError)
@@ -52,7 +62,9 @@ func run(args []string, out io.Writer, d deps) int {
 	case "log":
 		r = pccheck.LogIntact(filepath.Join(*storeDir, "log", "events.jsonl"))
 	case "perms":
-		r = pccheck.CheckPerms(d.read, pccheck.WithFiles(pccheck.Targets(*programDir, *storeDir), d.list))
+		r = pccheck.RunPerms(d.proc.Elevated, d.read, d.list, *programDir, *storeDir)
+	case "denied":
+		r = pccheck.CheckDenied(d.proc.Elevated, openClose, d.list, *storeDir)
 	case "locked":
 		r = pccheck.CheckLocked(d.proc, "phonerunner-session.exe")
 	default:

@@ -2,6 +2,7 @@ package pccheck
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,14 +105,71 @@ func TestWithFiles(t *testing.T) {
 
 func TestListDir(t *testing.T) {
 	d := t.TempDir()
-	if err := os.WriteFile(filepath.Join(d, "a.json"), nil, 0o600); err != nil {
+	if err := os.MkdirAll(filepath.Join(d, "sub"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	for _, f := range []string{"a.json", filepath.Join("sub", "b.png")} {
+		if err := os.WriteFile(filepath.Join(d, f), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	got, err := ListDir(d)
-	if err != nil || len(got) != 1 || got[0] != filepath.Join(d, "a.json") {
+	if err != nil || len(got) != 3 || got[2] != filepath.Join(d, "sub", "b.png") {
 		t.Fatal(got, err)
 	}
 	if _, err := ListDir(filepath.Join(d, "missing")); err == nil {
 		t.Fatal("missing folder should fail")
+	}
+}
+
+func TestRunPerms(t *testing.T) {
+	ok := func(string) (Perms, error) {
+		return Perms{Owner: SIDSystem, ACEs: []ACE{{SID: SIDSystem, Allow: true, Mask: 0x1f01ff}}}, nil
+	}
+	none := func(string) ([]string, error) { return nil, nil }
+	el := func(v bool, e error) func() (bool, error) { return func() (bool, error) { return v, e } }
+	if r := RunPerms(el(false, errors.New("x")), ok, none, `C:\P`, `C:\D`); r.Pass || !strings.Contains(r.Detail, "cannot tell") {
+		t.Fatal(r.Line())
+	}
+	if r := RunPerms(el(false, nil), ok, none, `C:\P`, `C:\D`); r.Pass || !strings.Contains(r.Detail, "elevated window") {
+		t.Fatal(r.Line())
+	}
+	if r := RunPerms(el(true, nil), ok, none, `C:\P`, `C:\D`); !r.Pass || !strings.HasPrefix(r.Line(), "PASS T-07 elevated read: 13 paths") {
+		t.Fatal(r.Line())
+	}
+	bad := func(string) (Perms, error) { return Perms{Owner: jake}, nil }
+	if r := RunPerms(el(true, nil), bad, none, `C:\P`, `C:\D`); r.Pass || strings.Contains(r.Detail, "elevated read") {
+		t.Fatal(r.Line())
+	}
+}
+
+func TestCheckDenied(t *testing.T) {
+	el := func(v bool, e error) func() (bool, error) { return func() (bool, error) { return v, e } }
+	denied := func(string) error { return fs.ErrPermission }
+	listDenied := func(string) ([]string, error) { return nil, fs.ErrPermission }
+	if r := CheckDenied(el(false, nil), denied, listDenied, `C:\D`); !r.Pass || r.Test != "T-07b" {
+		t.Fatal(r.Line())
+	}
+	if r := CheckDenied(el(true, nil), denied, listDenied, `C:\D`); r.Pass || !strings.Contains(r.Detail, "normal (not elevated)") {
+		t.Fatal(r.Line())
+	}
+	if r := CheckDenied(el(false, errors.New("x")), denied, listDenied, `C:\D`); r.Pass || !strings.Contains(r.Detail, "cannot tell") {
+		t.Fatal(r.Line())
+	}
+	opened := func(string) error { return nil }
+	mixed := func(d string) ([]string, error) {
+		switch {
+		case strings.HasSuffix(d, "private"):
+			return nil, fs.ErrNotExist
+		case strings.HasSuffix(d, "tsnet"):
+			return nil, errors.New("disk on fire")
+		}
+		return []string{"x"}, nil
+	}
+	r := CheckDenied(el(false, nil), opened, mixed, `C:\D`)
+	for _, w := range []string{"4 problem(s)", "config.json succeeded", "not found", "another reason: disk on fire", `list captures\ succeeded`} {
+		if r.Pass || !strings.Contains(r.Detail, w) {
+			t.Fatalf("%q missing: %s", w, r.Line())
+		}
 	}
 }

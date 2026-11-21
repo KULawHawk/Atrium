@@ -3,7 +3,7 @@ package pccheck
 import (
 	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"strings"
 )
@@ -70,17 +70,81 @@ type Target struct {
 // Lister lists the files directly inside a folder (for private\ and tsnet\).
 type Lister func(dir string) ([]string, error)
 
-// ListDir is the real Lister: every entry directly inside dir, full paths.
+// ListDir is the real Lister: every file and folder at any depth inside dir,
+// full paths (a subfolder can carry its own entries too). Any folder it cannot
+// read is an error, so the target fails rather than being skipped.
 func ListDir(dir string) ([]string, error) {
-	es, err := os.ReadDir(dir)
+	var out []string
+	err := filepath.WalkDir(dir, func(p string, _ fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if p != dir {
+			out = append(out, p)
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]string, 0, len(es))
-	for _, e := range es {
-		out = append(out, filepath.Join(dir, e.Name()))
-	}
 	return out, nil
+}
+
+// ErrNotElevated means T-07 ran from a normal window. The private folders hold
+// only SYSTEM and Administrators, so a normal window cannot even read their
+// permissions and a correct install would always show FAIL.
+var ErrNotElevated = errors.New("run this check from an elevated window (your own click on the Windows prompt): the private folders are SYSTEM/Administrators only, so a normal window cannot read their permissions")
+
+// RunPerms is T-07 as run on the PC: elevated first, then every target plus the
+// files found inside the private folders.
+func RunPerms(elevated func() (bool, error), read Reader, list Lister, programDir, root string) Result {
+	el, err := elevated()
+	if err != nil {
+		return fail("T-07", "cannot tell whether this window is elevated: %v", err)
+	}
+	if !el {
+		return fail("T-07", "%v", ErrNotElevated)
+	}
+	r := CheckPerms(read, WithFiles(Targets(programDir, root), list))
+	if r.Pass {
+		r.Detail = "elevated read: " + r.Detail
+	}
+	return r
+}
+
+// CheckDenied is T-07b, the other half, run from a NORMAL window (as an agent
+// would be): opening private\config.json and listing private\, tsnet\ and
+// captures\ must each be refused with access denied. A path that does not exist
+// proves nothing and fails.
+func CheckDenied(elevated func() (bool, error), open func(string) error, list Lister, root string) Result {
+	const test = "T-07b"
+	el, err := elevated()
+	if err != nil {
+		return fail(test, "cannot tell whether this window is elevated: %v", err)
+	}
+	if el {
+		return fail(test, "run this half from a normal (not elevated) window: admin rights would open the files")
+	}
+	var bad []string
+	judge := func(what string, err error) {
+		switch {
+		case err == nil:
+			bad = append(bad, what+" succeeded")
+		case errors.Is(err, fs.ErrNotExist):
+			bad = append(bad, what+": not found, so this proves nothing")
+		case !errors.Is(err, fs.ErrPermission):
+			bad = append(bad, fmt.Sprintf("%s failed for another reason: %v", what, err))
+		}
+	}
+	judge("open private\\config.json", open(filepath.Join(root, "private", "config.json")))
+	for _, d := range []string{"private", "tsnet", "captures"} {
+		_, err := list(filepath.Join(root, d))
+		judge("list "+d+"\\", err)
+	}
+	if len(bad) > 0 {
+		return fail(test, "%d problem(s): %s", len(bad), strings.Join(bad, "; "))
+	}
+	return Result{Test: test, Pass: true, Detail: "normal window: config.json and the private, tsnet and captures folders all refused with access denied"}
 }
 
 // Targets lists what T-07 checks for an install. ack\ is left out on purpose: it

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -47,6 +48,17 @@ func TestRun(t *testing.T) {
 	// Off Windows both checks fail closed with a reason.
 	if rc, out := call("perms"); rc != 1 || !strings.HasPrefix(out, "FAIL T-07") {
 		t.Fatal(out)
+	}
+	if rc, out := call("denied"); rc != 1 || !strings.HasPrefix(out, "FAIL T-07b") {
+		t.Fatal(out)
+	}
+	if err := openClose(filepath.Join(dir, "nope")); err == nil {
+		t.Fatal("missing file opened")
+	}
+	f := filepath.Join(dir, "yes")
+	_ = os.WriteFile(f, nil, 0o600)
+	if err := openClose(f); err != nil {
+		t.Fatal(err)
 	}
 	if rc, out := call("locked"); rc != 1 || !strings.HasPrefix(out, "FAIL T-16") {
 		t.Fatal(out)
