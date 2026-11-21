@@ -15,6 +15,9 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:12px;margin:0;max-heigh
 img{max-width:100%;border:1px solid var(--line);border-radius:6px}
 details summary{cursor:pointer}.row{display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding:6px 0}
 ul{margin:0;padding-left:18px}
+button{font:inherit;padding:10px 16px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg);margin:6px 6px 0 0}
+button.go{background:var(--ok);color:#fff;border-color:var(--ok)}button.stop{background:var(--bad);color:#fff;border-color:var(--bad)}
+button:disabled{opacity:.5}.badge{display:inline-block;border:1px solid var(--warn);color:var(--warn);border-radius:6px;padding:1px 6px;margin:2px 4px 2px 0;font-size:12px}
 </style>
 </head>
 <body>
@@ -30,10 +33,28 @@ ul{margin:0;padding-left:18px}
   <p><img id="shot" alt="Latest PC screenshot" hidden></p>
   <div class="muted" id="shotat"></div>
 </div>
+<div class="card" id="runcard"><h2>Running now</h2>
+  <div id="runstate" class="muted">Nothing has run yet.</div>
+  <div id="runbadges"></div>
+  <button class="stop" id="stopbtn" hidden>Stop (needs your phone unlock)</button>
+  <details><summary>Output (last 200 lines, kept on the PC)</summary><pre id="runlines"></pre></details>
+  <div id="runmsg" class="muted"></div>
+</div>
+<div class="card"><h2>Staged items</h2>
+  <p class="muted">Agents can only stage items here. Nothing runs until you tap Run and unlock your phone. Staged items must hold synthetic data only: their files and differences are shown on this page.</p>
+  <div id="items" class="muted">—</div>
+  <p class="warn" id="risk"></p>
+</div>
+<div class="card"><h2>Passkey</h2>
+  <div id="pkstate" class="muted">—</div>
+  <button id="pkbtn">Add this phone's passkey</button>
+  <div class="muted">Works only while the passkey step is open at the desk (5 minutes). Then type the code shown here at the desk.</div>
+  <div id="pkmsg"></div>
+</div>
 <div id="logs"></div>
 <div class="card"><h2>Results copied off the PC</h2><div id="copy">—</div></div>
 <div class="card"><details><summary><b>Settings</b> <span class="muted">(changed at the desk for now)</span></summary><div id="settings"></div></details></div>
-<p class="muted">Watch-only. This page cannot start, stop or change anything on the PC.</p>
+<p class="muted">Run and Stop each need your tap and your phone unlock, and only work while the Run button is turned on at the desk and the PC is unlocked. Everything else on this page only watches.</p>
 <script src="/app.js"></script>
 </body>
 </html>

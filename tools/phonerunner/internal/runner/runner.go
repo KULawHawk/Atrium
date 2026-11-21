@@ -109,6 +109,10 @@ func (r Run) Running() bool { return !r.Started.IsZero() && r.Ended.IsZero() }
 var (
 	ErrBusy       = errors.New("another item is still running; stop it or wait")
 	ErrNotRunning = errors.New("nothing is running")
+	// ErrAlreadyEnded means the item's main process ended on its own before the
+	// Stop arrived; the run is recorded as ended, not stopped. Proc.Kill returns
+	// it when the item's tree is already gone.
+	ErrAlreadyEnded = errors.New("the item had already ended on its own; nothing was stopped")
 )
 
 // Runner runs at most one item at a time. Safe for concurrent use.
@@ -119,10 +123,11 @@ type Runner struct {
 	now   func() time.Time
 	opts  Options
 
-	mu   sync.Mutex
-	cur  Run
-	proc Proc
-	done chan struct{}
+	mu     sync.Mutex
+	cur    Run
+	proc   Proc
+	exited bool // the main process has ended (output may still be draining)
+	done   chan struct{}
 }
 
 // New builds a Runner. keep receives every (redacted) output line for the
@@ -146,6 +151,7 @@ func (r *Runner) Start(itemID, manifestSHA string, spec Spec, o Options) error {
 	}
 	r.cur = Run{ItemID: itemID, ManifestSHA: manifestSHA, Started: r.now(), Lines: []string{}}
 	r.proc = p
+	r.exited = false
 	r.opts = o
 	r.done = make(chan struct{})
 	r.log("run.started", map[string]any{"item": itemID, "manifest_sha256": manifestSHA})
@@ -165,6 +171,9 @@ func (r *Runner) follow(p Proc, done chan struct{}) {
 	waited := make(chan result, 1)
 	go func() {
 		c, err := p.Wait()
+		r.mu.Lock()
+		r.exited = true
+		r.mu.Unlock()
 		waited <- result{c, err}
 	}()
 	br := bufio.NewReaderSize(p.Output(), MaxLineBytes)
@@ -228,22 +237,35 @@ func (r *Runner) add(line string) {
 }
 
 // Stop ends the running item's process tree. Stop is approved by a tap like Run.
+// A Stop that arrives after the main process ended on its own (while its last
+// output is still being read) returns ErrAlreadyEnded and the run is not marked
+// stopped.
 func (r *Runner) Stop() error {
 	r.mu.Lock()
 	if !r.cur.Running() || r.proc == nil {
 		r.mu.Unlock()
 		return ErrNotRunning
 	}
-	p := r.proc
+	if r.exited {
+		item := r.cur.ItemID
+		r.mu.Unlock()
+		r.log("run.stop_after_end", map[string]any{"item": item})
+		return ErrAlreadyEnded
+	}
+	p, item := r.proc, r.cur.ItemID
 	r.cur.Stopped = true // set first so the end record says stopped; undone if Kill fails
 	r.mu.Unlock()
 	if err := p.Kill(); err != nil {
 		r.mu.Lock()
 		r.cur.Stopped = false
 		r.mu.Unlock()
+		if errors.Is(err, ErrAlreadyEnded) {
+			r.log("run.stop_after_end", map[string]any{"item": item})
+			return ErrAlreadyEnded
+		}
 		return fmt.Errorf("runner: stop failed: %w", err)
 	}
-	r.log("run.stop", map[string]any{"item": r.Current().ItemID})
+	r.log("run.stop", map[string]any{"item": item})
 	return nil
 }
 

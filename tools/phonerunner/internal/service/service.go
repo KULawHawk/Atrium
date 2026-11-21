@@ -2,12 +2,13 @@
 // frames from the session part, keeps the current status, writes status and
 // heartbeat files for the PC lane to copy, and decides when to alert.
 //
-// Watch-only (Decision 260 = A): nothing here can start, stop or change anything on
-// the PC. The Run button comes in a later PR, behind the passkey check.
+// Nothing here starts or stops anything: the Run button lives in package control,
+// behind the passkey check, and asks RunReady before every run.
 package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -21,7 +22,7 @@ import (
 )
 
 // Version is stamped into every status and heartbeat.
-var Version = "0.1.0-watch"
+var Version = "0.2.0-run"
 
 // PictureHold is why screenshots are not copied off the PC yet: under Decision 266 = A
 // they are copied only after the picture filter (key and patient blackout) exists,
@@ -169,7 +170,7 @@ func (s *Service) Refresh(ctx context.Context) Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.now().UTC()
-	st := Status{At: now, Version: Version, Mode: "watch-only", Paired: s.cfg.Paired(), Problems: []string{}}
+	st := Status{At: now, Version: Version, Mode: s.mode(), Paired: s.cfg.Paired(), Problems: []string{}}
 	stale := time.Duration(3*s.cfg.CaptureTextSeconds) * time.Second
 	s.sess.Connected = !s.sess.LastFrame.IsZero() && now.Sub(s.sess.LastFrame) <= stale
 	st.Session = s.sess
@@ -217,6 +218,30 @@ func (s *Service) Refresh(ctx context.Context) Status {
 		st.Problems = append(st.Problems, "could not write heartbeat: "+err.Error())
 	}
 	return st
+}
+
+func (s *Service) mode() string {
+	if s.cfg.RunButton {
+		return "watch + Run button"
+	}
+	return "watch-only"
+}
+
+// RunReady says whether the PC can take a run now (nil) or why not. Under plan C
+// the tool only runs items while the PC is already unlocked; it never unlocks.
+func (s *Service) RunReady() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	stale := time.Duration(3*s.cfg.CaptureTextSeconds) * time.Second
+	switch {
+	case !s.cfg.RunButton:
+		return errors.New("the Run button is off; it is turned on at the desk after the Always-notify check")
+	case s.sess.LastFrame.IsZero() || s.now().Sub(s.sess.LastFrame) > stale:
+		return errors.New("the desktop watcher is not reporting, so the PC's state is unknown; Run is refused")
+	case s.sess.Locked:
+		return errors.New("the PC is locked; unlock it at the PC first (this tool never unlocks it)")
+	}
+	return nil
 }
 
 // WriteSessionSettings writes session.json, the only settings the session process

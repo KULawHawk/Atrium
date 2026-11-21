@@ -5,6 +5,8 @@
 //	phonerunner-service install [--user NAME]   elevated, once: store + permissions + service
 //	phonerunner-service login                   elevated: join the tailnet (prints Tailscale's sign-in link)
 //	phonerunner-service pair NODEID LOGIN       elevated: allow Jake's phone (type YES to confirm)
+//	phonerunner-service passkey                 elevated: add the phone's passkey (5-minute window, code check)
+//	phonerunner-service run-button on|off       elevated: on re-checks Always notify (T-01C) first
 //	phonerunner-service uninstall               elevated: remove the service, keep all data
 //	phonerunner-service version
 //
@@ -47,6 +49,13 @@ func main() {
 			usage()
 		}
 		err = winsvc.Pair(os.Args[2], os.Args[3], bufio.NewReader(os.Stdin))
+	case "passkey":
+		err = winsvc.AddPasskey(os.Stdin)
+	case "run-button":
+		if len(os.Args) != 3 || (os.Args[2] != "on" && os.Args[2] != "off") {
+			usage()
+		}
+		err = winsvc.SetRunButton(os.Args[2] == "on")
 	case "uninstall":
 		err = winsvc.Uninstall()
 	case "version":
@@ -61,6 +70,6 @@ func main() {
 }
 
 func usage() {
-	fmt.Println("usage: phonerunner-service install [--user NAME] | login | pair NODEID LOGIN | uninstall | version")
+	fmt.Println("usage: phonerunner-service install [--user NAME] | login | pair NODEID LOGIN | passkey | run-button on|off | uninstall | version")
 	os.Exit(2)
 }

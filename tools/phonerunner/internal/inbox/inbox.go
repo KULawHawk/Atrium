@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -139,7 +138,7 @@ func Load(dir string) (Item, error) {
 	seen := map[string]bool{}
 	var unread []string
 	for _, rel := range rels {
-		b, err := readCapped(filepath.Join(dir, filepath.FromSlash(rel)))
+		b, err := ReadInside(dir, rel)
 		if err != nil {
 			it.Problems = append(it.Problems, rel+": "+err.Error())
 			continue
@@ -208,22 +207,6 @@ func (it Item) Estimates() (string, string) {
 }
 
 var errTooBig = fmt.Errorf("larger than %d bytes", MaxFileBytes)
-
-func readCapped(p string) ([]byte, error) {
-	f, err := os.Open(p)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	b, err := io.ReadAll(io.LimitReader(f, MaxFileBytes+1))
-	if err != nil {
-		return nil, err
-	}
-	if len(b) > MaxFileBytes {
-		return nil, errTooBig
-	}
-	return b, nil
-}
 
 // ManifestSHA is the sha256 of the manifest text, one "sha256  path" line per
 // file in path order (the same form sha256sum prints).
@@ -296,7 +279,7 @@ func CopyApproved(src, dst string, approved []File, approvedSHA string) error {
 		return fmt.Errorf("inbox: %s already exists", dst)
 	}
 	for _, f := range approved {
-		b, err := readCapped(filepath.Join(src, filepath.FromSlash(f.Rel)))
+		b, err := ReadInside(src, f.Rel)
 		if err != nil {
 			return fmt.Errorf("inbox: %s: %w", f.Rel, err)
 		}

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -178,7 +179,7 @@ func TestLimitsAndLinks(t *testing.T) {
 	if _, err := Load(filepath.Join(t.TempDir(), "missing")); err == nil {
 		t.Fatal("missing folder must fail")
 	}
-	if _, err := readCapped(filepath.Join(d, "nope")); err == nil {
+	if _, err := ReadInside(d, "nope"); err == nil {
 		t.Fatal("missing file must fail")
 	}
 }
@@ -287,7 +288,8 @@ func TestCopyApproved(t *testing.T) {
 	if _, err := List(filepath.Dir(src)); err == nil {
 		t.Fatal("a failing item must fail the list")
 	}
-	if _, err := readCapped(store); err == nil {
+	os.MkdirAll(filepath.Join(store, "sub"), 0o700)
+	if _, err := ReadInside(store, "sub"); err == nil {
 		t.Fatal("a folder is not a file")
 	}
 }
@@ -344,5 +346,90 @@ func TestManifestForm(t *testing.T) {
 	renamed := []File{files[0], {Rel: "go.ps1", SHA256: files[1].SHA256}}
 	if ManifestSHA(renamed) == ManifestSHA(files) {
 		t.Fatal("a rename must change the manifest")
+	}
+}
+
+func TestReadInsideRefusesEscapes(t *testing.T) {
+	root := t.TempDir()
+	item := filepath.Join(root, "item")
+	secret := filepath.Join(root, "private")
+	os.MkdirAll(filepath.Join(item, "sub"), 0o700)
+	os.MkdirAll(secret, 0o700)
+	os.WriteFile(filepath.Join(secret, "config.json"), []byte("secret"), 0o600)
+	os.WriteFile(filepath.Join(item, "sub", "ok.txt"), []byte("ok"), 0o600)
+	if b, err := ReadInside(item, "sub/ok.txt"); err != nil || string(b) != "ok" {
+		t.Fatal(err)
+	}
+	// A link swapped in after the folder walk (the walk itself refuses links).
+	os.Symlink(filepath.Join(secret, "config.json"), filepath.Join(item, "leak.txt"))
+	if _, err := ReadInside(item, "leak.txt"); !errors.Is(err, ErrOutside) {
+		t.Fatal(err)
+	}
+	// A folder swapped for a link to another folder (a junction on Windows).
+	os.Symlink(secret, filepath.Join(item, "j"))
+	if _, err := ReadInside(item, "j/config.json"); !errors.Is(err, ErrOutside) {
+		t.Fatal(err)
+	}
+	// A link to a sibling whose name starts like the item's is still outside.
+	os.MkdirAll(item+"2", 0o700)
+	os.WriteFile(filepath.Join(item+"2", "x"), []byte("x"), 0o600)
+	os.Symlink(filepath.Join(item+"2", "x"), filepath.Join(item, "sib"))
+	if _, err := ReadInside(item, "sib"); !errors.Is(err, ErrOutside) {
+		t.Fatal(err)
+	}
+	// The item folder itself swapped for a link to a private folder.
+	os.Symlink(secret, filepath.Join(root, "item3"))
+	if _, err := ReadInside(filepath.Join(root, "item3"), "config.json"); !errors.Is(err, ErrOutside) {
+		t.Fatal(err)
+	}
+	if _, err := ReadInside(item, "../private/config.json"); !errors.Is(err, ErrBadPath) {
+		t.Fatal(err)
+	}
+	if _, err := ReadInside(filepath.Join(root, "missing"), "x"); err == nil {
+		t.Fatal("missing root must fail")
+	}
+	// Big file and an unreadable handle path.
+	os.WriteFile(filepath.Join(item, "big.bin"), make([]byte, MaxFileBytes+1), 0o600)
+	if _, err := ReadInside(item, "big.bin"); !errors.Is(err, errTooBig) {
+		t.Fatal(err)
+	}
+	calls := 0
+	finalPath = func(f *os.File) (string, error) {
+		calls++
+		if calls == 1 {
+			return "", errors.New("no path")
+		}
+		return finalPathOS(f)
+	}
+	if _, err := ReadInside(item, "sub/ok.txt"); err == nil {
+		t.Fatal("root path failure must fail")
+	}
+	calls = -10
+	finalPath = func(f *os.File) (string, error) {
+		calls++
+		if calls == -8 {
+			return "", errors.New("no path")
+		}
+		return finalPathOS(f)
+	}
+	if _, err := ReadInside(item, "sub/ok.txt"); err == nil {
+		t.Fatal("parent path failure must fail")
+	}
+	calls = -10
+	finalPath = func(f *os.File) (string, error) {
+		calls++
+		if calls == -7 {
+			return "", errors.New("no path")
+		}
+		return finalPathOS(f)
+	}
+	if _, err := ReadInside(item, "sub/ok.txt"); err == nil {
+		t.Fatal("file path failure must fail")
+	}
+	finalPath = finalPathOS
+	readAll = func(io.Reader) ([]byte, error) { return nil, errors.New("read broke") }
+	defer func() { readAll = io.ReadAll }()
+	if _, err := ReadInside(item, "sub/ok.txt"); err == nil || err.Error() != "read broke" {
+		t.Fatal(err)
 	}
 }

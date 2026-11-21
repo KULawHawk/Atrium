@@ -1,12 +1,14 @@
-# PhoneRunner (watch-only, PR 1)
+# PhoneRunner
 
 Lets Jake watch his Windows PC from his Android phone over his private Tailscale network:
 which window is in front, whether the PC is locked, the latest screenshot, the last
 lines of chosen log files, and whether results are being copied off the PC.
-**Watch-only: it cannot start, stop or change anything.** The Run button, the control
-panel, the command box and the lock-screen helper come in later PRs behind a per-tap
-passkey (plan: `/mnt/project-files/phone-runner-plan/PLAN_phone_run_button_2026-11-20.md`,
-Decisions 259–263).
+
+It also has a **Run button** (Decision 235): staged items run only on his own tap plus his
+phone unlock (a passkey), only while the PC is already unlocked, and only after he turns the
+button on at the desk, which first re-checks "Always notify" (T-01C). Agents can only stage
+items. The control panel, the command box and the picture filter come in later PRs
+(plan: `/mnt/project-files/phone-runner-plan/PLAN_phone_run_button_2026-11-20.md`).
 
 This is its own Go module. It touches no Atrium Python code, contract or registry entry.
 
@@ -17,7 +19,7 @@ This is its own Go module. It touches no Atrium Python code, contract or registr
 | `phonerunner-service.exe` | Windows service, SYSTEM | Joins Jake's tailnet as its own device `phonerunner` (Tailscale `tsnet`, **no localhost port**). Serves the page over HTTPS. Lets in only Jake's paired phone, identified by Tailscale itself (device ID + login), never by a header. Writes the append-only log, status and heartbeat. Sends fixed-text phone alerts. |
 | `phonerunner-session.exe` | Jake, in his desktop session | Started by the service with locked-down process rights (Jake gets only query + stop). Reports the front window, lock state and screenshots over a pipe only it holds. The service labels everything it says "reported by the session process". |
 
-Store: `C:\ProgramData\PhoneRunner\` (SYSTEM + Administrators write, Jake read). Folders Jake (and so any agent) **cannot read**: `tsnet\` (Tailscale identity), `private\` (`config.json`, which holds the alert topic, a bearer secret), `captures\` (pictures). `ack\` is the one folder Jake's agents may write, for the copy-off acknowledgement. The session part reads only `session.json` (capture intervals and window rules; no secret).
+Store: `C:\ProgramData\PhoneRunner\` (SYSTEM + Administrators write, Jake read; the Run button's `inbox\` and `work\` are Jake-writable, see below). Folders Jake (and so any agent) **cannot read**: `tsnet\` (Tailscale identity), `private\` (`config.json`, which holds the alert topic, a bearer secret), `captures\` (pictures). `ack\` is the one folder Jake's agents may write, for the copy-off acknowledgement. The session part reads only `session.json` (capture intervals and window rules; no secret).
 
 ## Safety rules built in
 
@@ -37,7 +39,7 @@ Store: `C:\ProgramData\PhoneRunner\` (SYSTEM + Administrators write, Jake read).
 - Window rules check the **front window only**. A key page or patient file in a side window or on a second monitor is still in the picture (the Settings info box says so). Pictures stay on the PC and phone until the picture filter handles this.
 - The key filter cannot spot a short password with no label (for example a bare `hunter2`).
 - Title rules are a starting list; a patient file whose title has no name pattern, date or "patient" still shows on the phone (never in a copied file).
-- No Run button, control panel, command box, passkey, or lock-screen helper.
+- No control panel, command box, or lock-screen helper yet. No per-item time limit yet (the plan's "time limit from header"); Stop is the limit for now.
 - The Windows parts (`internal/winsvc`, `capture_windows.go`, the service entry point) are cross-compiled and vetted here but **have never run**; they are exercised on the PC by the install tests below.
 
 ## Copy-off and PC checks (PR 2)
@@ -115,6 +117,44 @@ The page can show the words in the front window, read through Windows UI Automat
   - Items that need no desktop still run as Jake. The plan's separate low-rights account for those is parked with plan B.
   - [U] The Windows launcher (job, suspended start, clean environment block) compiles but has never run. Its PC test is T-05: a dummy item that prints its environment and working folder, prints `$env:PSModulePath`, tries one call that needs `USERPROFILE` (`[Environment]::GetFolderPath('MyDocuments')`), starts a child process, and is then stopped. A second dummy item prints 500 numbered lines and exits at once. The test passes if the environment is exactly the list above, `PSModulePath` is the one system folder only, the `USERPROFILE` call shows what an item sees without it (recorded, not a failure), the working folder is the approved copy, writing into that copy fails, Stop ends the child too, and all 500 numbered lines from the second item arrive.
 
+## The Run button on the page (PR 8, part 2c)
+
+`internal/control` joins the approval check, the staged items and the runner; `internal/web` adds the routes and the page; `winsvc` wires them into the service.
+
+- **What the phone shows.** "Staged items": each item's title, who staged it, time and cost (red when not stated), badges, problems, whether it is new or what changed since he last approved it, and each file's text with a line diff against the last approved copy (key-redacted, cut at 256 KB). "Running now": the run's state, exit code or "stopped by you", line count, the last 200 output lines, and **the item's badges again next to Stop**. The risk note is shown beside the Run buttons.
+- **Run.**
+  - The tap asks the PC for a challenge. Refused at once, with the reason, if the Run button is off, the PC is locked, the desktop watcher is not reporting, the item has a problem, or another item is running.
+  - A badged item asks a second "Run it anyway?" line first (plan 6.4).
+  - The PC keeps its own snapshot of the item as loaded.
+  - The phone signs after Jake unlocks it. The PC checks the signature, time limit, device and manifest, re-checks the PC is ready, copies **exactly the snapshot's files** into a new folder under `approved\`, and starts the fixed command on that copy with its own `work\` folder as TEMP.
+  - The file list never comes from the page.
+- **Stop** is approved the same way, bound to the running item's manifest. A Stop that lands after the item already ended on its own is recorded as "already ended", not "stopped".
+- **Output** goes to `private\output\<item>.log` (SYSTEM and Administrators only, never staged by copy-off; a test proves it) and to the page. It reaches the copied event log only if the item sets `"output_may_copy": true`.
+- **The log** records every tap approved or refused, every copy refused, run start and end, and every passkey step. It never records output unless allowed.
+- **No reading through links.** The inbox is Jake-writable and the service reads it as SYSTEM, so every inbox read (the scan, the copy, the file view) goes through `inbox.ReadInside`. It checks where the open handle really is (on Windows, `GetFinalPathNameByHandle`) and refuses any file, or item folder, that resolves outside the item: a link or junction swapped in after the scan cannot make the service read, show or copy a file Jake's account cannot read.
+- **Same-page requests only.** Every POST must be JSON with `Sec-Fetch-Site: same-origin`, and the device is always the one the tailnet names, never a value from the page.
+- **Adding the phone's passkey (at the desk, about 3 minutes).** `phonerunner-service passkey` (elevated) opens a 5-minute window. On the phone, Jake taps "Add this phone's passkey" and unlocks. The phone shows an 8-character code, and he types it at the desk to store the passkey. If the phone's step fails, the page says the window is used up and the desk step must be run again. The desk command and the service talk through `private\desk\` (SYSTEM and Administrators only), so each desk step starts with his own click on the Windows prompt.
+- **Turning the Run button on.** `phonerunner-service run-button on` (elevated) runs the read-only T-01C check first and refuses unless it prints PASS. Then restart the service. `run-button off` needs no check.
+- **Staged items contain synthetic data only.** Their text and differences are shown on the phone.
+- **Folders.**
+  - `inbox\`: lanes stage here; Jake's account can write.
+  - `approved\`: read-only to Jake.
+  - `work\`: Jake can write.
+  - `private\output\`, `private\desk\`, `private\passkeys.json`, `privatepproved.json` (the last approved version of each item): SYSTEM and Administrators only.
+  - Install sets all of these.
+- **Threat note.** Registration accepts the "none" attestation format (now also in the plan's §6.5 threat list).
+- [U] The service wiring, the desk commands and the page's passkey calls are code that has never run. Their PC test is T-20 (new; it also covers the plan's T-02 no passkey, T-05 file changed after viewing, and T-09 over cellular):
+  - add the passkey;
+  - turn the Run button on;
+  - run the T-05 dummy items from the phone;
+  - Stop one;
+  - check that a tap from the PC's own browser is refused;
+  - check that a second Run while one is going is refused;
+  - check that editing a file after the tap refuses the run;
+  - check that a Run with no passkey registered is refused;
+  - repeat one Run over cellular.
+- Not yet: the plan's T-19 (refuse a long item while copy-off is behind) and a per-item time limit.
+
 ## Build (cloud, reproducible)
 
 ```
@@ -130,6 +170,7 @@ Two builds give the same hashes. The service program is about 23 MB, over the PC
 4. Open the page on the phone → "Not allowed" shows the phone's device ID and login.
 5. `phonerunner-service pair <device ID> <login>` → type `YES` → PASS.
 6. `sc start PhoneRunner`, reload the page on the phone.
+7. Run button (optional, when he wants it): `phonerunner-service passkey` → tap "Add this phone's passkey" on the phone → type the code → PASS. Then `phonerunner-service run-button on` → T-01C PASS → restart the service.
 
 ## Tests
 

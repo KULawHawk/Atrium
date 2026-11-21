@@ -242,3 +242,33 @@ func TestScreenTextIngest(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+func TestRunReady(t *testing.T) {
+	s, _, _, clock := setup(t)
+	ctx := context.Background()
+	if err := s.RunReady(); err == nil || !strings.Contains(err.Error(), "Run button is off") {
+		t.Fatal(err)
+	}
+	if s.Refresh(ctx).Mode != "watch-only" {
+		t.Fatal("mode")
+	}
+	s.cfg.RunButton = true
+	if s.Refresh(ctx).Mode != "watch + Run button" {
+		t.Fatal("mode")
+	}
+	if err := s.RunReady(); err == nil || !strings.Contains(err.Error(), "not reporting") {
+		t.Fatal(err)
+	}
+	s.Ingest(ctx, capture.Frame{Type: "window", At: *clock, Locked: true})
+	if err := s.RunReady(); err == nil || !strings.Contains(err.Error(), "locked") {
+		t.Fatal(err)
+	}
+	s.Ingest(ctx, capture.Frame{Type: "window", At: *clock})
+	if err := s.RunReady(); err != nil {
+		t.Fatal(err)
+	}
+	*clock = clock.Add(time.Hour) // the watcher went quiet
+	if err := s.RunReady(); err == nil || !strings.Contains(err.Error(), "not reporting") {
+		t.Fatal(err)
+	}
+}
