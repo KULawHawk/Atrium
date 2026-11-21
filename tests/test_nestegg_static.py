@@ -126,3 +126,13 @@ def test_prereqs_ends_on_one_verdict_line() -> None:
     assert "'NESTEGG-PREREQS: PASS'" in code
     assert '"NESTEGG-PREREQS: FAIL $($script:fails)"' in code
     assert code.rstrip().endswith("Say $final")
+
+
+def test_no_double_quotes_inside_python_dash_c_text():
+    """Windows PowerShell 5.1 strips embedded double quotes when calling a program,
+    so a -c text with them becomes a Python syntax error (clean-Windows run 4)."""
+    import re
+    for name in ("Check-AdAstra.ps1", "Install-Prereqs.ps1"):
+        text = (NESTEGG / name).read_text(encoding="utf-8")
+        for m in re.finditer(r"'-c',\s*'([^']|'')*'", text):
+            assert '"' not in m.group(0), (name, m.group(0))

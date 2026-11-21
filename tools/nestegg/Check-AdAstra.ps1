@@ -85,9 +85,9 @@ if ($wg) { Row 'PASS' 'winget' $wg } else { Row 'GAP' 'winget' 'not found (App I
 
 # --- Python 3.13 -----------------------------------------------------------------------------
 $py = $null
-if (Get-Command py -ErrorAction SilentlyContinue) { $py = Try-Cmd 'py' @('-3.13', '-c', 'import sys; print("%d.%d.%d" % sys.version_info[:3])') }
+if (Get-Command py -ErrorAction SilentlyContinue) { $py = Try-Cmd 'py' @('-3.13', '-c', 'import sys; print(''.''.join(map(str, sys.version_info[:3])))') }
 if (-not $py -and (Get-Command python -ErrorAction SilentlyContinue)) {
-    $v = Try-Cmd 'python' @('-c', 'import sys; print("%d.%d.%d" % sys.version_info[:3])')
+    $v = Try-Cmd 'python' @('-c', 'import sys; print(''.''.join(map(str, sys.version_info[:3])))')
     if ($v -and $v.StartsWith('3.13.')) { $py = $v }
 }
 if ($py) { Row 'PASS' 'Python 3.13' $py } else { Row 'GAP' 'Python 3.13' 'not found; installer adds it per-user (no admin)' }

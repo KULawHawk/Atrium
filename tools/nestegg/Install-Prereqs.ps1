@@ -76,7 +76,9 @@ function Find-Python {
     $cands += (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python313\python.exe')
     foreach ($c in $cands) {
         if ($c -and (Test-Path -LiteralPath $c)) {
-            $v = Try-Cmd $c @('-c', 'import sys; print("%d.%d.%d" % sys.version_info[:3])')
+            # No double quotes inside the -c text: Windows PowerShell 5.1 strips them when it calls a
+            # program, which turned the old check into a Python syntax error (clean-Windows run 4).
+            $v = Try-Cmd $c @('-c', 'import sys; print(''.''.join(map(str, sys.version_info[:3])))')
             if ($v -and $v.StartsWith('3.13.')) { return "$c ($v)" }
         }
     }
