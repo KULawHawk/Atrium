@@ -113,8 +113,11 @@ function Find-Poppler {
     return $null
 }
 function Find-VC {
-    $vc = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64' -ErrorAction SilentlyContinue
-    if ($vc -and $vc.Installed -eq 1) { return $vc.Version }
+    foreach ($k in @('HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64',
+                     'HKLM:\SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X64')) {
+        $vc = Get-ItemProperty $k -ErrorAction SilentlyContinue
+        if ($vc -and $vc.Installed -eq 1) { return $vc.Version }
+    }
     return $null
 }
 
