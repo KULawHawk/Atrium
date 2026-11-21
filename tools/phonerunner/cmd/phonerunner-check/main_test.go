@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kulawhawk/atrium/tools/phonerunner/internal/pccheck"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/store"
 )
 
@@ -15,7 +16,7 @@ func TestRun(t *testing.T) {
 	var b bytes.Buffer
 	call := func(args ...string) (int, string) {
 		b.Reset()
-		return run(args, &b, http.DefaultClient), b.String()
+		return run(args, &b, deps{client: http.DefaultClient, read: pccheck.ReadPerms, proc: pccheck.WinProc{}}), b.String()
 	}
 	if rc, _ := call(); rc != 2 {
 		t.Fatal("no args")
@@ -41,6 +42,13 @@ func TestRun(t *testing.T) {
 	}))
 	defer srv.Close()
 	if rc, out := call("refused", "--url", srv.URL); rc != 0 || !strings.HasPrefix(out, "PASS T-06") {
+		t.Fatal(out)
+	}
+	// Off Windows both checks fail closed with a reason.
+	if rc, out := call("perms"); rc != 1 || !strings.HasPrefix(out, "FAIL T-07") {
+		t.Fatal(out)
+	}
+	if rc, out := call("locked"); rc != 1 || !strings.HasPrefix(out, "FAIL T-16") {
 		t.Fatal(out)
 	}
 }
