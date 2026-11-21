@@ -41,6 +41,10 @@ type Proc interface {
 	Output() io.Reader // stdout and stderr together
 	Wait() (exitCode int, err error)
 	Kill() error // the whole process tree
+	// Close releases the output and handles. The runner calls it once, after
+	// the output has been read to its end and Wait has returned; Wait itself
+	// must not close the output, or the last lines could be lost.
+	Close()
 }
 
 // Starter starts a Spec (on the PC: in Jake's session, locked down, in a job).
@@ -191,6 +195,7 @@ func (r *Runner) follow(p Proc, done chan struct{}) {
 		}
 	}
 	w := <-waited
+	p.Close()
 	code, err := w.code, w.err
 	r.mu.Lock()
 	defer r.mu.Unlock()

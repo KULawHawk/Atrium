@@ -17,7 +17,10 @@ type fakeProc struct {
 	killErr error
 	once    sync.Once
 	killed  bool
+	closed  int
 }
+
+func (f *fakeProc) Close() { f.closed++ }
 
 func (f *fakeProc) Output() io.Reader { return f.out }
 func (f *fakeProc) Wait() (int, error) {
@@ -256,5 +259,50 @@ func TestPSModulePathIsSystemOnly(t *testing.T) {
 	env := strings.Join(CleanEnv(`C:\Windows`, `C:\w`), "|")
 	if !strings.Contains(env, `PSModulePath=C:\Windows\System32\WindowsPowerShell\v1.0\Modules|`) {
 		t.Fatal(env)
+	}
+}
+
+// eofCheck reports, when its reader reaches the end, whether Close had
+// already been called.
+type eofCheck struct {
+	r      io.Reader
+	p      *fakeProc
+	early  bool
+	reached bool
+}
+
+func (e *eofCheck) Read(b []byte) (int, error) {
+	n, err := e.r.Read(b)
+	if err == io.EOF && !e.reached {
+		e.reached = true
+		e.early = e.p.closed > 0
+	}
+	return n, err
+}
+
+func TestLastLinesKeptWhenExitIsImmediate(t *testing.T) {
+	// The script prints 500 lines and exits at once: every line arrives, and
+	// the output is closed only after it has been read to its end, once.
+	var b strings.Builder
+	for i := 1; i <= 500; i++ {
+		b.WriteString("line ")
+		b.WriteString(strings.Repeat("n", i%7))
+		b.WriteString("\n")
+	}
+	b.WriteString("PASS T-05\n")
+	p := &fakeProc{waitCh: make(chan struct{})}
+	ec := &eofCheck{r: strings.NewReader(b.String()), p: p}
+	p.out = ec
+	close(p.waitCh)
+	var l logSink
+	r := New(func(Spec) (Proc, error) { return p, nil }, l.log, l.keep, clock)
+	_ = r.Start("a", "b", Spec{}, Options{})
+	r.Wait()
+	c := r.Current()
+	if c.Count != 501 || c.Lines[len(c.Lines)-1] != "PASS T-05" || len(l.kept) != 501 {
+		t.Fatal(c.Count, len(l.kept))
+	}
+	if ec.early || !ec.reached || p.closed != 1 {
+		t.Fatal("output closed before it was read to the end, or not exactly once: ", ec.early, p.closed)
 	}
 }

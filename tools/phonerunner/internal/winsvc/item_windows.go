@@ -4,6 +4,7 @@ package winsvc
 
 import (
 	"io"
+	"sync"
 
 	"golang.org/x/sys/windows"
 
@@ -11,12 +12,23 @@ import (
 )
 
 // itemProc adapts a launched item to runner.Proc.
-type itemProc struct{ c *Child }
+//
+// Order at the end of a run: the main process exits, Wait closes only the job
+// (ending anything the item left behind, which releases the pipe's write ends),
+// the runner keeps reading the pipe to its end, and only then Close releases
+// the read end and the process handle. Closing the pipe early would drop the
+// last lines a script prints just before it exits.
+type itemProc struct {
+	c *Child
 
-func (p itemProc) Output() io.Reader { return p.c.Out }
+	mu      sync.Mutex
+	jobDone bool
+}
 
-func (p itemProc) Wait() (int, error) {
-	defer p.c.Close() // closing the job ends anything the item left behind
+func (p *itemProc) Output() io.Reader { return p.c.Out }
+
+func (p *itemProc) Wait() (int, error) {
+	defer p.closeJob()
 	if _, err := windows.WaitForSingleObject(p.c.Process, windows.INFINITE); err != nil {
 		return -1, err
 	}
@@ -27,7 +39,32 @@ func (p itemProc) Wait() (int, error) {
 	return int(code), nil
 }
 
-func (p itemProc) Kill() error { return p.c.Stop() }
+// closeJob ends the item's tree once. After it, Kill has nothing left to end.
+func (p *itemProc) closeJob() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.jobDone {
+		p.jobDone = true
+		windows.CloseHandle(p.c.Job)
+		p.c.Job = 0
+	}
+}
+
+func (p *itemProc) Kill() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.jobDone {
+		return nil // the main process has exited and its tree is already ended
+	}
+	return p.c.Stop()
+}
+
+// Close releases the pipe's read end and the process handle, after the output
+// has been read to its end.
+func (p *itemProc) Close() {
+	p.closeJob()
+	p.c.Close()
+}
 
 // StartItem is the runner.Starter on the PC: Jake's session, the locked-down
 // process and thread rights of the session part, stdout and stderr on one pipe,
@@ -37,5 +74,5 @@ func StartItem(s runner.Spec) (runner.Proc, error) {
 	if err != nil {
 		return nil, err
 	}
-	return itemProc{c}, nil
+	return &itemProc{c: c}, nil
 }
