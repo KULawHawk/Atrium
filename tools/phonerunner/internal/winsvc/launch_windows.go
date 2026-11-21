@@ -11,21 +11,65 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// Child is a running session part.
+// Child is a running session part or item.
 type Child struct {
 	Process windows.Handle
 	PID     uint32
-	Out     *os.File // read end of the pipe; only the child holds the write end
+	Out     *os.File       // read end of the pipe; only the child holds the write end
+	Job     windows.Handle // 0 unless launched with Job: the whole process tree
 }
 
-// Close releases the parent's handles (it does not stop the child).
+// Close releases the parent's handles. Closing the job ends the item's tree
+// (kill-on-close), so an item never outlives the service.
 func (c *Child) Close() {
 	c.Out.Close()
 	windows.CloseHandle(c.Process)
+	if c.Job != 0 {
+		windows.CloseHandle(c.Job)
+	}
 }
 
-// Stop ends the child process.
-func (c *Child) Stop() { windows.TerminateProcess(c.Process, 1) }
+// Stop ends the child, and its whole tree when it has a job.
+func (c *Child) Stop() error {
+	if c.Job != 0 {
+		return windows.TerminateJobObject(c.Job, 1)
+	}
+	return windows.TerminateProcess(c.Process, 1)
+}
+
+// Opts adjusts a launch. The zero value is the session part's launch.
+type Opts struct {
+	Dir         string   // working folder ("" = inherit)
+	Env         []string // the whole environment ("" = the user's own block)
+	StderrToOut bool     // send stderr down the same pipe as stdout
+	Job         bool     // put the child in a kill-on-close job object
+}
+
+// envBlock builds a Windows environment block.
+func envBlock(env []string) *uint16 {
+	var b []uint16
+	for _, e := range env {
+		u, _ := windows.UTF16FromString(e) // includes the trailing 0
+		b = append(b, u...)
+	}
+	b = append(b, 0)
+	return &b[0]
+}
+
+// newKillJob makes a job that ends every process in it when its handle closes.
+func newKillJob() (windows.Handle, error) {
+	j, err := windows.CreateJobObject(nil, nil)
+	if err != nil {
+		return 0, err
+	}
+	info := windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION{}
+	info.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+	if _, err := windows.SetInformationJobObject(j, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info))); err != nil {
+		windows.CloseHandle(j)
+		return 0, err
+	}
+	return j, nil
+}
 
 // ErrNobodySignedIn means there is no interactive user to watch.
 var ErrNobodySignedIn = errors.New("nobody is signed in at the PC")
@@ -55,7 +99,10 @@ func defaultDACL(userSID string) string {
 type tokenDefaultDACL struct{ DefaultDacl *windows.ACL }
 
 // LaunchSession starts exe in the active console session as the signed-in user.
-func LaunchSession(exe string, args []string) (*Child, error) {
+func LaunchSession(exe string, args []string) (*Child, error) { return Launch(exe, args, Opts{}) }
+
+// Launch is LaunchSession with options (used for approved items).
+func Launch(exe string, args []string, o Opts) (*Child, error) {
 	sess := windows.WTSGetActiveConsoleSessionId()
 	if sess == 0xFFFFFFFF {
 		return nil, ErrNobodySignedIn
@@ -133,6 +180,10 @@ func LaunchSession(exe string, args []string) (*Child, error) {
 		return nil, fmt.Errorf("launch: attributes: %w", err)
 	}
 
+	errOut := nul
+	if o.StderrToOut {
+		errOut = w
+	}
 	desktop, _ := windows.UTF16PtrFromString(`winsta0\default`)
 	si := &windows.StartupInfoEx{
 		StartupInfo: windows.StartupInfo{
@@ -140,17 +191,26 @@ func LaunchSession(exe string, args []string) (*Child, error) {
 			Flags:     windows.STARTF_USESTDHANDLES,
 			StdInput:  nul,
 			StdOutput: w,
-			StdErr:    nul,
+			StdErr:    errOut,
 			Desktop:   desktop,
 		},
 		ProcThreadAttributeList: attrs.List(),
 	}
 	var env *uint16
-	if err := windows.CreateEnvironmentBlock(&env, tok, false); err != nil {
-		return nil, fmt.Errorf("launch: environment: %w", err)
+	if o.Env != nil {
+		env = envBlock(o.Env)
+	} else {
+		if err := windows.CreateEnvironmentBlock(&env, tok, false); err != nil {
+			return nil, fmt.Errorf("launch: environment: %w", err)
+		}
+		defer windows.DestroyEnvironmentBlock(env)
 	}
-	defer windows.DestroyEnvironmentBlock(env)
-
+	var dir *uint16
+	if o.Dir != "" {
+		if dir, err = windows.UTF16PtrFromString(o.Dir); err != nil {
+			return nil, err
+		}
+	}
 	exe16, err := windows.UTF16PtrFromString(exe)
 	if err != nil {
 		return nil, err
@@ -159,12 +219,41 @@ func LaunchSession(exe string, args []string) (*Child, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Made last, after every step that can return early, so its handle cannot leak.
+	var job windows.Handle
+	if o.Job {
+		if job, err = newKillJob(); err != nil {
+			return nil, fmt.Errorf("launch: job: %w", err)
+		}
+	}
 	var pi windows.ProcessInformation
 	flags := uint32(windows.CREATE_UNICODE_ENVIRONMENT | windows.EXTENDED_STARTUPINFO_PRESENT | windows.CREATE_NO_WINDOW)
-	if err := windows.CreateProcessAsUser(tok, exe16, cmd16, saP, saT, true, flags, env, nil, &si.StartupInfo, &pi); err != nil {
+	if job != 0 {
+		flags |= windows.CREATE_SUSPENDED // into the job before it runs a single instruction
+	}
+	if err := windows.CreateProcessAsUser(tok, exe16, cmd16, saP, saT, true, flags, env, dir, &si.StartupInfo, &pi); err != nil {
+		if job != 0 {
+			windows.CloseHandle(job)
+		}
 		return nil, fmt.Errorf("launch: CreateProcessAsUser: %w", err)
+	}
+	if job != 0 {
+		if err := windows.AssignProcessToJobObject(job, pi.Process); err != nil {
+			windows.TerminateProcess(pi.Process, 1)
+			windows.CloseHandle(pi.Thread)
+			windows.CloseHandle(pi.Process)
+			windows.CloseHandle(job)
+			return nil, fmt.Errorf("launch: job: %w", err)
+		}
+		if _, err := windows.ResumeThread(pi.Thread); err != nil {
+			windows.TerminateJobObject(job, 1)
+			windows.CloseHandle(pi.Thread)
+			windows.CloseHandle(pi.Process)
+			windows.CloseHandle(job)
+			return nil, fmt.Errorf("launch: resume: %w", err)
+		}
 	}
 	windows.CloseHandle(pi.Thread)
 	ok = true
-	return &Child{Process: pi.Process, PID: pi.ProcessId, Out: os.NewFile(uintptr(r), "session-pipe")}, nil
+	return &Child{Process: pi.Process, PID: pi.ProcessId, Out: os.NewFile(uintptr(r), "session-pipe"), Job: job}, nil
 }

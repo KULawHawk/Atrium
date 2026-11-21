@@ -56,6 +56,13 @@ func TestLoadGood(t *testing.T) {
 	if tm, c := it.Estimates(); tm != "5 min" || c != "$0" {
 		t.Fatal(tm, c)
 	}
+	if it.Header.OutputMayCopy {
+		t.Fatal("output stays on the PC unless the item says so")
+	}
+	copyOK, _ := Load(item(t, map[string]string{"item.json": `{"title":"T","claimed_by":"x","entry":"run.ps1","output_may_copy":true}`, "run.ps1": "ok"}))
+	if !copyOK.Header.OutputMayCopy {
+		t.Fatal("output_may_copy not read")
+	}
 	// One byte changed anywhere changes the manifest.
 	write(t, d, map[string]string{"lib/helper.ps1": "# helper!\n"})
 	it2, _ := Load(d)
@@ -79,6 +86,25 @@ func TestBadges(t *testing.T) {
 		if !has(it.Badges, want) {
 			t.Errorf("%q: badges %v", script, it.Badges)
 		}
+	}
+	// Programs started these ways can live outside the run's job, so Stop
+	// may not end them.
+	for _, script := range []string{
+		"Invoke-WmiMethod -Class Win32_Process -Name Create -ArgumentList x",
+		"Invoke-CimMethod -ClassName Win32_Process -MethodName Create",
+		"schtasks /create /tn x /tr y",
+		"Register-ScheduledTask -TaskName x",
+		"explorer.exe x.exe",
+		"New-Service -Name x -BinaryPathName y",
+		"sc.exe create x binPath= y",
+	} {
+		it, _ := Load(item(t, map[string]string{"item.json": goodHeader, "run.ps1": script}))
+		if !has(it.Badges, "Stop cannot end") {
+			t.Errorf("%q: badges %v", script, it.Badges)
+		}
+	}
+	if it, _ := Load(item(t, map[string]string{"item.json": goodHeader, "run.ps1": "Start-Process notepad"})); has(it.Badges, "Stop cannot end") {
+		t.Error("Start-Process stays inside the job")
 	}
 	long := strings.Repeat("A", 220)
 	it, _ := Load(item(t, map[string]string{"item.json": goodHeader, "run.ps1": "$b='" + long + "'"}))
