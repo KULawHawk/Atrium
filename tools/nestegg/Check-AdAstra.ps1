@@ -144,9 +144,17 @@ foreach ($u in @('https://github.com', 'https://pypi.org/simple/', 'https://file
         $r = Invoke-WebRequest -Uri $u -Method Head -UseBasicParsing -TimeoutSec 10
         Row 'PASS' ("Reach " + ([uri]$u).Host) ("HTTP {0}" -f [int]$r.StatusCode)
     } catch {
-        $msg = $_.Exception.Message
-        if ($msg.Length -gt 80) { $msg = $msg.Substring(0, 80) }
-        Row 'GAP' ("Reach " + ([uri]$u).Host) $msg
+        # A server that answers with an HTTP error (files.pythonhosted.org returns 404 at its
+        # root) is still reachable: only "no answer at all" is a gap.
+        $resp = $null
+        try { $resp = $_.Exception.Response } catch { $resp = $null }
+        if ($resp -and $resp.StatusCode) {
+            Row 'PASS' ("Reach " + ([uri]$u).Host) ("reachable (server answered HTTP {0})" -f [int]$resp.StatusCode)
+        } else {
+            $msg = $_.Exception.Message
+            if ($msg.Length -gt 80) { $msg = $msg.Substring(0, 80) }
+            Row 'GAP' ("Reach " + ([uri]$u).Host) $msg
+        }
     }
 }
 
