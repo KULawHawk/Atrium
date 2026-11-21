@@ -23,12 +23,13 @@ import (
 )
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, deps{client: &http.Client{Timeout: 20 * time.Second}, read: pccheck.ReadPerms, proc: pccheck.WinProc{}}))
+	os.Exit(run(os.Args[1:], os.Stdout, deps{client: &http.Client{Timeout: 20 * time.Second}, read: pccheck.ReadPerms, list: pccheck.ListDir, proc: pccheck.WinProc{}}))
 }
 
 type deps struct {
 	client *http.Client
 	read   pccheck.Reader
+	list   pccheck.Lister
 	proc   pccheck.Proc
 }
 
@@ -51,7 +52,7 @@ func run(args []string, out io.Writer, d deps) int {
 	case "log":
 		r = pccheck.LogIntact(filepath.Join(*storeDir, "log", "events.jsonl"))
 	case "perms":
-		r = pccheck.CheckPerms(d.read, pccheck.Targets(*programDir, *storeDir))
+		r = pccheck.CheckPerms(d.read, pccheck.WithFiles(pccheck.Targets(*programDir, *storeDir), d.list))
 	case "locked":
 		r = pccheck.CheckLocked(d.proc, "phonerunner-session.exe")
 	default:

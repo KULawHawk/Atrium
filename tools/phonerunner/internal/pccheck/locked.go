@@ -23,10 +23,30 @@ var Dangerous = []struct {
 	{"memory operation", 0x0008},
 	{"memory write", 0x0020},
 	{"duplicate handles", 0x0040},
+	{"memory read", 0x0010},
+	{"create child process", 0x0080},
+	{"set quota", 0x0100},
 	{"set information", 0x0200},
 	{"suspend/resume", 0x0800},
 	{"change permissions", 0x40000},
 	{"change owner", 0x80000},
+}
+
+// DangerousThread lists the thread rights that must be refused on EVERY thread of
+// the session part (threads created after launch get the token's default rights,
+// so they are checked one by one).
+var DangerousThread = []struct {
+	Name string
+	Mask uint32
+}{
+	{"thread suspend/resume", 0x0002},
+	{"thread get context", 0x0008},
+	{"thread set context", 0x0010},
+	{"thread set information", 0x0020},
+	{"thread impersonate", 0x0100},
+	{"thread direct impersonation", 0x0200},
+	{"thread change permissions", 0x40000},
+	{"thread change owner", 0x80000},
 }
 
 // QueryLimited is the one right Jake should have (with terminate).
@@ -39,8 +59,11 @@ var ErrElevated = errors.New("run this check from a normal (not elevated) window
 // Proc is the platform part.
 type Proc interface {
 	Elevated() (bool, error)
-	Find(exe string) (pid uint32, err error)
-	Open(pid, access uint32) error // nil if the open succeeded
+	Identity() (sid, integrity string, err error) // who this check runs as
+	FindAll(exe string) ([]uint32, error)
+	Threads(pid uint32) ([]uint32, error)
+	Open(pid, access uint32) error       // nil if the open succeeded
+	OpenThread(tid, access uint32) error // nil if the open succeeded
 }
 
 // CheckLocked is T-16.
@@ -53,12 +76,28 @@ func CheckLocked(p Proc, exe string) Result {
 	if el {
 		return fail(test, "%v", ErrElevated)
 	}
-	pid, err := p.Find(exe)
+	sid, il, err := p.Identity()
 	if err != nil {
-		return fail(test, "%s is not running (start the service first): %v", exe, err)
+		return fail(test, "cannot tell which account this check runs as: %v", err)
 	}
+	who := fmt.Sprintf("[ran as %s, %s integrity]", sid, il)
+	if il != "Medium" {
+		return fail(test, "%s: run from a normal window at Medium integrity, the level agents run at", who)
+	}
+	pids, err := p.FindAll(exe)
+	if err != nil {
+		return fail(test, "%s: listing processes failed: %v", who, err)
+	}
+	switch len(pids) {
+	case 0:
+		return fail(test, "%s: %s is not running (start the service first)", who, exe)
+	case 1:
+	default:
+		return fail(test, "%s: %d copies of %s are running (pids %v): a second one may be fake; tell Jake", who, len(pids), exe, pids)
+	}
+	pid := pids[0]
 	if err := p.Open(pid, QueryLimited); err != nil {
-		return fail(test, "cannot even query %s (pid %d), so the test proves nothing: %v", exe, pid, err)
+		return fail(test, "%s: cannot even query %s (pid %d), so the test proves nothing: %v", who, exe, pid, err)
 	}
 	var allowed []string
 	for _, d := range Dangerous {
@@ -66,8 +105,19 @@ func CheckLocked(p Proc, exe string) Result {
 			allowed = append(allowed, d.Name)
 		}
 	}
-	if len(allowed) > 0 {
-		return fail(test, "%s (pid %d) can be opened for: %s", exe, pid, strings.Join(allowed, ", "))
+	tids, err := p.Threads(pid)
+	if err != nil || len(tids) == 0 {
+		return fail(test, "%s: cannot list the threads of pid %d, so the test proves nothing: %v", who, pid, err)
 	}
-	return Result{Test: test, Pass: true, Detail: fmt.Sprintf("%s (pid %d): query allowed, all %d dangerous rights refused", exe, pid, len(Dangerous))}
+	for _, tid := range tids {
+		for _, d := range DangerousThread {
+			if p.OpenThread(tid, d.Mask) == nil {
+				allowed = append(allowed, fmt.Sprintf("%s (thread %d)", d.Name, tid))
+			}
+		}
+	}
+	if len(allowed) > 0 {
+		return fail(test, "%s: %s (pid %d) can be opened for: %s", who, exe, pid, strings.Join(allowed, ", "))
+	}
+	return Result{Test: test, Pass: true, Detail: fmt.Sprintf("%s: %s (pid %d): query allowed; all %d process rights and %d rights on each of %d threads refused", who, exe, pid, len(Dangerous), len(DangerousThread), len(tids))}
 }

@@ -12,8 +12,17 @@ var errNotWindows = errors.New("process check runs only on Windows")
 // Elevated fails off Windows.
 func (WinProc) Elevated() (bool, error) { return false, errNotWindows }
 
-// Find fails off Windows.
-func (WinProc) Find(string) (uint32, error) { return 0, errNotWindows }
+// Identity fails off Windows.
+func (WinProc) Identity() (string, string, error) { return "", "", errNotWindows }
+
+// FindAll fails off Windows.
+func (WinProc) FindAll(string) ([]uint32, error) { return nil, errNotWindows }
+
+// Threads fails off Windows.
+func (WinProc) Threads(uint32) ([]uint32, error) { return nil, errNotWindows }
+
+// OpenThread fails off Windows.
+func (WinProc) OpenThread(uint32, uint32) error { return errNotWindows }
 
 // Open fails off Windows.
 func (WinProc) Open(uint32, uint32) error { return errNotWindows }

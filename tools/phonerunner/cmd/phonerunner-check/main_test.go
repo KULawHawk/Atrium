@@ -16,7 +16,7 @@ func TestRun(t *testing.T) {
 	var b bytes.Buffer
 	call := func(args ...string) (int, string) {
 		b.Reset()
-		return run(args, &b, deps{client: http.DefaultClient, read: pccheck.ReadPerms, proc: pccheck.WinProc{}}), b.String()
+		return run(args, &b, deps{client: http.DefaultClient, read: pccheck.ReadPerms, list: pccheck.ListDir, proc: pccheck.WinProc{}}), b.String()
 	}
 	if rc, _ := call(); rc != 2 {
 		t.Fatal("no args")
