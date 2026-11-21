@@ -7,16 +7,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 	"golang.org/x/sys/windows/svc/mgr"
 	"tailscale.com/tsnet"
 
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/config"
+	"github.com/kulawhawk/atrium/tools/phonerunner/internal/control"
+	"github.com/kulawhawk/atrium/tools/phonerunner/internal/pccheck"
 )
 
 // ServiceName is the Windows service name (also what the PC guard should protect).
@@ -81,6 +85,15 @@ func Install(viewer string) error {
 		{filepath.Join(root, "private"), "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"},  // settings incl. ntfy topic
 		{filepath.Join(root, "captures"), "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"}, // pictures (Decision 266 = A)
 		{filepath.Join(root, "ack"), fmt.Sprintf("D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;%s)", user)},
+		// Run button: lanes stage items in inbox (Jake's account can write);
+		// approved copies are read-only to Jake; each run's TEMP is in work.
+		{filepath.Join(root, "inbox"), fmt.Sprintf("D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;%s)", user)},
+		{filepath.Join(root, "approved"), fmt.Sprintf("D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;%s)", user)},
+		{filepath.Join(root, "work"), fmt.Sprintf("D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;%s)", user)},
+		// PC-only run output, the passkeys and the desk's files inherit private's
+		// SYSTEM+Administrators-only entries.
+		{filepath.Join(root, "private", "output"), "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"},
+		{filepath.Join(root, "private", "desk"), "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"},
 	}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d.path, 0o755); err != nil {
@@ -105,8 +118,8 @@ func Install(viewer string) error {
 	}
 	defer m.Disconnect()
 	s, err := m.CreateService(ServiceName, exe, mgr.Config{
-		DisplayName: "PhoneRunner (watch-only)",
-		Description: "Lets Jake's paired phone watch this PC over his private Tailscale network. Cannot run anything.",
+		DisplayName: "PhoneRunner",
+		Description: "Lets Jake's paired phone watch this PC over his private Tailscale network, and run staged items only on his tap and phone unlock (Run button off until turned on at the desk).",
 		StartType:   mgr.StartAutomatic,
 	}, "service")
 	if err != nil {
@@ -179,6 +192,56 @@ func Pair(nodeID, login string, in *bufio.Reader) error {
 	}
 	fmt.Println("PASS paired. Restart the service: sc stop PhoneRunner, then sc start PhoneRunner")
 	return nil
+}
+
+// SetRunButton turns the phone's Run button on or off. On is refused unless the
+// read-only T-01C check passes ("Always notify"), so the risk note's premise
+// holds. Off needs no check.
+func SetRunButton(on bool) error {
+	if err := RequireElevated(); err != nil {
+		return err
+	}
+	if on {
+		r := pccheck.AlwaysNotify(readUAC)
+		fmt.Println(r.Line())
+		if !r.Pass {
+			return errors.New("the Run button stays off until Always notify is on")
+		}
+	}
+	cfgPath := ConfigPath()
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return err
+	}
+	cfg.RunButton = on
+	b, err := cfg.Marshal()
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(cfgPath, b, 0o644); err != nil {
+		return err
+	}
+	fmt.Printf("PASS Run button %s. Restart the service: sc stop PhoneRunner, then sc start PhoneRunner\n", map[bool]string{true: "on", false: "off"}[on])
+	return nil
+}
+
+func readUAC(name string) (uint32, error) {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System`, registry.QUERY_VALUE)
+	if err != nil {
+		return 0, err
+	}
+	defer k.Close()
+	v, _, err := k.GetIntegerValue(name)
+	return uint32(v), err
+}
+
+// AddPasskey opens the service's 5-minute registration window and confirms the
+// phone's new passkey with the code Jake types here.
+func AddPasskey(in io.Reader) error {
+	if err := RequireElevated(); err != nil {
+		return err
+	}
+	return control.AddPasskey(filepath.Join(DefaultRoot(), "private", "desk"), in, os.Stdout, time.Sleep, 300)
 }
 
 // Uninstall removes the service registration. The store (logs, captures, settings)

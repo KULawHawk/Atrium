@@ -8,14 +8,20 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"golang.org/x/sys/windows"
 	"tailscale.com/tsnet"
 
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/alert"
+	"github.com/kulawhawk/atrium/tools/phonerunner/internal/approve"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/capture"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/config"
+	"github.com/kulawhawk/atrium/tools/phonerunner/internal/control"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/gate"
+	"github.com/kulawhawk/atrium/tools/phonerunner/internal/pccheck"
+	"github.com/kulawhawk/atrium/tools/phonerunner/internal/runner"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/service"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/store"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/tsnetwho"
@@ -70,7 +76,41 @@ func Run(ctx context.Context, root, sessionExe string) error {
 	if err != nil {
 		return err
 	}
-	srv := &http.Server{Handler: web.Handler(svc, cfg, g.Middleware), ReadHeaderTimeout: 10 * time.Second}
+	svc.SetRunCheck(func() error {
+		if r := pccheck.AlwaysNotify(readUAC); !r.Pass {
+			return errors.New(r.Line())
+		}
+		return nil
+	})
+	ctl, ap, err := runButton(root, pageURL, cfg, svc, st)
+	if err != nil {
+		_ = st.Append("service.run_button_error", map[string]any{"error": err.Error()})
+		return err
+	}
+	desk := &control.Desk{Dir: filepath.Join(root, "private", "desk"), Reg: ap, Log: st.Logger(), Now: time.Now,
+		Phone: func() string {
+			if len(cfg.AllowedNodeIDs) == 0 {
+				return ""
+			}
+			return cfg.AllowedNodeIDs[0]
+		}}
+	go func() {
+		t := time.NewTicker(time.Second)
+		defer t.Stop()
+		logged := false
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if err := desk.Poll(); err != nil && !logged {
+					_ = st.Append("desk.error", map[string]any{"error": err.Error()})
+					logged = true
+				}
+			}
+		}
+	}()
+	srv := &http.Server{Handler: web.Handler(svc, cfg, ctl, ap, g.Middleware), ReadHeaderTimeout: 10 * time.Second}
 	go func() { <-ctx.Done(); srv.Close() }()
 	go supervise(ctx, svc, st, sessionExe, filepath.Join(root, "session.json"))
 	go func() {
@@ -91,6 +131,35 @@ func Run(ctx context.Context, root, sessionExe string) error {
 		return err
 	}
 	return nil
+}
+
+// runButton builds the passkey check, the runner and the control that joins
+// them. The page address is the passkeys' origin, so it must be the tailnet
+// HTTPS name.
+func runButton(root, pageURL string, cfg config.Config, svc *service.Service, st *store.Store) (*control.Control, *approve.Approver, error) {
+	if pageURL == "" {
+		return nil, nil, errors.New("no HTTPS name for this device (turn on HTTPS certificates in the Tailscale admin DNS page)")
+	}
+	host := strings.TrimSuffix(strings.TrimPrefix(pageURL, "https://"), "/")
+	ap, err := approve.New(host, "https://"+host, filepath.Join(root, "private", "passkeys.json"))
+	if err != nil {
+		return nil, nil, err
+	}
+	sysRoot, err := windows.GetSystemWindowsDirectory()
+	if err != nil {
+		return nil, nil, err
+	}
+	var ctl *control.Control
+	run := runner.New(StartItem, st.Logger(), func(item, line string) { ctl.Keep(item, line) }, time.Now)
+	ctl, err = control.New(control.Paths{
+		Inbox:      filepath.Join(root, "inbox"),
+		Approved:   filepath.Join(root, "approved"),
+		Work:       filepath.Join(root, "work"),
+		Output:     filepath.Join(root, "private", "output"),
+		Ledger:     filepath.Join(root, "private", "approved.json"),
+		SystemRoot: sysRoot,
+	}, ap, run, svc.RunReady, st.Logger(), time.Now)
+	return ctl, ap, err
 }
 
 // supervise keeps one session part running in the signed-in user's desktop and feeds

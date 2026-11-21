@@ -54,7 +54,7 @@ func (p *itemProc) Kill() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.jobDone {
-		return nil // the main process has exited and its tree is already ended
+		return runner.ErrAlreadyEnded // the main process exited and its tree is already ended
 	}
 	return p.c.Stop()
 }

@@ -434,3 +434,34 @@ func TestNeedsSplit(t *testing.T) {
 		t.Fatal("big file not flagged")
 	}
 }
+
+// The Run button's output files (private\output\<item>.log, PC-only by
+// default) and the passkey and approval-history files are never staged.
+func TestPrivateFilesNeverStaged(t *testing.T) {
+	c, st := setup(t)
+	const mark = "PRIVATE-OUTPUT-MARK"
+	for _, rel := range []string{"private/output/pod-start.log", "private/passkeys.json", "private/approved.json", "private/desk/state.json"} {
+		p := filepath.Join(c.Store, filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o700)
+		os.WriteFile(p, []byte(mark+"\n"), 0o600)
+	}
+	_ = st.Append("run.ended", map[string]any{"item": "pod-start", "output_copied": false})
+	_ = st.WriteJSON("status.json", map[string]any{"mode": "x"})
+	r, err := c.Stage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = filepath.WalkDir(r.Dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, _ := os.ReadFile(p)
+		if strings.Contains(string(b), mark) {
+			t.Errorf("%s holds a private file's content", p)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

@@ -265,9 +265,9 @@ func TestPSModulePathIsSystemOnly(t *testing.T) {
 // eofCheck reports, when its reader reaches the end, whether Close had
 // already been called.
 type eofCheck struct {
-	r      io.Reader
-	p      *fakeProc
-	early  bool
+	r       io.Reader
+	p       *fakeProc
+	early   bool
 	reached bool
 }
 
@@ -305,4 +305,50 @@ func TestLastLinesKeptWhenExitIsImmediate(t *testing.T) {
 	if ec.early || !ec.reached || p.closed != 1 {
 		t.Fatal("output closed before it was read to the end, or not exactly once: ", ec.early, p.closed)
 	}
+}
+
+func TestStopAfterOwnEndIsNotStopped(t *testing.T) {
+	// The main process ended on its own; its output is still being read.
+	pr, pw := io.Pipe()
+	p := &fakeProc{out: pr, waitCh: make(chan struct{})}
+	close(p.waitCh)
+	var l logSink
+	r := New(func(Spec) (Proc, error) { return p, nil }, l.log, l.keep, clock)
+	_ = r.Start("a", "b", Spec{}, Options{})
+	for {
+		r.mu.Lock()
+		e := r.exited
+		r.mu.Unlock()
+		if e {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := r.Stop(); !errors.Is(err, ErrAlreadyEnded) {
+		t.Fatal(err)
+	}
+	pw.Close()
+	r.Wait()
+	if c := r.Current(); c.Stopped || p.killed || !l.has("run.stop_after_end") {
+		t.Fatalf("%+v killed=%v", c, p.killed)
+	}
+}
+
+func TestKillReportsAlreadyEnded(t *testing.T) {
+	// The PC side reports the tree already gone (job closed) in the window
+	// before the runner saw the exit.
+	pr, pw := io.Pipe()
+	p := &fakeProc{out: pr, waitCh: make(chan struct{}), killErr: ErrAlreadyEnded}
+	var l logSink
+	r := New(func(Spec) (Proc, error) { return p, nil }, l.log, l.keep, clock)
+	_ = r.Start("a", "b", Spec{}, Options{})
+	if err := r.Stop(); !errors.Is(err, ErrAlreadyEnded) {
+		t.Fatal(err)
+	}
+	if r.Current().Stopped || !l.has("run.stop_after_end") {
+		t.Fatal("must not read as stopped")
+	}
+	close(p.waitCh)
+	pw.Close()
+	r.Wait()
 }

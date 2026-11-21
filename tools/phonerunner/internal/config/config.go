@@ -58,6 +58,9 @@ type Config struct {
 	NtfyClickLink        bool         `json:"ntfy_click_link"` // off: the page address is not sent to ntfy.sh
 	WatchedLogs          []WatchedLog `json:"watched_logs"`
 	DenyRules            []DenyRule   `json:"deny_rules"`
+	// RunButton turns on the phone's Run and Stop buttons. Off by default; the
+	// desk command that turns it on first re-checks "Always notify" (T-01C).
+	RunButton bool `json:"run_button"`
 }
 
 // Defaults returns the strictest-first starting settings. AllowedNodeIDs is empty:
