@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // Identity is what the tailnet reports about the device behind a connection.
@@ -72,11 +73,13 @@ func MaskLogin(login string) string {
 	if login == "" {
 		return ""
 	}
+	_, size := utf8.DecodeRuneInString(login) // first letter, whole even if not ASCII
+	first := login[:size]
 	at := strings.LastIndex(login, "@")
 	if at <= 0 {
-		return login[:1] + "***"
+		return first + "***"
 	}
-	return login[:1] + "***" + login[at:]
+	return first + "***" + login[at:]
 }
 
 // SetClock replaces the time source (tests).
