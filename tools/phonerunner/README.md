@@ -93,6 +93,26 @@ The page can show the words in the front window, read through Windows UI Automat
 - **Approval actions.** Taps approve only `run`, `stop` or `resume`; anything else is refused.
 - **Threat note.** Passkey registration accepts the "none" attestation format, so the tool cannot prove which phone model made the passkey. What stops a passkey made elsewhere is the registration window: it opens only at the desk, accepts only the phone's Tailscale device and only one passkey, and Jake must confirm the code. The device check also stays on every tap, because Android passkeys sync between devices.
 
+## Running an approved item (PR 7, part 2b: the runner, not yet on the page)
+
+`internal/runner` runs one approved item at a time; `winsvc.StartItem` starts it on the PC.
+
+- **Fixed command.** The tool decides what runs, not the item: `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <approved copy>\<entry>`.
+- **Separate folders.**
+  - The working folder is the approved copy, which Jake's account can read but not change.
+  - TEMP is the run's own work folder, kept apart from the approved files.
+- **Clean environment.** Only `SystemRoot`, `windir`, a system-only `PATH`, `PATHEXT`, `TEMP`/`TMP` and `PHONERUNNER=1`. Nothing comes from Jake's profile: no `PSModulePath`, no user `PATH`.
+- **Where it runs.** In Jake's desktop session, with the same locked process and thread rights as the session part (T-16 applies to items too). The item sits in a kill-on-close job, so **Stop ends the whole tree**, and nothing an item started survives the service. Stop is approved by a tap, like Run.
+- **Output.**
+  - stdout and stderr come down one pipe, kept line by line: the last 200 lines are shown, and each line is cut at 4,096 characters.
+  - Every line is key-redacted before it is kept or logged (`run.line` events).
+  - The page shows the exit code, whether it was stopped, and how many key-like spans were blanked.
+- **One at a time.** A second Run while one is going is refused.
+- **Honest limits:**
+  - A run counts as finished when its output pipe closes. If the script leaves a background process holding the pipe, the run shows as still running until Stop.
+  - Items that need no desktop still run as Jake. The plan's separate low-rights account for those is parked with plan B.
+  - [U] The Windows launcher (job, suspended start, clean environment block) compiles but has never run. Its PC test is T-05: a dummy item that prints its environment and working folder, starts a child process, and is then stopped. The test passes if the environment is exactly the list above, the working folder is the approved copy, writing into that copy fails, and Stop ends the child too.
+
 ## Build (cloud, reproducible)
 
 ```
