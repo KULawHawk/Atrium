@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -63,6 +64,19 @@ func New(who WhoIser, allowedNodeIDs []string, allowedLogin string, log Logger) 
 	}
 	return &Gate{who: who, allowed: m, login: allowedLogin, log: log,
 		lastLogged: map[string]time.Time{}, suppressed: map[string]int{}, now: time.Now}
+}
+
+// MaskLogin shortens a Tailscale login for the log, which leaves the PC:
+// "someone@example.com" becomes "s***@example.com".
+func MaskLogin(login string) string {
+	if login == "" {
+		return ""
+	}
+	at := strings.LastIndex(login, "@")
+	if at <= 0 {
+		return login[:1] + "***"
+	}
+	return login[:1] + "***" + login[at:]
 }
 
 // SetClock replaces the time source (tests).
@@ -119,7 +133,7 @@ func (g *Gate) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id, err := g.Check(r.Context(), r.RemoteAddr)
 		if err != nil {
-			g.logRefusal(map[string]any{"node_id": id.NodeID, "node_name": id.NodeName, "login": id.Login, "reason": err.Error(), "path": r.URL.Path}, id.NodeID)
+			g.logRefusal(map[string]any{"node_id": id.NodeID, "node_name": id.NodeName, "login": MaskLogin(id.Login), "reason": err.Error(), "path": r.URL.Path}, id.NodeID)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-store")
 			w.WriteHeader(http.StatusForbidden)

@@ -44,7 +44,7 @@ func Settings(c config.Config) []Setting {
 		{"Copy-off allowed delay (seconds)", c.CopyAckMaxAgeSeconds, "If results have not been copied off the PC for longer than this, the page shows a warning and you get one alert."},
 		{"Page link in phone alerts", c.NtfyClickLink, "Off: alerts carry no link, so the alert service (ntfy.sh) never learns this page's address. Turn on at the desk if you want to tap an alert to open the page."},
 		{"Phone alerts", c.NtfyTopic != "", "Short alerts to your phone. The text never contains details, only 'needs you', 'done', 'locked' or 'not copying'."},
-		{"Watched logs", len(c.WatchedLogs), "Text files whose last lines show on this page, with anything that looks like a key removed."},
+		{"Watched logs", len(c.WatchedLogs), "Text files whose last lines show on this page, with anything that looks like a key removed. Their lines are NOT copied off the PC unless that log is marked may_copy at the desk (off by default, because a log can hold patient data the key filter cannot see)."},
 	}
 }
 

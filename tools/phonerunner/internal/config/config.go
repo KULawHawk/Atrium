@@ -25,6 +25,10 @@ type WatchedLog struct {
 	Label string `json:"label"`
 	Path  string `json:"path"`
 	Lines int    `json:"lines"`
+	// MayCopy lets this log's lines go into status.json, the status copy that leaves
+	// the PC. Off by default: a log can carry patient data the key filter cannot see,
+	// so its lines show on the phone only unless Jake turns this on for that log.
+	MayCopy bool `json:"may_copy"`
 }
 
 // DenyRule stops screen capture, and withholds the window's title and program

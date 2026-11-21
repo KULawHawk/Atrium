@@ -152,6 +152,8 @@ type Ack struct {
 	At          time.Time `json:"at"`
 	CopiedBytes int64     `json:"copied_bytes"`
 	Copier      string    `json:"copier"`
+	Batch       int       `json:"batch,omitempty"`
+	ManifestSHA string    `json:"manifest_sha256,omitempty"`
 }
 
 // AckState summarises copy-off health for the page and for the long-item gate.
@@ -190,6 +192,8 @@ func (s *Store) ReadAck(maxAge time.Duration) AckState {
 	switch {
 	case !st.Fresh:
 		st.Problem = fmt.Sprintf("last copy off the PC was %.0f seconds ago", st.AgeSeconds)
+	case a.CopiedBytes > st.LogBytes:
+		st.Problem = fmt.Sprintf("copy acknowledgement claims %d bytes but the log has only %d: the ack is wrong or the log was replaced", a.CopiedBytes, st.LogBytes)
 	case a.CopiedBytes < st.LogBytes:
 		st.Problem = fmt.Sprintf("%d log bytes not yet copied", st.LogBytes-a.CopiedBytes)
 	}

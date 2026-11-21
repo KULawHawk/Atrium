@@ -32,6 +32,11 @@ const PictureHold = "not copied: picture filter not built yet (Decision 266 = A,
 // agents can read and the PC lane copies off. Until a patient filter exists, window
 // titles stay on the PC and the phone only, like pictures (coordinator ruling on the
 // reviewer's point 3, strictest first).
+// LogHold replaces a watched log's lines in status.json unless that log is marked
+// may_copy (reviewer point on #51: logs are the same patient-data class as titles).
+const LogHold = "kept on the PC and phone: this log is not marked may_copy"
+
+// TitleHold replaces the front window's title in status.json (see above).
 const TitleHold = "kept on the PC and phone: window titles are not copied off until the patient filter exists"
 
 // LogTail is one watched file on the page.
@@ -183,6 +188,13 @@ func (s *Service) Refresh(ctx context.Context) Status {
 	s.copyLag = lag
 	file := st
 	file.Session.Window = capture.Window{Title: TitleHold}
+	file.Logs = make([]LogTail, len(st.Logs))
+	for i, lt := range st.Logs {
+		if !s.cfg.WatchedLogs[i].MayCopy {
+			lt = LogTail{Label: lt.Label, Error: LogHold}
+		}
+		file.Logs[i] = lt
+	}
 	if err := s.st.WriteJSON("status.json", file); err != nil {
 		st.Problems = append(st.Problems, "could not write status file: "+err.Error())
 	}
