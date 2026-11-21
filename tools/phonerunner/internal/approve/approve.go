@@ -46,6 +46,9 @@ const TTL = 2 * time.Minute
 // RegWindow is how long a desk-opened registration window stays open.
 const RegWindow = 5 * time.Minute
 
+// Actions are the only things a tap can approve (a fixed list, never free text).
+var Actions = map[string]bool{"run": true, "stop": true, "resume": true}
+
 // Request is exactly what one tap approves.
 type Request struct {
 	ItemID      string `json:"item_id"`
@@ -164,7 +167,7 @@ func (a *Approver) Count() int {
 
 // Begin issues the challenge for one tap.
 func (a *Approver) Begin(req Request) (*protocol.CredentialAssertion, error) {
-	if req.ItemID == "" || req.ManifestSHA == "" || req.Action == "" || req.DeviceID == "" {
+	if req.ItemID == "" || req.ManifestSHA == "" || req.DeviceID == "" || !Actions[req.Action] {
 		return nil, ErrBadRequest
 	}
 	a.mu.Lock()
