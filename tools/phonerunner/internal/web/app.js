@@ -10,6 +10,8 @@ async function tick() {
     if (!r.ok) throw new Error("status " + r.status);
     const s = await r.json();
     $("mode").textContent = "· " + s.mode + " · v" + s.version;
+    $("button").textContent = "Run button: " + (s.run_button || "unknown");
+    $("button").className = s.run_button === "on" ? "ok" : "muted";
     $("seen").textContent = "Last update from the PC: " + new Date(s.at).toLocaleTimeString();
     $("seen").className = "muted";
     const pl = $("plist"); pl.replaceChildren();

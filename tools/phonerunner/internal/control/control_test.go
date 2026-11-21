@@ -294,11 +294,11 @@ func TestStartAndDiskFailures(t *testing.T) {
 	r := newRig(t)
 	r.stage(t, "good", map[string]string{"item.json": header, "run.ps1": "ok"})
 	r.c.BeginTap("phone", "good", "run")
-	mkdirAll = func(string, os.FileMode) error { return errors.New("disk full") }
+	mkdir = func(string, os.FileMode) error { return errors.New("disk full") }
 	if _, err := r.c.FinishTap("phone", nil); err == nil || !strings.Contains(err.Error(), "disk full") {
 		t.Fatal(err)
 	}
-	mkdirAll = os.MkdirAll
+	mkdir = os.Mkdir
 	r.c.BeginTap("phone", "good", "run")
 	r.run.startErr = errors.New("no session")
 	if _, err := r.c.FinishTap("phone", nil); err == nil || err.Error() != "no session" {
@@ -319,6 +319,21 @@ func TestStartAndDiskFailures(t *testing.T) {
 	r.c.BeginTap("phone", "good", "run")
 	if res, _ := r.c.FinishTap("phone", nil); !strings.Contains(res.Done, "could not save") {
 		t.Fatal(res)
+	}
+}
+
+func TestWorkFolderMustBeNew(t *testing.T) {
+	r := newRig(t)
+	r.stage(t, "good", map[string]string{"item.json": header, "run.ps1": "ok"})
+	fixed := time.Date(2026, 11, 21, 4, 0, 0, 0, time.UTC)
+	r.c.now = func() time.Time { return fixed }
+	r.c.BeginTap("phone", "good", "run")
+	sha := r.ap.last.ManifestSHA
+	// An agent plants a link where the run's TEMP folder will be.
+	planted := filepath.Join(r.p.Work, "good-20261121T040000-"+sha[:8])
+	os.Symlink(t.TempDir(), planted)
+	if _, err := r.c.FinishTap("phone", nil); err == nil || r.run.cur.Running() {
+		t.Fatal("a planted work folder must refuse the run: ", err)
 	}
 }
 

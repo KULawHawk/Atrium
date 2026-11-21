@@ -81,9 +81,9 @@ var (
 
 // Seams for tests that need a failing disk.
 var (
-	marshal  = json.MarshalIndent
-	mkdirAll = os.MkdirAll
-	copyIn   = inbox.CopyApproved
+	marshal = json.MarshalIndent
+	mkdir   = os.Mkdir
+	copyIn  = inbox.CopyApproved
 )
 
 type snap struct {
@@ -318,7 +318,9 @@ func (c *Control) FinishTap(deviceID string, resp *protocol.ParsedCredentialAsse
 		c.log("run.copy_refused", map[string]any{"item": req.ItemID, "error": err.Error()})
 		return res, err
 	}
-	if err := mkdirAll(work, 0o700); err != nil {
+	// Mkdir, not MkdirAll: the run's folder must be new. An existing folder or a
+	// junction planted under that name in the Jake-writable work folder fails.
+	if err := mkdir(work, 0o700); err != nil {
 		return res, fmt.Errorf("control: %w", err)
 	}
 	spec := runner.Command(c.p.SystemRoot, dst, work, s.item.Header.Entry)

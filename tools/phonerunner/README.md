@@ -131,10 +131,10 @@ The page can show the words in the front window, read through Windows UI Automat
 - **Stop** is approved the same way, bound to the running item's manifest. A Stop that lands after the item already ended on its own is recorded as "already ended", not "stopped".
 - **Output** goes to `private\output\<item>.log` (SYSTEM and Administrators only, never staged by copy-off; a test proves it) and to the page. It reaches the copied event log only if the item sets `"output_may_copy": true`.
 - **The log** records every tap approved or refused, every copy refused, run start and end, and every passkey step. It never records output unless allowed.
-- **No reading through links.** The inbox is Jake-writable and the service reads it as SYSTEM, so every inbox read (the scan, the copy, the file view) goes through `inbox.ReadInside`. It checks where the open handle really is (on Windows, `GetFinalPathNameByHandle`) and refuses any file, or item folder, that resolves outside the item: a link or junction swapped in after the scan cannot make the service read, show or copy a file Jake's account cannot read.
+- **No reading through links.** The inbox is Jake-writable and the service reads it as SYSTEM, so every inbox read (the scan, the copy, the file view) goes through `inbox.ReadInside`. It checks where the open handle really is (on Windows, `GetFinalPathNameByHandle`) and refuses any file, or item folder, that resolves outside the item, and any file with more than one hard link (a hard link's path looks inside the item, so it is refused by its link count). A link, junction or hard link swapped in after the scan cannot make the service read, show or copy a file Jake's account cannot read. Each run's TEMP folder is made new with `Mkdir`; a folder or junction planted under that name refuses the run.
 - **Same-page requests only.** Every POST must be JSON with `Sec-Fetch-Site: same-origin`, and the device is always the one the tailnet names, never a value from the page.
 - **Adding the phone's passkey (at the desk, about 3 minutes).** `phonerunner-service passkey` (elevated) opens a 5-minute window. On the phone, Jake taps "Add this phone's passkey" and unlocks. The phone shows an 8-character code, and he types it at the desk to store the passkey. If the phone's step fails, the page says the window is used up and the desk step must be run again. The desk command and the service talk through `private\desk\` (SYSTEM and Administrators only), so each desk step starts with his own click on the Windows prompt.
-- **Turning the Run button on.** `phonerunner-service run-button on` (elevated) runs the read-only T-01C check first and refuses unless it prints PASS. Then restart the service. `run-button off` needs no check.
+- **Turning the Run button on.** `phonerunner-service run-button on` (elevated) runs the read-only T-01C check first and refuses unless it prints PASS. Then restart the service. `run-button off` needs no check. The service also re-runs T-01C before every Run tap, so if Always notify is turned off later, Run is refused with the FAIL line. The page shows the Run button as the running service uses it ("on" or "off" with the reason); a desk change shows after the restart.
 - **Staged items contain synthetic data only.** Their text and differences are shown on the phone.
 - **Folders.**
   - `inbox\`: lanes stage here; Jake's account can write.
@@ -151,6 +151,7 @@ The page can show the words in the front window, read through Windows UI Automat
   - check that a tap from the PC's own browser is refused;
   - check that a second Run while one is going is refused;
   - check that editing a file after the tap refuses the run;
+  - from a normal window, hard-link `C:\ProgramData\PhoneRunner\private\config.json` into a staged item (`mklink /H`); expected: Windows denies the link, or the item shows a problem and Run is refused, and nothing appears under `approved\`;
   - check that a Run with no passkey registered is refused;
   - repeat one Run over cellular.
 - Not yet: the plan's T-19 (refuse a long item while copy-off is behind) and a per-item time limit.

@@ -370,6 +370,19 @@ func TestReadInsideRefusesEscapes(t *testing.T) {
 	if _, err := ReadInside(item, "j/config.json"); !errors.Is(err, ErrOutside) {
 		t.Fatal(err)
 	}
+	// A hard link: its path is inside the item, but it is another name for an
+	// outside file.
+	if err := os.Link(filepath.Join(secret, "config.json"), filepath.Join(item, "hard.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadInside(item, "hard.txt"); !errors.Is(err, ErrOutside) {
+		t.Fatal("hard link must be refused: ", err)
+	}
+	links = func(*os.File, os.FileInfo) (uint64, error) { return 0, errors.New("no info") }
+	if _, err := ReadInside(item, "sub/ok.txt"); !errors.Is(err, ErrOutside) {
+		t.Fatal(err)
+	}
+	links = linksOS
 	// A link to a sibling whose name starts like the item's is still outside.
 	os.MkdirAll(item+"2", 0o700)
 	os.WriteFile(filepath.Join(item+"2", "x"), []byte("x"), 0o600)

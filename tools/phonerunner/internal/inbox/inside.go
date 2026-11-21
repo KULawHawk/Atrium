@@ -12,10 +12,13 @@ import (
 // or junction was swapped in. The inbox is writable by Jake's account and the
 // service reads it as SYSTEM, so without this check an agent could make the
 // service read, show or copy a file Jake's account cannot read itself.
-var ErrOutside = errors.New("a file resolved outside its item folder (a link or junction?); refused")
+var ErrOutside = errors.New("a file is a link, a junction or a hard link, or resolves outside its item folder; refused")
 
 // finalPath is where an open file really is (seam for tests).
 var finalPath = finalPathOS
+
+// links is the open file's hard-link count (seam for tests).
+var links = linksOS
 
 // readAll is io.ReadAll (seam for a read that fails mid-file).
 var readAll = io.ReadAll
@@ -53,8 +56,14 @@ func ReadInside(root, rel string) ([]byte, error) {
 	if r, err := filepath.Rel(realRoot, real); err != nil || r == ".." || strings.HasPrefix(r, ".."+string(filepath.Separator)) {
 		return nil, ErrOutside
 	}
-	if st, err := f.Stat(); err != nil || !st.Mode().IsRegular() {
+	st, err := f.Stat()
+	if err != nil || !st.Mode().IsRegular() {
 		return nil, errors.New("not a plain file")
+	}
+	// A hard link's path is its name inside the item, so the path check cannot
+	// see it; a file with more than one name is refused outright.
+	if n, err := links(f, st); err != nil || n != 1 {
+		return nil, ErrOutside
 	}
 	b, err := readAll(io.LimitReader(f, MaxFileBytes+1))
 	if err != nil {

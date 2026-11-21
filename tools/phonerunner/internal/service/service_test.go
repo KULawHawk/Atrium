@@ -249,7 +249,7 @@ func TestRunReady(t *testing.T) {
 	if err := s.RunReady(); err == nil || !strings.Contains(err.Error(), "Run button is off") {
 		t.Fatal(err)
 	}
-	if s.Refresh(ctx).Mode != "watch-only" {
+	if st := s.Refresh(ctx); st.Mode != "watch-only" || !strings.HasPrefix(st.RunButton, "off") {
 		t.Fatal("mode")
 	}
 	s.cfg.RunButton = true
@@ -266,6 +266,18 @@ func TestRunReady(t *testing.T) {
 	s.Ingest(ctx, capture.Frame{Type: "window", At: *clock})
 	if err := s.RunReady(); err != nil {
 		t.Fatal(err)
+	}
+	// Always notify was turned off after the service started: refused per run.
+	s.SetRunCheck(func() error { return errors.New("FAIL T-01C Always notify is not on") })
+	if err := s.RunReady(); err == nil || !strings.Contains(err.Error(), "T-01C") {
+		t.Fatal(err)
+	}
+	if st := s.Refresh(ctx); !strings.HasPrefix(st.RunButton, "off: FAIL T-01C") {
+		t.Fatal(st.RunButton)
+	}
+	s.SetRunCheck(func() error { return nil })
+	if st := s.Refresh(ctx); st.RunButton != "on" {
+		t.Fatal(st.RunButton)
 	}
 	*clock = clock.Add(time.Hour) // the watcher went quiet
 	if err := s.RunReady(); err == nil || !strings.Contains(err.Error(), "not reporting") {

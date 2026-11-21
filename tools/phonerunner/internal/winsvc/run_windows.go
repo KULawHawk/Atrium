@@ -20,6 +20,7 @@ import (
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/config"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/control"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/gate"
+	"github.com/kulawhawk/atrium/tools/phonerunner/internal/pccheck"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/runner"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/service"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/store"
@@ -75,6 +76,12 @@ func Run(ctx context.Context, root, sessionExe string) error {
 	if err != nil {
 		return err
 	}
+	svc.SetRunCheck(func() error {
+		if r := pccheck.AlwaysNotify(readUAC); !r.Pass {
+			return errors.New(r.Line())
+		}
+		return nil
+	})
 	ctl, ap, err := runButton(root, pageURL, cfg, svc, st)
 	if err != nil {
 		_ = st.Append("service.run_button_error", map[string]any{"error": err.Error()})

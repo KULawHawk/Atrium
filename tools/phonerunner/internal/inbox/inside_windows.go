@@ -18,3 +18,12 @@ func finalPathOS(f *os.File) (string, error) {
 	}
 	return windows.UTF16ToString(buf[:n]), nil
 }
+
+// linksOS is the file's hard-link count, read from the open handle.
+func linksOS(f *os.File, _ os.FileInfo) (uint64, error) {
+	var info windows.ByHandleFileInformation
+	if err := windows.GetFileInformationByHandle(windows.Handle(f.Fd()), &info); err != nil {
+		return 0, err
+	}
+	return uint64(info.NumberOfLinks), nil
+}
