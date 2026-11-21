@@ -53,6 +53,9 @@ type Header struct {
 	EstimateTime string `json:"estimate_time"`
 	EstimateCost string `json:"estimate_cost"`
 	NeedsDesktop bool   `json:"needs_desktop"`
+	// OutputMayCopy lets the item's output lines into the event log, which is
+	// copied off the PC. Off unless the item says so: output stays on the PC.
+	OutputMayCopy bool `json:"output_may_copy"`
 }
 
 // File is one manifest line.
@@ -87,6 +90,7 @@ var badgeRules = []struct {
 	{"deletes files", regexp.MustCompile(`(?i)\b(remove-item|clear-content|rmdir|rd|del|erase|rm)\b`)},
 	{"changes Windows settings", regexp.MustCompile(`(?i)\b(set-itemproperty|new-itemproperty|reg\s+add|reg\s+delete|set-mppreference|netsh|bcdedit|set-executionpolicy|sc\s+config)\b`)},
 	{"needs a Windows security box", regexp.MustCompile(`(?i)-verb\s+runas|\bwebauthn\b|windows hello`)},
+	{"may start programs that Stop cannot end", regexp.MustCompile(`(?i)\b(invoke-wmimethod|invoke-cimmethod|win32_process|schtasks|register-scheduledtask|new-scheduledtask|new-service|explorer(\.exe)?|sc(\.exe)?\s+create)\b`)},
 	{"REMOTE CODE: fetches or runs code not shown here", regexp.MustCompile(`(?i)\b(iex|invoke-expression|downloadstring|downloadfile|invoke-webrequest|iwr|invoke-restmethod|irm|curl|wget|start-bitstransfer|frombase64string)\b|\b(exec|eval)\s*\(|[a-z0-9+/]{200,}={0,2}`)},
 }
 

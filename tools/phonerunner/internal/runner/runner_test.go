@@ -36,12 +36,19 @@ func (f *fakeProc) Kill() error {
 type logSink struct {
 	mu     sync.Mutex
 	events []string
+	kept   []string
 }
 
 func (l *logSink) log(e string, f map[string]any) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.events = append(l.events, e)
+}
+
+func (l *logSink) keep(item, line string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.kept = append(l.kept, line)
 }
 
 func (l *logSink) has(e string) bool {
@@ -69,11 +76,11 @@ func TestCommandIsFixed(t *testing.T) {
 		t.Fatal(s.Dir)
 	}
 	for _, e := range s.Env {
-		if strings.HasPrefix(e, "PSModulePath") || strings.Contains(e, "Users") {
+		if strings.Contains(e, "Users") || strings.Contains(e, "Documents") || strings.Contains(e, "USERPROFILE") {
 			t.Fatal("environment must be clean: ", e)
 		}
 	}
-	if !strings.Contains(strings.Join(s.Env, ";"), `TEMP=C:\ProgramData\PhoneRunner\work\pod-start-1`) || len(s.Env) != 7 {
+	if !strings.Contains(strings.Join(s.Env, ";"), `TEMP=C:\ProgramData\PhoneRunner\work\pod-start-1`) || len(s.Env) != 8 {
 		t.Fatal(s.Env)
 	}
 }
@@ -84,8 +91,8 @@ func TestRunToEnd(t *testing.T) {
 	p := &fakeProc{out: strings.NewReader(out), waitCh: make(chan struct{}), code: 3}
 	close(p.waitCh)
 	var l logSink
-	r := New(func(Spec) (Proc, error) { return p, nil }, l.log, clock)
-	if err := r.Start("pod-start", "abc", Spec{}); err != nil {
+	r := New(func(Spec) (Proc, error) { return p, nil }, l.log, l.keep, clock)
+	if err := r.Start("pod-start", "abc", Spec{}, Options{}); err != nil {
 		t.Fatal(err)
 	}
 	r.Wait()
@@ -102,10 +109,14 @@ func TestRunToEnd(t *testing.T) {
 	if !strings.HasSuffix(c.Lines[2], "(line cut at 4096 characters)") || len(c.Lines[2]) > MaxLineBytes+40 {
 		t.Fatal(len(c.Lines[2]))
 	}
-	for _, e := range []string{"run.started", "run.line", "run.ended"} {
+	for _, e := range []string{"run.started", "run.ended"} {
 		if !l.has(e) {
 			t.Fatal("missing log event ", e)
 		}
+	}
+	// Output is held on the PC by default: kept, never in the copied log.
+	if l.has("run.line") || len(l.kept) != 4 || c.Count != 4 {
+		t.Fatal("output must stay off the copied log by default")
 	}
 }
 
@@ -118,8 +129,8 @@ func TestKeepsLastLinesAndWaitError(t *testing.T) {
 	p := &fakeProc{out: strings.NewReader(b.String()), waitCh: make(chan struct{}), waitErr: errors.New("lost")}
 	close(p.waitCh)
 	var l logSink
-	r := New(func(Spec) (Proc, error) { return p, nil }, l.log, clock)
-	_ = r.Start("a", "b", Spec{})
+	r := New(func(Spec) (Proc, error) { return p, nil }, l.log, l.keep, clock)
+	_ = r.Start("a", "b", Spec{}, Options{})
 	r.Wait()
 	c := r.Current()
 	if len(c.Lines) != KeepLines || c.Lines[KeepLines-1] != "final" || c.Error != "lost" {
@@ -131,20 +142,23 @@ func TestBusyStopAndRefusals(t *testing.T) {
 	pr, pw := io.Pipe()
 	p := &fakeProc{out: pr, waitCh: make(chan struct{}), code: 1}
 	var l logSink
-	r := New(func(Spec) (Proc, error) { return p, nil }, l.log, clock)
+	r := New(func(Spec) (Proc, error) { return p, nil }, l.log, l.keep, clock)
 	if err := r.Stop(); !errors.Is(err, ErrNotRunning) {
 		t.Fatal(err)
 	}
 	r.Wait() // nothing started: returns at once
-	if err := r.Start("a", "b", Spec{}); err != nil {
+	if err := r.Start("a", "b", Spec{}, Options{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.Start("c", "d", Spec{}); !errors.Is(err, ErrBusy) {
+	if err := r.Start("c", "d", Spec{}, Options{}); !errors.Is(err, ErrBusy) {
 		t.Fatal(err)
 	}
 	p.killErr = errors.New("denied")
 	if err := r.Stop(); err == nil || !strings.Contains(err.Error(), "stop failed") {
 		t.Fatal(err)
+	}
+	if r.Current().Stopped {
+		t.Fatal("a failed stop must not read as stopped")
 	}
 	p.killErr = nil
 	if err := r.Stop(); err != nil {
@@ -158,8 +172,8 @@ func TestBusyStopAndRefusals(t *testing.T) {
 	if !l.has("run.stop") {
 		t.Fatal("stop not logged")
 	}
-	bad := New(func(Spec) (Proc, error) { return nil, errors.New("no session") }, l.log, clock)
-	if err := bad.Start("a", "b", Spec{}); err == nil || !strings.Contains(err.Error(), "no session") {
+	bad := New(func(Spec) (Proc, error) { return nil, errors.New("no session") }, l.log, l.keep, clock)
+	if err := bad.Start("a", "b", Spec{}, Options{}); err == nil || !strings.Contains(err.Error(), "no session") {
 		t.Fatal(err)
 	}
 	if !l.has("run.refused") {
@@ -172,8 +186,8 @@ func TestPartialLineAtEnd(t *testing.T) {
 	p := &fakeProc{out: strings.NewReader(long), waitCh: make(chan struct{})}
 	close(p.waitCh)
 	var l logSink
-	r := New(func(Spec) (Proc, error) { return p, nil }, l.log, clock)
-	_ = r.Start("a", "b", Spec{})
+	r := New(func(Spec) (Proc, error) { return p, nil }, l.log, l.keep, clock)
+	_ = r.Start("a", "b", Spec{}, Options{})
 	r.Wait()
 	if c := r.Current(); len(c.Lines) != 1 || !strings.Contains(c.Lines[0], "line cut") {
 		t.Fatal(c.Lines)
@@ -190,10 +204,57 @@ func TestOutputBreaksMidLine(t *testing.T) {
 	p := &fakeProc{out: out, waitCh: make(chan struct{})}
 	close(p.waitCh)
 	var l logSink
-	r := New(func(Spec) (Proc, error) { return p, nil }, l.log, clock)
-	_ = r.Start("a", "b", Spec{})
+	r := New(func(Spec) (Proc, error) { return p, nil }, l.log, l.keep, clock)
+	_ = r.Start("a", "b", Spec{}, Options{})
 	r.Wait()
 	if c := r.Current(); len(c.Lines) != 1 || len(c.Lines[0]) != MaxLineBytes {
 		t.Fatal(len(c.Lines))
+	}
+}
+
+func TestOutputMayCopy(t *testing.T) {
+	p := &fakeProc{out: strings.NewReader("a\nb\n"), waitCh: make(chan struct{})}
+	close(p.waitCh)
+	var l logSink
+	r := New(func(Spec) (Proc, error) { return p, nil }, l.log, l.keep, clock)
+	_ = r.Start("a", "b", Spec{}, Options{OutputMayCopy: true})
+	r.Wait()
+	if !l.has("run.line") || len(l.kept) != 2 {
+		t.Fatal("may_copy output goes to both")
+	}
+}
+
+// closingProc closes its own output when Wait returns, as the PC's job close does.
+type closingProc struct {
+	fakeProc
+	w *io.PipeWriter
+}
+
+func (c *closingProc) Wait() (int, error) {
+	<-c.waitCh
+	c.w.Close()
+	return 0, nil
+}
+
+func TestExitSeenWhilePipeHeld(t *testing.T) {
+	pr, pw := io.Pipe()
+	p := &closingProc{fakeProc: fakeProc{out: pr, waitCh: make(chan struct{})}, w: pw}
+	close(p.waitCh) // the main process has exited; nothing closed the pipe yet
+	var l logSink
+	r := New(func(Spec) (Proc, error) { return p, nil }, l.log, l.keep, clock)
+	_ = r.Start("a", "b", Spec{}, Options{})
+	done := make(chan struct{})
+	go func() { r.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the run must end when the main process ends")
+	}
+}
+
+func TestPSModulePathIsSystemOnly(t *testing.T) {
+	env := strings.Join(CleanEnv(`C:\Windows`, `C:\w`), "|")
+	if !strings.Contains(env, `PSModulePath=C:\Windows\System32\WindowsPowerShell\v1.0\Modules|`) {
+		t.Fatal(env)
 	}
 }

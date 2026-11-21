@@ -211,13 +211,6 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 			return nil, err
 		}
 	}
-	var job windows.Handle
-	if o.Job {
-		if job, err = newKillJob(); err != nil {
-			return nil, fmt.Errorf("launch: job: %w", err)
-		}
-	}
-
 	exe16, err := windows.UTF16PtrFromString(exe)
 	if err != nil {
 		return nil, err
@@ -225,6 +218,13 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 	cmd16, err := windows.UTF16PtrFromString(windows.ComposeCommandLine(append([]string{exe}, args...)))
 	if err != nil {
 		return nil, err
+	}
+	// Made last, after every step that can return early, so its handle cannot leak.
+	var job windows.Handle
+	if o.Job {
+		if job, err = newKillJob(); err != nil {
+			return nil, fmt.Errorf("launch: job: %w", err)
+		}
 	}
 	var pi windows.ProcessInformation
 	flags := uint32(windows.CREATE_UNICODE_ENVIRONMENT | windows.EXTENDED_STARTUPINFO_PRESENT | windows.CREATE_NO_WINDOW)

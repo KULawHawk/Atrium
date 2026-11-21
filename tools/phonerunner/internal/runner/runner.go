@@ -5,7 +5,8 @@
 // System32 with -NoProfile -NonInteractive -ExecutionPolicy Bypass -File and the
 // entry script inside the approved copy, with the working folder set to that
 // copy and a short, clean environment (no PATH entries from Jake's profile, no
-// PSModulePath). Each output line is key-redacted before it is kept or logged.
+// user module folder in PSModulePath). Each output line is key-redacted; it is
+// kept on the PC, and logged (copied off) only when the item allows it.
 // Stop ends the item's whole process tree (a Windows job object on the PC).
 package runner
 
@@ -67,10 +68,20 @@ func CleanEnv(systemRoot, temp string) []string {
 		"windir=" + systemRoot,
 		"PATH=" + systemRoot + `\System32;` + systemRoot + `;` + systemRoot + `\System32\WindowsPowerShell\v1.0`,
 		"PATHEXT=.COM;.EXE;.BAT;.CMD",
+		// Set explicitly: left unset, Windows PowerShell adds the user-writable
+		// Documents\WindowsPowerShell\Modules and could autoload a planted module.
+		"PSModulePath=" + systemRoot + `\System32\WindowsPowerShell\v1.0\Modules`,
 		"TEMP=" + temp,
 		"TMP=" + temp,
 		"PHONERUNNER=1",
 	}
+}
+
+// Options are per-item choices from item.json.
+type Options struct {
+	// OutputMayCopy lets output lines go into the event log, which is copied off
+	// the PC. Off by default: output stays on the PC (the page and the keep file).
+	OutputMayCopy bool
 }
 
 // Run is what the page shows about the current or last run.
@@ -84,6 +95,7 @@ type Run struct {
 	Stopped     bool      `json:"stopped"`
 	Lines       []string  `json:"lines"`
 	Masked      int       `json:"masked"` // key-like spans blanked in the output
+	Count       int       `json:"line_count"`
 }
 
 // Running reports whether the run has not ended.
@@ -99,7 +111,9 @@ var (
 type Runner struct {
 	start Starter
 	log   func(string, map[string]any)
+	keep  func(item, line string) // PC-only output file; never copied
 	now   func() time.Time
+	opts  Options
 
 	mu   sync.Mutex
 	cur  Run
@@ -107,14 +121,15 @@ type Runner struct {
 	done chan struct{}
 }
 
-// New builds a Runner.
-func New(start Starter, log func(string, map[string]any), now func() time.Time) *Runner {
-	return &Runner{start: start, log: log, now: now}
+// New builds a Runner. keep receives every (redacted) output line for the
+// PC-only output file.
+func New(start Starter, log func(string, map[string]any), keep func(item, line string), now func() time.Time) *Runner {
+	return &Runner{start: start, log: log, keep: keep, now: now}
 }
 
 // Start runs spec for the approved item. The caller has already passed the
 // approval check and copied the exact approved bytes into spec.Dir.
-func (r *Runner) Start(itemID, manifestSHA string, spec Spec) error {
+func (r *Runner) Start(itemID, manifestSHA string, spec Spec, o Options) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.cur.Running() {
@@ -127,6 +142,7 @@ func (r *Runner) Start(itemID, manifestSHA string, spec Spec) error {
 	}
 	r.cur = Run{ItemID: itemID, ManifestSHA: manifestSHA, Started: r.now(), Lines: []string{}}
 	r.proc = p
+	r.opts = o
 	r.done = make(chan struct{})
 	r.log("run.started", map[string]any{"item": itemID, "manifest_sha256": manifestSHA})
 	go r.follow(p, r.done)
@@ -135,6 +151,18 @@ func (r *Runner) Start(itemID, manifestSHA string, spec Spec) error {
 
 func (r *Runner) follow(p Proc, done chan struct{}) {
 	defer close(done)
+	// Wait on the main process while reading, so an exit is seen even if a
+	// leftover child still holds the output pipe (on the PC, Wait then closes
+	// the job, which ends that child and the pipe).
+	type result struct {
+		code int
+		err  error
+	}
+	waited := make(chan result, 1)
+	go func() {
+		c, err := p.Wait()
+		waited <- result{c, err}
+	}()
 	br := bufio.NewReaderSize(p.Output(), MaxLineBytes)
 	var buf []byte
 	cut := false
@@ -162,12 +190,13 @@ func (r *Runner) follow(p Proc, done chan struct{}) {
 			emit()
 		}
 	}
-	code, err := p.Wait()
+	w := <-waited
+	code, err := w.code, w.err
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.cur.Ended = r.now()
 	r.cur.ExitCode = &code
-	fields := map[string]any{"item": r.cur.ItemID, "exit_code": code, "stopped": r.cur.Stopped}
+	fields := map[string]any{"item": r.cur.ItemID, "exit_code": code, "stopped": r.cur.Stopped, "lines": r.cur.Count, "output_copied": r.opts.OutputMayCopy}
 	if err != nil {
 		r.cur.Error = err.Error()
 		fields["error"] = err.Error()
@@ -180,13 +209,17 @@ func (r *Runner) add(line string) {
 	res := redact.Text(line)
 	r.mu.Lock()
 	r.cur.Masked += res.Count
+	r.cur.Count++
 	r.cur.Lines = append(r.cur.Lines, res.Text)
 	if len(r.cur.Lines) > KeepLines {
 		r.cur.Lines = r.cur.Lines[len(r.cur.Lines)-KeepLines:]
 	}
-	item := r.cur.ItemID
+	item, mayCopy := r.cur.ItemID, r.opts.OutputMayCopy
 	r.mu.Unlock()
-	r.log("run.line", map[string]any{"item": item, "line": res.Text})
+	r.keep(item, res.Text)
+	if mayCopy {
+		r.log("run.line", map[string]any{"item": item, "line": res.Text})
+	}
 }
 
 // Stop ends the running item's process tree. Stop is approved by a tap like Run.
@@ -196,10 +229,13 @@ func (r *Runner) Stop() error {
 		r.mu.Unlock()
 		return ErrNotRunning
 	}
-	r.cur.Stopped = true
 	p := r.proc
+	r.cur.Stopped = true // set first so the end record says stopped; undone if Kill fails
 	r.mu.Unlock()
 	if err := p.Kill(); err != nil {
+		r.mu.Lock()
+		r.cur.Stopped = false
+		r.mu.Unlock()
 		return fmt.Errorf("runner: stop failed: %w", err)
 	}
 	r.log("run.stop", map[string]any{"item": r.Current().ItemID})

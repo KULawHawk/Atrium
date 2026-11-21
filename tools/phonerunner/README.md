@@ -101,17 +101,19 @@ The page can show the words in the front window, read through Windows UI Automat
 - **Separate folders.**
   - The working folder is the approved copy, which Jake's account can read but not change.
   - TEMP is the run's own work folder, kept apart from the approved files.
-- **Clean environment.** Only `SystemRoot`, `windir`, a system-only `PATH`, `PATHEXT`, `TEMP`/`TMP` and `PHONERUNNER=1`. Nothing comes from Jake's profile: no `PSModulePath`, no user `PATH`.
-- **Where it runs.** In Jake's desktop session, with the same locked process and thread rights as the session part (T-16 applies to items too). The item sits in a kill-on-close job, so **Stop ends the whole tree**, and nothing an item started survives the service. Stop is approved by a tap, like Run.
-- **Output.**
+- **Clean environment.** Only `SystemRoot`, `windir`, a system-only `PATH`, `PATHEXT`, a system-only `PSModulePath`, `TEMP`/`TMP` and `PHONERUNNER=1`. Nothing comes from Jake's profile: no user `PATH`, no `USERPROFILE`. `PSModulePath` is set on purpose to `%SystemRoot%\System32\WindowsPowerShell\v1.0\Modules`: left unset, Windows PowerShell adds the user-writable `Documents\WindowsPowerShell\Modules`, from which a planted module could load.
+- **Where it runs.** In Jake's desktop session, with the same locked process and thread rights as the session part (T-16 applies to items too). The item sits in a kill-on-close job, so **Stop ends the whole tree**, and nothing an item started that way survives the service. Stop is approved by a tap, like Run.
+- **Output stays on the PC by default.**
   - stdout and stderr come down one pipe, kept line by line: the last 200 lines are shown, and each line is cut at 4,096 characters.
-  - Every line is key-redacted before it is kept or logged (`run.line` events).
-  - The page shows the exit code, whether it was stopped, and how many key-like spans were blanked.
+  - Every line is key-redacted, then kept on the PC only (the page and a PC-only output file). It is **not** written to the event log, which is copied off the PC.
+  - An item can set `"output_may_copy": true` in item.json to let its output lines into the event log as `run.line` events. It is off unless the item says so, and the run's end record notes which way it went.
+  - The page shows the exit code, whether it was stopped, the line count, and how many key-like spans were blanked.
 - **One at a time.** A second Run while one is going is refused.
+- **Exit is seen at once.** The runner waits on the main process while it reads output, so a run ends when the main process ends, even if a leftover child still holds the pipe. On the PC, ending the run closes the job, which ends that child.
 - **Honest limits:**
-  - A run counts as finished when its output pipe closes. If the script leaves a background process holding the pipe, the run shows as still running until Stop.
+  - Programs started through WMI or CIM (`Win32_Process`), the Task Scheduler (`schtasks`, `Register-ScheduledTask`), `explorer`, or a new service are started by Windows itself, outside the job, so **Stop cannot end them**. The inbox puts a "may start programs that Stop cannot end" badge on items that mention these. The scan is a pattern match and can be evaded.
   - Items that need no desktop still run as Jake. The plan's separate low-rights account for those is parked with plan B.
-  - [U] The Windows launcher (job, suspended start, clean environment block) compiles but has never run. Its PC test is T-05: a dummy item that prints its environment and working folder, starts a child process, and is then stopped. The test passes if the environment is exactly the list above, the working folder is the approved copy, writing into that copy fails, and Stop ends the child too.
+  - [U] The Windows launcher (job, suspended start, clean environment block) compiles but has never run. Its PC test is T-05: a dummy item that prints its environment and working folder, prints `$env:PSModulePath`, tries one call that needs `USERPROFILE` (`[Environment]::GetFolderPath('MyDocuments')`), starts a child process, and is then stopped. The test passes if the environment is exactly the list above, `PSModulePath` is the one system folder only, the `USERPROFILE` call shows what an item sees without it (recorded, not a failure), the working folder is the approved copy, writing into that copy fails, and Stop ends the child too.
 
 ## Build (cloud, reproducible)
 
