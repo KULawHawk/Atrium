@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PhoneRunner</title>
+<style>
+:root{--bg:#fafaf9;--fg:#1c1917;--muted:#57534e;--card:#fff;--line:#e7e5e4;--ok:#15803d;--warn:#b45309;--bad:#b91c1c}
+@media (prefers-color-scheme:dark){:root{--bg:#1c1917;--fg:#f5f5f4;--muted:#a8a29e;--card:#292524;--line:#44403c;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171}}
+body{margin:0;padding:16px;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,sans-serif}
+h1{font-size:20px;margin:0 0 4px}h2{font-size:16px;margin:0 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin:12px 0}
+.muted{color:var(--muted);font-size:13px}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+pre{white-space:pre-wrap;word-break:break-word;font-size:12px;margin:0;max-height:260px;overflow:auto}
+img{max-width:100%;border:1px solid var(--line);border-radius:6px}
+details summary{cursor:pointer}.row{display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding:6px 0}
+ul{margin:0;padding-left:18px}
+</style>
+</head>
+<body>
+<h1>PhoneRunner <span class="muted" id="mode"></span></h1>
+<div class="muted" id="seen">Connecting…</div>
+<div class="card" id="problems" hidden><h2 class="warn">Needs a look</h2><ul id="plist"></ul></div>
+<div class="card"><h2>PC screen</h2>
+  <div id="lock"></div>
+  <div>Front window: <b id="win">—</b> <span class="muted" id="exe"></span></div>
+  <div class="muted" id="paused"></div>
+  <div class="muted" id="sessnote"></div>
+  <p><img id="shot" alt="Latest PC screenshot" hidden></p>
+  <div class="muted" id="shotat"></div>
+</div>
+<div id="logs"></div>
+<div class="card"><h2>Results copied off the PC</h2><div id="copy">—</div></div>
+<div class="card"><details><summary><b>Settings</b> <span class="muted">(changed at the desk for now)</span></summary><div id="settings"></div></details></div>
+<p class="muted">Watch-only. This page cannot start, stop or change anything on the PC.</p>
+<script src="/app.js"></script>
+</body>
+</html>
