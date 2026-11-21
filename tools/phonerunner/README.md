@@ -57,7 +57,24 @@ The page can show the words in the front window, read through Windows UI Automat
 - **Limits.** At most 200 lines of 300 characters each. Every line goes through the same key redaction as logs.
 - **Discarded on window change.** If the front window changed while it was being read, the text is thrown away.
 - **Never in the copied file.** `status.json` shows the hold note instead of screen text, like window titles. This stays until a patient filter exists.
-- [U] The UI Automation reader is Windows code that compiles but has never run. T-10 is the PC test: a Notepad window with known synthetic text shows on the page, and a denied window shows only the pause note.
+- [U] The UI Automation reader is Windows code that compiles but has never run. T-10 is the PC test: a Notepad window with known synthetic text shows on the page; a long document scrolled to its middle shows only the visible lines; a window with a password box never shows that box's name or contents; and a denied window shows only the pause note.
+
+## Run button approval check (PR 5, part 1: the check only, not yet wired to a page)
+
+`internal/approve` is the check every Run tap must pass. It uses the go-webauthn library (BSD-3-Clause) for the passkey cryptography.
+
+- **One tap, one signature.** Each tap gets a fresh random challenge, stored against the exact request: the item, the sha256 of its manifest, the action, and the Tailscale device that tapped. The phone signs it only after Jake unlocks the phone, because user verification is required.
+- **Refused:**
+  - a second use of the same answer (T-03);
+  - an answer after 2 minutes (T-04);
+  - an answer from a device other than the one that tapped;
+  - a signature without the phone unlock, or one made for another web address;
+  - a passkey whose counter went backwards (a copied passkey);
+  - any change to the item's files between the tap and the answer.
+- **Random challenge on purpose.** The library warns that a challenge derived from the request weakens it. The stored, single-use mapping binds the signature to the request just as tightly.
+- **Registration.** A passkey can be added only while a 5-minute window is open (opened at the desk), and only from the phone's Tailscale device; one from the PC is refused (T-17). Only one is allowed per window: a second arrival refuses both and closes the window. The new passkey is stored only after Jake types its 8-character code at the desk, the same code his phone shows.
+- **Storage.** Passkeys live in `private\passkeys.json` (SYSTEM and Administrators only). A damaged file stops the service rather than starting with none.
+- **Under "Always notify" (Decision 274):** no PIN is stored. The page will carry this risk note: *Your PC uses "Always notify". It closes the known quiet routes to admin rights. Microsoft still does not treat the Windows prompt as a security wall, so a program running as you might one day find a way to admin without a prompt. If that happened, it could read the phone tool's private files and fake a tap. The tool shows every run on your phone and logs it, and it never stores your PIN.*
 
 ## Build (cloud, reproducible)
 
