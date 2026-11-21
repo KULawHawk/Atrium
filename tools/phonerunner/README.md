@@ -38,8 +38,14 @@ Store: `C:\ProgramData\PhoneRunner\` (SYSTEM + Administrators write, Jake read).
 - The key filter cannot spot a short password with no label (for example a bare `hunter2`).
 - Title rules are a starting list; a patient file whose title has no name pattern, date or "patient" still shows on the phone (never in a copied file).
 - No Run button, control panel, command box, passkey, or lock-screen helper.
-- The copy-off script for the PC lane (it reads the store and writes `ack\copy_ack.json`).
 - The Windows parts (`internal/winsvc`, `capture_windows.go`, the service entry point) are cross-compiled and vetted here but **have never run**; they are exercised on the PC by the install tests below.
+
+## Copy-off and PC checks (PR 2)
+
+Two more programs, both run as Jake, no elevation, change nothing on the PC except their own outbox and the store's `ack\` file, and print one PASS/FAIL line:
+
+- `phonerunner-copyoff stage --outbox <dir>` copies new **whole** log lines (second pass of the key filter, masked spans counted), `status.json` (no window titles) and `heartbeat.json` into a new `batch_NNNNNN\` folder with `MANIFEST.json` (size + sha256 per file, files over 10 MB flagged for splitting, log capped at 8 MB per batch). The PC lane sends that folder to the share, then runs `phonerunner-copyoff ack --outbox <dir> --manifest <sha256>`: it re-checks every file is unchanged and writes `ack\copy_ack.json`, labelled as the lane's claim, so the phone page shows the copy is current. One batch at a time; staging again before the ack returns the same batch. A shrunken log, a changed manifest or a changed batch file stops with "tell Jake". Nothing is deleted; a folder left by a failed attempt is kept and the next attempt uses a `_retryN` name. **Pictures are never copied by this tool.**
+- `phonerunner-check log` (T-11: every log line whole, valid and in order; a restart restarts the sequence at 1) and `phonerunner-check refused --url <page>` (T-06: this PC gets 403 "Not allowed", and the refusal page names nothing on the PC).
 
 ## Build (cloud, reproducible)
 
@@ -59,4 +65,4 @@ Two builds give the same hashes. The service program is about 23 MB, over the PC
 
 ## Tests
 
-`go test -cover ./...` — 100% of statements in every platform-independent package (the session program's one-line `main` aside). PC tests (each a script printing one PASS/FAIL line, dry-run first) arrive with the staging PR: T-06 the PC itself is refused, T-07 permissions, T-09 page over cellular, T-11 restart keeps the log, T-16 an agent cannot open the session part for writing.
+`go test -cover ./...` — 100% of statements in every platform-independent package (the session program's one-line `main` aside). T-06 and T-11 are in `phonerunner-check` (above). Still owed before anything is staged on the PC: T-07 permissions on every file the service loads, T-09 page over cellular (Jake's phone), T-16 an agent cannot open the session part for writing.
