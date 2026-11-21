@@ -21,12 +21,12 @@ func main() {
 func run(args []string, out, errw interface{ Write([]byte) (int, error) }, c capture.Capturer) int {
 	fs := flag.NewFlagSet("phonerunner-session", flag.ContinueOnError)
 	fs.SetOutput(errw)
-	cfgPath := fs.String("config", "", "settings file")
+	cfgPath := fs.String("settings", "", "session settings file (intervals and deny rules only)")
 	maxRun := fs.Duration("for", 0, "stop after this long (tests)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	cfg, err := config.Load(*cfgPath)
+	cfg, err := config.LoadSession(*cfgPath)
 	if err != nil {
 		fmt.Fprintln(errw, "FAIL", err)
 		return 1

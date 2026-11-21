@@ -159,3 +159,44 @@ func TestWriteFailuresSurface(t *testing.T) {
 	}
 }
 
+func TestServiceRechecksAndWithholds(t *testing.T) {
+	s, st, _, clock := setup(t)
+	ctx := context.Background()
+	// A session process that ignored the deny rules: the service drops the picture
+	// and the title anyway.
+	s.Ingest(ctx, capture.Frame{Type: "shot", At: *clock, Window: capture.Window{Title: "Smith_John_DOB_1980-02-03.pdf", Exe: "acrobat.exe"}, PNG: []byte("leak")})
+	if s.LatestShot() != nil {
+		t.Fatal("denied picture kept")
+	}
+	stat := s.Refresh(ctx)
+	if !strings.HasPrefix(stat.Session.Window.Title, capture.WithheldPrefix) || stat.Session.Window.Exe != "withheld" || stat.Session.ShotPaused != "paused: patient-mode window" {
+		t.Fatalf("%+v", stat.Session)
+	}
+	// A locked frame carrying a picture is dropped too.
+	s.Ingest(ctx, capture.Frame{Type: "shot", At: *clock, Window: capture.Window{Title: "Notepad"}, Locked: true, PNG: []byte("leak")})
+	if s.LatestShot() != nil {
+		t.Fatal("locked picture kept")
+	}
+	if m, _ := filepath.Glob(filepath.Join(st.Root(), "captures", "*", "*.png")); len(m) != 0 {
+		t.Fatal("dropped picture saved")
+	}
+	// Ordinary titles show on the page but never in status.json (the copied file).
+	s.Ingest(ctx, capture.Frame{Type: "window", At: *clock, Window: capture.Window{Title: "Notepad - notes.txt", Exe: "notepad.exe"}})
+	if got := s.Refresh(ctx).Session.Window.Title; got != "Notepad - notes.txt" {
+		t.Fatalf("page title %q", got)
+	}
+	b, _ := os.ReadFile(filepath.Join(st.Root(), "status.json"))
+	if strings.Contains(string(b), "notes.txt") || strings.Contains(string(b), "notepad.exe") || !strings.Contains(string(b), TitleHold) {
+		t.Fatalf("status.json: %s", b)
+	}
+}
+
+func TestWriteSessionSettings(t *testing.T) {
+	s, st, _, _ := setup(t)
+	if err := s.WriteSessionSettings(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config.LoadSession(filepath.Join(st.Root(), "session.json")); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -55,13 +56,20 @@ type Frame struct {
 // MaxFrame bounds one frame on the pipe (a 4K PNG is well under this).
 const MaxFrame = 32 << 20
 
-// Denied returns the reason a window must not be captured, or "".
+// Denied returns the reason a window must not be captured, or "". A pattern that
+// does not compile counts as a match (fail closed).
 func Denied(w Window, rules []config.DenyRule) string {
 	title := strings.ToLower(w.Title)
 	exe := strings.ToLower(filepath.Base(strings.ReplaceAll(w.Exe, `\`, "/")))
 	for _, r := range rules {
 		for _, s := range r.TitleContains {
 			if s != "" && strings.Contains(title, strings.ToLower(s)) {
+				return r.Reason
+			}
+		}
+		for _, p := range r.TitleRegex {
+			re, err := regexp.Compile(p)
+			if err != nil || re.MatchString(w.Title) {
 				return r.Reason
 			}
 		}
@@ -72,6 +80,15 @@ func Denied(w Window, rules []config.DenyRule) string {
 		}
 	}
 	return ""
+}
+
+// WithheldPrefix starts the title shown in place of a denied window's title.
+const WithheldPrefix = "withheld: "
+
+// Withhold replaces a denied window's title and program name, so neither reaches
+// the phone, a status file or the log.
+func Withhold(w Window, reason string) Window {
+	return Window{Title: WithheldPrefix + reason, Exe: "withheld", PID: w.PID}
 }
 
 // Loop runs until ctx ends, writing frames to out. Window state is sent every
@@ -108,6 +125,9 @@ func Loop(ctx context.Context, c Capturer, rules []config.DenyRule, textEvery, s
 			return nil
 		case <-tText.C:
 			w, locked, problem := state()
+			if reason := Denied(w, rules); reason != "" {
+				w = Withhold(w, reason)
+			}
 			f := Frame{Type: "window", Window: w, Locked: locked}
 			if problem != "" {
 				f = Frame{Type: "error", Error: problem}
@@ -117,18 +137,31 @@ func Loop(ctx context.Context, c Capturer, rules []config.DenyRule, textEvery, s
 			}
 		case <-tShot.C:
 			w, locked, problem := state()
+			reason := Denied(w, rules)
+			if reason != "" {
+				w = Withhold(w, reason)
+			}
 			f := Frame{Type: "shot", Window: w, Locked: locked}
 			switch {
 			case problem != "":
 				f = Frame{Type: "error", Error: problem}
 			case locked:
 				f.Paused = "the PC is locked"
-			case Denied(w, rules) != "":
-				f.Paused = "paused: " + Denied(w, rules)
+			case reason != "":
+				f.Paused = "paused: " + reason
 			default:
 				png, err := c.Screenshot()
 				if err != nil {
 					f = Frame{Type: "error", Error: err.Error()}
+					break
+				}
+				// Re-read after the picture: a key page may have opened in between.
+				w2, locked2, problem2 := state()
+				if problem2 != "" || locked2 || w2 != w || Denied(w2, rules) != "" {
+					f.Paused = "screen changed during capture; picture discarded"
+					if r2 := Denied(w2, rules); r2 != "" {
+						f.Window = Withhold(w2, r2)
+					}
 					break
 				}
 				h := sha256.Sum256(png)

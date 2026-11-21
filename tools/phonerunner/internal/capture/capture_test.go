@@ -14,13 +14,13 @@ import (
 )
 
 type fake struct {
-	mu      sync.Mutex
-	w       Window
-	wErr    error
-	locked  bool
-	lErr    error
-	png     []byte
-	sErr    error
+	mu     sync.Mutex
+	w      Window
+	wErr   error
+	locked bool
+	lErr   error
+	png    []byte
+	sErr   error
 }
 
 func (f *fake) Foreground() (Window, error) { f.mu.Lock(); defer f.mu.Unlock(); return f.w, f.wErr }
@@ -162,5 +162,90 @@ func TestUnsupported(t *testing.T) {
 func TestInitDPIOther(t *testing.T) {
 	if err := InitDPI(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDeniedPatientTitles(t *testing.T) {
+	rules := config.DefaultDenyRules()
+	for _, title := range []string{
+		"Smith_John_DOB_1980-02-03_WAIS.pdf - Adobe Acrobat",
+		"intake 2/3/1980.docx - Word",
+		"Report MRN 554433",
+		"chart DOB: 3 Feb",
+	} {
+		if Denied(Window{Title: title}, rules) == "" {
+			t.Errorf("not withheld: %q", title)
+		}
+	}
+	for _, title := range []string{"manual.pdf - Adobe Acrobat", "Windows PowerShell", "build 12345"} {
+		if r := Denied(Window{Title: title}, rules); r != "" {
+			t.Errorf("wrongly withheld %q: %s", title, r)
+		}
+	}
+	// A pattern that does not compile fails closed.
+	if Denied(Window{Title: "x"}, []config.DenyRule{{Reason: "bad", TitleRegex: []string{"("}}}) != "bad" {
+		t.Error("broken pattern did not fail closed")
+	}
+}
+
+func TestWithholdEverywhere(t *testing.T) {
+	f := &fake{w: Window{Title: "Obsidian - Patient mode", Exe: "obsidian.exe", PID: 9}, png: []byte("p")}
+	frames := run(t, f, 50*time.Millisecond)
+	for _, fr := range frames {
+		if strings.Contains(fr.Window.Title, "Patient mode") || fr.Window.Exe == "obsidian.exe" || len(fr.PNG) > 0 {
+			t.Fatalf("leaked: %+v", fr)
+		}
+	}
+	if count(frames, func(fr Frame) bool {
+		return fr.Window.Title == WithheldPrefix+"patient-mode window" && fr.Window.PID == 9
+	}) == 0 {
+		t.Fatal("no withheld frames")
+	}
+}
+
+// switching changes the front window right after each screenshot.
+type switching struct {
+	fake
+	after Window
+	shot  bool
+}
+
+func (s *switching) Foreground() (Window, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.shot {
+		s.shot = false
+		return s.after, nil
+	}
+	return s.w, nil
+}
+
+func (s *switching) Screenshot() ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.shot = true
+	return []byte("p"), nil
+}
+
+func TestPictureDiscardedWhenScreenChanges(t *testing.T) {
+	for _, after := range []Window{{Title: "Notepad 2"}, {Title: "RunPod - API Keys"}} {
+		s := &switching{fake: fake{w: Window{Title: "Notepad"}}, after: after}
+		var buf syncBuf
+		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+		_ = Loop(ctx, s, config.DefaultDenyRules(), time.Hour, 7*time.Millisecond, &buf, time.Now)
+		cancel()
+		var frames []Frame
+		_ = Read(strings.NewReader(buf.String()), func(fr Frame) { frames = append(frames, fr) })
+		if count(frames, func(fr Frame) bool { return len(fr.PNG) > 0 }) != 0 {
+			t.Fatalf("picture kept after window changed to %q", after.Title)
+		}
+		if count(frames, func(fr Frame) bool { return fr.Paused == "screen changed during capture; picture discarded" }) == 0 {
+			t.Fatal("no discard frame")
+		}
+		for _, fr := range frames {
+			if strings.Contains(fr.Window.Title, "API Keys") {
+				t.Fatal("denied title leaked on discard")
+			}
+		}
 	}
 }

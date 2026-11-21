@@ -1,9 +1,9 @@
 package store
 
 import (
-	"errors"
 	"bufio"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -161,8 +161,8 @@ func TestReadAck(t *testing.T) {
 type failWrite struct{}
 
 func (failWrite) Write([]byte) (int, error) { return 0, errors.New("disk full") }
-func (failWrite) Sync() error                { return nil }
-func (failWrite) Close() error               { return nil }
+func (failWrite) Sync() error               { return nil }
+func (failWrite) Close() error              { return nil }
 
 func TestAppendWriteError(t *testing.T) {
 	s := open(t)

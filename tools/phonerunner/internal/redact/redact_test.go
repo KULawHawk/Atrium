@@ -20,6 +20,8 @@ func TestKnownShapes(t *testing.T) {
 		"-----BEGIN PRIVATE KEY-----\nunterminated",
 		"password: hunter2",
 		"API_KEY=whatever",
+		"Authorization: Bearer abc.def",
+		"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.c2lnbmF0dXJl",
 	}
 	for _, c := range cases {
 		r := Text("before " + c + " after")
@@ -39,9 +41,11 @@ func TestOpaqueHighEntropyRedacted(t *testing.T) {
 
 func TestKeptShapes(t *testing.T) {
 	keep := []string{
-		strings.Repeat("ab", 20),                 // low entropy 40 chars
-		"0123456789abcdef0123456789abcdef01234567", // git sha (40 hex)
-		"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", // sha256
+		strings.Repeat("ab", 20),                                                         // low entropy 40 chars
+		"0123456789abcdef0123456789abcdef01234567",                                       // git sha (40 hex)
+		"sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",        // labelled sha256
+		"file hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",    // labelled hash
+		"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  results.json", // sha256sum line
 		"--------------------------------------",
 		"ordinary words only",
 	}
@@ -73,5 +77,14 @@ func TestEntropy(t *testing.T) {
 	}
 	if e := entropy("ab"); e != 1 {
 		t.Fatalf("entropy ab = %v", e)
+	}
+}
+
+func TestUnlabelledSha256Redacted(t *testing.T) {
+	h := "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	for _, s := range []string{h, "secret value " + h, h + " ", "x " + h + "  file"} {
+		if r := Text(s); strings.Contains(r.Text, h) || r.Count != 1 {
+			t.Errorf("unlabelled 64-hex kept: %q -> %q", s, r.Text)
+		}
 	}
 }

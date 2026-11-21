@@ -37,10 +37,12 @@ func Settings(c config.Config) []Setting {
 	return []Setting{
 		{"Screen text every (seconds)", c.CaptureTextSeconds, "How often the tool notes which window is in front of the PC and whether it is locked."},
 		{"Screenshot every (seconds)", c.CaptureShotSeconds, "How often the tool takes a picture of the PC screen. A picture is only kept when the screen changed."},
-		{"Pictures copied to the share", false, "Off until the picture filter is built and you answer Decision 4b. Until then pictures stay on the PC and your phone."},
-		{"Pause pictures on", len(c.DenyRules), "Number of window rules (key pages, Windows security screens, password managers, patient-mode windows) that stop pictures while that window is in front."},
+		{"Pictures copied to the share", false, "Off until the picture filter is built (Decision 266 = A: copied only after key and patient blackout; built last). Until then pictures stay in an admin-only folder on the PC and on your phone."},
+		{"Pause pictures on", len(c.DenyRules), "Number of window rules (key pages, Windows security screens, password managers, patient-mode windows, titles with a birth date or record number) that stop pictures and hide the window title while that window is in front. Only the FRONT window is checked: a key page or patient file in a side window or on a second monitor is still in the picture."},
+		{"Window titles copied to the share", false, "Off: until a patient filter exists, window titles show on this page only. The status copy the PC lane takes says 'kept on the PC and phone'."},
 		{"Heartbeat every (seconds)", c.HeartbeatSeconds, "How often the PC writes an 'I am alive' note, so you get an alert if the PC goes offline."},
 		{"Copy-off allowed delay (seconds)", c.CopyAckMaxAgeSeconds, "If results have not been copied off the PC for longer than this, the page shows a warning and you get one alert."},
+		{"Page link in phone alerts", c.NtfyClickLink, "Off: alerts carry no link, so the alert service (ntfy.sh) never learns this page's address. Turn on at the desk if you want to tap an alert to open the page."},
 		{"Phone alerts", c.NtfyTopic != "", "Short alerts to your phone. The text never contains details, only 'needs you', 'done', 'locked' or 'not copying'."},
 		{"Watched logs", len(c.WatchedLogs), "Text files whose last lines show on this page, with anything that looks like a key removed."},
 	}

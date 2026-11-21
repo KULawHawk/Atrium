@@ -29,7 +29,7 @@ func Run(ctx context.Context, root, sessionExe string) error {
 	if err != nil {
 		return err
 	}
-	cfgPath := filepath.Join(root, "config.json")
+	cfgPath := filepath.Join(root, "private", "config.json")
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		_ = st.Append("service.config_error", map[string]any{"error": err.Error()})
@@ -54,8 +54,16 @@ func Run(ctx context.Context, root, sessionExe string) error {
 	if names := ts.CertDomains(); len(names) > 0 {
 		pageURL = "https://" + names[0] + "/"
 	}
-	n := alert.New(cfg.NtfyServer, cfg.NtfyTopic, pageURL)
+	clickURL := ""
+	if cfg.NtfyClickLink {
+		clickURL = pageURL // off by default: sending it tells ntfy.sh the tailnet host name
+	}
+	n := alert.New(cfg.NtfyServer, cfg.NtfyTopic, clickURL)
 	svc := service.New(cfg, st, n, time.Now)
+	if err := svc.WriteSessionSettings(); err != nil {
+		_ = st.Append("service.session_settings_error", map[string]any{"error": err.Error()})
+		return err
+	}
 	g := gate.New(tsnetwho.Adapter{Fn: lc.WhoIs}, cfg.AllowedNodeIDs, cfg.AllowedLogin, st.Logger())
 
 	ln, err := ts.ListenTLS("tcp", ":443")
@@ -64,7 +72,7 @@ func Run(ctx context.Context, root, sessionExe string) error {
 	}
 	srv := &http.Server{Handler: web.Handler(svc, cfg, g.Middleware), ReadHeaderTimeout: 10 * time.Second}
 	go func() { <-ctx.Done(); srv.Close() }()
-	go supervise(ctx, svc, st, sessionExe, cfgPath)
+	go supervise(ctx, svc, st, sessionExe, filepath.Join(root, "session.json"))
 	go func() {
 		t := time.NewTicker(time.Duration(cfg.HeartbeatSeconds) * time.Second)
 		defer t.Stop()
@@ -87,10 +95,10 @@ func Run(ctx context.Context, root, sessionExe string) error {
 
 // supervise keeps one session part running in the signed-in user's desktop and feeds
 // its frames to the service. It retries with backoff and logs every exit.
-func supervise(ctx context.Context, svc *service.Service, st *store.Store, exe, cfgPath string) {
+func supervise(ctx context.Context, svc *service.Service, st *store.Store, exe, settingsPath string) {
 	wait := 5 * time.Second
 	for ctx.Err() == nil {
-		child, err := LaunchSession(exe, []string{"--config", cfgPath})
+		child, err := LaunchSession(exe, []string{"--settings", settingsPath})
 		if err != nil {
 			_ = st.Append("session.launch_failed", map[string]any{"error": err.Error()})
 		} else {

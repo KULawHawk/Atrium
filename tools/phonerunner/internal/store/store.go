@@ -6,7 +6,8 @@
 //	log\events.jsonl        append-only, one JSON object per line, fsync per line
 //	status.json             latest status (atomic replace)
 //	heartbeat.json          liveness for the PC-offline alert (atomic replace)
-//	captures\<date>\*.png   screenshots, each with a .json sidecar saying whether it may be copied
+//	session.json            settings for the session part (intervals, window rules; no secret)
+//	captures\<date>\*.png   screenshots + .json sidecar; SYSTEM+Administrators only (set at install)
 //	ack\copy_ack.json       written by the PC lane after each copy (the only lane-writable folder)
 //
 // Nothing here ever deletes a file (Jake's rule: nothing deleted without his decision).

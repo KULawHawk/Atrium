@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"sync"
+	"time"
 )
 
 // Identity is what the tailnet reports about the device behind a connection.
@@ -38,7 +40,17 @@ type Gate struct {
 	allowed map[string]bool
 	login   string
 	log     Logger
+
+	mu         sync.Mutex
+	lastLogged map[string]time.Time
+	suppressed map[string]int
+	now        func() time.Time
 }
+
+// RefusalLogGap is the least time between two logged refusals of one device, so a
+// device retrying in a loop cannot grow the log without bound. Skipped refusals are
+// counted and reported on the next logged line.
+const RefusalLogGap = time.Minute
 
 // ErrNotPaired means no phone has been paired at the desk yet.
 var ErrNotPaired = errors.New("no phone is paired yet")
@@ -49,7 +61,28 @@ func New(who WhoIser, allowedNodeIDs []string, allowedLogin string, log Logger) 
 	for _, id := range allowedNodeIDs {
 		m[id] = true
 	}
-	return &Gate{who: who, allowed: m, login: allowedLogin, log: log}
+	return &Gate{who: who, allowed: m, login: allowedLogin, log: log,
+		lastLogged: map[string]time.Time{}, suppressed: map[string]int{}, now: time.Now}
+}
+
+// SetClock replaces the time source (tests).
+func (g *Gate) SetClock(now func() time.Time) { g.now = now }
+
+// logRefusal writes a refusal line at most once per RefusalLogGap per device.
+func (g *Gate) logRefusal(fields map[string]any, key string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	now := g.now()
+	if last, ok := g.lastLogged[key]; ok && now.Sub(last) < RefusalLogGap {
+		g.suppressed[key]++
+		return
+	}
+	if n := g.suppressed[key]; n > 0 {
+		fields["skipped_since_last_line"] = n
+	}
+	g.lastLogged[key] = now
+	g.suppressed[key] = 0
+	g.log("gate.refused", fields)
 }
 
 // Check returns the identity if allowed, or an error saying why not.
@@ -86,7 +119,7 @@ func (g *Gate) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id, err := g.Check(r.Context(), r.RemoteAddr)
 		if err != nil {
-			g.log("gate.refused", map[string]any{"node_id": id.NodeID, "node_name": id.NodeName, "login": id.Login, "reason": err.Error(), "path": r.URL.Path})
+			g.logRefusal(map[string]any{"node_id": id.NodeID, "node_name": id.NodeName, "login": id.Login, "reason": err.Error(), "path": r.URL.Path}, id.NodeID)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-store")
 			w.WriteHeader(http.StatusForbidden)

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeWho struct {
@@ -69,5 +70,33 @@ func TestMiddleware(t *testing.T) {
 	}
 	if _, ok := FromContext(context.Background()); ok {
 		t.Fatal("empty context has identity")
+	}
+}
+
+func TestRefusalLogIsRateLimited(t *testing.T) {
+	var lines []map[string]any
+	log := func(_ string, f map[string]any) { lines = append(lines, f) }
+	g := New(fakeWho{id: Identity{NodeID: "nPC", Login: "jake@x"}}, []string{"nPHONE"}, "jake@x", log)
+	now := time.Date(2026, 11, 21, 3, 0, 0, 0, time.UTC)
+	g.SetClock(func() time.Time { return now })
+	h := g.Middleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	hit := func() {
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil))
+	}
+	hit()
+	hit()
+	hit()
+	if len(lines) != 1 {
+		t.Fatalf("logged %d lines in one minute", len(lines))
+	}
+	now = now.Add(RefusalLogGap)
+	hit()
+	if len(lines) != 2 || lines[1]["skipped_since_last_line"] != 2 {
+		t.Fatalf("second line %v", lines)
+	}
+	now = now.Add(RefusalLogGap)
+	hit()
+	if _, ok := lines[2]["skipped_since_last_line"]; ok {
+		t.Fatal("stale skip count")
 	}
 }

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,5 +70,47 @@ func TestLoad(t *testing.T) {
 	}
 	if _, err := Load(filepath.Join(dir, "missing.json")); err == nil {
 		t.Fatal("missing file accepted")
+	}
+}
+
+func TestSessionSettings(t *testing.T) {
+	c := Defaults()
+	c.NtfyTopic = strings.Repeat("t", 30)
+	b, _ := json.Marshal(c.SessionSettings())
+	if strings.Contains(string(b), "ntfy") || strings.Contains(string(b), c.NtfyTopic) {
+		t.Fatal("secret in session settings")
+	}
+	dir := t.TempDir()
+	p := filepath.Join(dir, "s.json")
+	os.WriteFile(p, b, 0o600)
+	s, err := LoadSession(p)
+	if err != nil || s.CaptureShotSeconds != c.CaptureShotSeconds || len(s.DenyRules) != len(c.DenyRules) {
+		t.Fatalf("%v %+v", err, s)
+	}
+	bad := map[string]string{
+		"unknown field": `{"capture_text_seconds":5,"capture_shot_seconds":10,"deny_rules":[{"reason":"r","title_contains":["x"]}],"ntfy_topic":"x"}`,
+		"no rules":      `{"capture_text_seconds":5,"capture_shot_seconds":10}`,
+		"bad json":      `{`,
+	}
+	for name, body := range bad {
+		os.WriteFile(p, []byte(body), 0o600)
+		if _, err := LoadSession(p); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	if _, err := LoadSession(filepath.Join(dir, "none.json")); err == nil {
+		t.Error("missing file accepted")
+	}
+}
+
+func TestTitleRegexRules(t *testing.T) {
+	c := Defaults()
+	c.DenyRules = []DenyRule{{Reason: "regex only", TitleRegex: []string{"^x$"}}}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	c.DenyRules = []DenyRule{{Reason: "broken", TitleRegex: []string{"("}}}
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "does not compile") {
+		t.Fatal(err)
 	}
 }

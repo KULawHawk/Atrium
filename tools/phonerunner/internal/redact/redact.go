@@ -17,15 +17,17 @@ const Mask = "[REDACTED]"
 
 // known lists key shapes with a recognisable prefix. Order does not matter.
 var known = []*regexp.Regexp{
-	regexp.MustCompile(`sk-ant-[A-Za-z0-9_\-]{8,}`),              // Anthropic
-	regexp.MustCompile(`sk-[A-Za-z0-9_\-]{16,}`),                 // OpenAI-style
-	regexp.MustCompile(`rpa_[A-Za-z0-9]{16,}`),                   // RunPod
-	regexp.MustCompile(`gh[pousr]_[A-Za-z0-9]{20,}`),             // GitHub classic tokens
-	regexp.MustCompile(`github_pat_[A-Za-z0-9_]{20,}`),           // GitHub fine-grained
-	regexp.MustCompile(`hf_[A-Za-z0-9]{20,}`),                    // Hugging Face
-	regexp.MustCompile(`AKIA[0-9A-Z]{16}`),                       // AWS access key id
-	regexp.MustCompile(`xox[abprs]-[A-Za-z0-9\-]{10,}`),          // Slack
-	regexp.MustCompile(`tskey-[A-Za-z0-9\-]{10,}`),               // Tailscale auth keys
+	regexp.MustCompile(`sk-ant-[A-Za-z0-9_\-]{8,}`),                                  // Anthropic
+	regexp.MustCompile(`sk-[A-Za-z0-9_\-]{16,}`),                                     // OpenAI-style
+	regexp.MustCompile(`rpa_[A-Za-z0-9]{16,}`),                                       // RunPod
+	regexp.MustCompile(`gh[pousr]_[A-Za-z0-9]{20,}`),                                 // GitHub classic tokens
+	regexp.MustCompile(`github_pat_[A-Za-z0-9_]{20,}`),                               // GitHub fine-grained
+	regexp.MustCompile(`hf_[A-Za-z0-9]{20,}`),                                        // Hugging Face
+	regexp.MustCompile(`AKIA[0-9A-Z]{16}`),                                           // AWS access key id
+	regexp.MustCompile(`xox[abprs]-[A-Za-z0-9\-]{10,}`),                              // Slack
+	regexp.MustCompile(`tskey-[A-Za-z0-9\-]{10,}`),                                   // Tailscale auth keys
+	regexp.MustCompile(`(?i)bearer\s+\S+`),                                           // HTTP bearer tokens
+	regexp.MustCompile(`eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]*`), // JWTs
 	regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(-----END [A-Z ]*PRIVATE KEY-----|$)`),
 	regexp.MustCompile(`(?i)(password|passwd|pwd|secret|token|api[_-]?key)\s*[:=]\s*\S+`),
 }
@@ -33,10 +35,14 @@ var known = []*regexp.Regexp{
 // tokenRe finds candidate opaque strings for the entropy check.
 var tokenRe = regexp.MustCompile(`[A-Za-z0-9_\-+/=]{32,}`)
 
-// hexOnly matches pure lowercase hex. Exactly 40 (git commit) and 64 (sha256)
-// characters are kept so file hashes stay readable on the approval card; any other
-// length of hex is treated like any other opaque token.
+// hexOnly matches pure lowercase hex. Exactly 40 characters (a git commit) is kept.
+// Exactly 64 (sha256) is kept only when it is labelled as a hash: "sha256", "sha-256"
+// or "hash" within the 24 characters before it, or the sha256sum line shape
+// "<hash>  <file>". An unlabelled 64-hex string may be a secret and is masked; any
+// other length of hex is treated like any other opaque token.
 var hexOnly = regexp.MustCompile(`^[0-9a-f]+$`)
+
+var hashLabel = regexp.MustCompile(`(?i)(sha-?256|hash)`)
 
 // Result reports what Text did.
 type Result struct {
@@ -50,14 +56,21 @@ func Text(s string) Result {
 	for _, re := range known {
 		s = re.ReplaceAllStringFunc(s, func(string) string { count++; return Mask })
 	}
-	s = tokenRe.ReplaceAllStringFunc(s, func(tok string) string {
-		if keepToken(tok) {
-			return tok
+	var out strings.Builder
+	last := 0
+	for _, loc := range tokenRe.FindAllStringIndex(s, -1) {
+		tok := s[loc[0]:loc[1]]
+		out.WriteString(s[last:loc[0]])
+		if keepToken(tok) || (len(tok) == 64 && hexOnly.MatchString(tok) && labelledHash(s, loc[0], loc[1])) {
+			out.WriteString(tok)
+		} else {
+			count++
+			out.WriteString(Mask)
 		}
-		count++
-		return Mask
-	})
-	return Result{Text: s, Count: count}
+		last = loc[1]
+	}
+	out.WriteString(s[last:])
+	return Result{Text: out.String(), Count: count}
 }
 
 // Lines redacts each line and returns the total count.
@@ -72,9 +85,20 @@ func Lines(in []string) ([]string, int) {
 	return out, total
 }
 
-func keepToken(tok string) bool {
-	if hexOnly.MatchString(tok) && (len(tok) == 40 || len(tok) == 64) {
+// labelledHash reports whether the 64-hex token at s[i:j] is marked as a hash.
+func labelledHash(s string, i, j int) bool {
+	if hashLabel.MatchString(s[max(0, i-24):i]) {
 		return true
+	}
+	return i == 0 && strings.HasPrefix(s[j:], "  ") && len(strings.TrimSpace(s[j:])) > 0
+}
+
+func keepToken(tok string) bool {
+	if len(tok) == 40 && hexOnly.MatchString(tok) {
+		return true
+	}
+	if hexOnly.MatchString(tok) && len(tok) == 64 {
+		return false // decided by labelledHash, which sees the surrounding text
 	}
 	if strings.Trim(tok, "-_=+/") == "" {
 		return true // a rule line such as "--------------------------------"

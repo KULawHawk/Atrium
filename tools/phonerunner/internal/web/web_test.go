@@ -15,7 +15,7 @@ import (
 type src struct{ shot []byte }
 
 func (s src) Refresh(context.Context) service.Status { return service.Status{Mode: "watch-only"} }
-func (s src) LatestShot() []byte                      { return s.shot }
+func (s src) LatestShot() []byte                     { return s.shot }
 
 func get(t *testing.T, h http.Handler, method, path string) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()

@@ -41,7 +41,10 @@ func TestLargeFileDropsCutLine(t *testing.T) {
 	}
 }
 
-type badSeeker struct{ failAt int; calls int }
+type badSeeker struct {
+	failAt int
+	calls  int
+}
 
 func (b *badSeeker) Seek(off int64, whence int) (int64, error) {
 	b.calls++

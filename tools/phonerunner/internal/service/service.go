@@ -22,10 +22,17 @@ import (
 // Version is stamped into every status and heartbeat.
 var Version = "0.1.0-watch"
 
-// PictureHold is why screenshots are not copied off the PC yet: the picture filter
-// (key blackout by reading the words in a picture) is built last, after Jake answers
-// Decision 4b. Until then pictures stay on the PC and the phone only.
-const PictureHold = "not copied: picture filter not built yet (Decision 4b pending)"
+// PictureHold is why screenshots are not copied off the PC yet: under Decision 266 = A
+// they are copied only after the picture filter (key and patient blackout) exists,
+// and it is built last. Until then pictures stay in the SYSTEM-only captures folder
+// and on the phone.
+const PictureHold = "not copied: picture filter not built yet (Decision 266 = A, built last)"
+
+// TitleHold replaces the front window's title in status.json, the one status copy
+// agents can read and the PC lane copies off. Until a patient filter exists, window
+// titles stay on the PC and the phone only, like pictures (coordinator ruling on the
+// reviewer's point 3, strictest first).
+const TitleHold = "kept on the PC and phone: window titles are not copied off until the patient filter exists"
 
 // LogTail is one watched file on the page.
 type LogTail struct {
@@ -94,6 +101,18 @@ func (s *Service) Ingest(ctx context.Context, f capture.Frame) {
 		return
 	}
 	s.sess.LastError = ""
+	// Second check here, not only in the session process (which runs as Jake).
+	if reason := capture.Denied(f.Window, s.cfg.DenyRules); reason != "" {
+		f.Window = capture.Withhold(f.Window, reason)
+		if f.Type == "shot" && len(f.PNG) > 0 {
+			f.PNG = nil
+			f.Paused = "paused: " + reason
+		}
+	}
+	if f.Locked && len(f.PNG) > 0 {
+		f.PNG = nil
+		f.Paused = "the PC is locked"
+	}
 	f.Window.Title = redact.Text(f.Window.Title).Text
 	s.sess.Window = f.Window
 	s.sess.Locked = f.Locked
@@ -162,7 +181,9 @@ func (s *Service) Refresh(ctx context.Context) Status {
 		s.send(ctx, alert.CopyLag)
 	}
 	s.copyLag = lag
-	if err := s.st.WriteJSON("status.json", st); err != nil {
+	file := st
+	file.Session.Window = capture.Window{Title: TitleHold}
+	if err := s.st.WriteJSON("status.json", file); err != nil {
 		st.Problems = append(st.Problems, "could not write status file: "+err.Error())
 	}
 	hb := map[string]any{"at": now, "version": Version, "session_connected": st.Session.Connected, "locked": st.Session.Locked}
@@ -170,6 +191,12 @@ func (s *Service) Refresh(ctx context.Context) Status {
 		st.Problems = append(st.Problems, "could not write heartbeat: "+err.Error())
 	}
 	return st
+}
+
+// WriteSessionSettings writes session.json, the only settings the session process
+// (running as Jake) reads: intervals and deny rules, no topic or other secret.
+func (s *Service) WriteSessionSettings() error {
+	return s.st.WriteJSON("session.json", s.cfg.SessionSettings())
 }
 
 // Started logs the start and sends the start alert.

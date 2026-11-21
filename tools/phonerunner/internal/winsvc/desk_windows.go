@@ -47,6 +47,9 @@ func setACL(path, sddl string) error {
 		windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, dacl, nil)
 }
 
+// ConfigPath is the settings file, in the SYSTEM+Administrators-only folder.
+func ConfigPath() string { return filepath.Join(DefaultRoot(), "private", "config.json") }
+
 // Install creates the store with its permissions, writes default settings if none
 // exist, and registers the service. viewer is the Windows user whose agents may
 // read the store and write copy acknowledgements (Jake's own account name).
@@ -75,6 +78,8 @@ func Install(viewer string) error {
 	dirs := []struct{ path, sddl string }{
 		{root, fmt.Sprintf("D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FR;;;%s)", user)},
 		{filepath.Join(root, "tsnet"), "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"},
+		{filepath.Join(root, "private"), "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"},  // settings incl. ntfy topic
+		{filepath.Join(root, "captures"), "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"}, // pictures (Decision 266 = A)
 		{filepath.Join(root, "ack"), fmt.Sprintf("D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;%s)", user)},
 	}
 	for _, d := range dirs {
@@ -86,7 +91,7 @@ func Install(viewer string) error {
 		}
 		fmt.Println("PASS permissions set:", d.path)
 	}
-	cfgPath := filepath.Join(root, "config.json")
+	cfgPath := ConfigPath()
 	if _, err := os.Stat(cfgPath); errors.Is(err, os.ErrNotExist) {
 		b, _ := config.Defaults().Marshal()
 		if err := os.WriteFile(cfgPath, b, 0o644); err != nil {
@@ -119,7 +124,7 @@ func Login() error {
 	if err := RequireElevated(); err != nil {
 		return err
 	}
-	cfg, err := config.Load(filepath.Join(DefaultRoot(), "config.json"))
+	cfg, err := config.Load(ConfigPath())
 	if err != nil {
 		return err
 	}
@@ -150,7 +155,7 @@ func Pair(nodeID, login string, in *bufio.Reader) error {
 	if err := RequireElevated(); err != nil {
 		return err
 	}
-	cfgPath := filepath.Join(DefaultRoot(), "config.json")
+	cfgPath := ConfigPath()
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		return err
