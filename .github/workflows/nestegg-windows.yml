@@ -1,0 +1,79 @@
+# Nestegg on a clean Windows machine (Decision 276 = I6 A, Jake 11/20/2026 9:36 PM CT).
+# NOT a required check. Runs only when tools/nestegg changes, or by hand.
+# Budget: about 2-4 runs, $1-4 total (approved as stated); concurrency cancels stale runs.
+name: nestegg-windows
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/nestegg/**"
+      - ".github/workflows/nestegg-windows.yml"
+
+concurrency:
+  group: nestegg-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  phase0-check:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Phase 0 read-only check (Windows PowerShell 5.1, as on a new PC)
+        shell: powershell
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'nestegg_check.log'
+          powershell -NoProfile -ExecutionPolicy Bypass -File "tools\nestegg\Check-AdAstra.ps1" -InstallRoot (Join-Path $env:RUNNER_TEMP 'AdAstra') *>&1 | Tee-Object -FilePath $log
+          $last = (Get-Content $log | Where-Object { $_ -match '^NESTEGG-CHECK: ' } | Select-Object -Last 1)
+          if (-not $last) { Write-Host 'FAIL: no NESTEGG-CHECK verdict line (script did not finish)'; exit 1 }
+          Write-Host "verdict: $last"
+          # A GAP is expected on a runner (no Tesseract/Poppler there). What this job proves:
+          # the script parses and runs to its verdict on a clean Windows, and changes nothing.
+          if (Test-Path (Join-Path $env:RUNNER_TEMP 'AdAstra')) { Write-Host 'FAIL: the check created the install folder'; exit 1 }
+          Write-Host 'NESTEGG-WINDOWS: PASS'
+      - name: Keep the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nestegg-check-log
+          path: ${{ runner.temp }}/nestegg_check.log
+
+  phase1-prereqs:
+    # Really installs on the throwaway runner. -AssumeYes answers winget's agreement question
+    # ONLY here; "Install AdAstra.cmd" never passes it, so on a real PC the person answers it.
+    # The runner has no UAC box (it is an elevated service account), so this cannot test the
+    # Windows security boxes; those stay the person's own clicks and are tested by reading.
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Phase 1 dry run, then install, then run again (second run must install nothing)
+        shell: powershell
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'AdAstra'
+          $f = "tools\nestegg\Install-Prereqs.ps1"
+          $dry = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -DryRun *>&1 | Tee-Object -Variable d
+          if (Test-Path $root) { Write-Host 'FAIL: the dry run created the install folder'; exit 1 }
+          $one = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -AssumeYes *>&1 | Tee-Object -Variable o
+          $v1 = ($o | Where-Object { "$_" -match '^NESTEGG-PREREQS: ' } | Select-Object -Last 1)
+          Write-Host "first run: $v1"
+          if ("$v1" -ne 'NESTEGG-PREREQS: PASS') { $o | ForEach-Object { Write-Host "  | $_" } }
+          if ("$v1" -ne 'NESTEGG-PREREQS: PASS') { exit 1 }
+          if (-not (Test-Path (Join-Path $root '.adastra\prereqs.json'))) { Write-Host 'FAIL: prereqs.json not written'; exit 1 }
+          $two = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root *>&1 | Tee-Object -Variable t
+          $v2 = ($t | Where-Object { "$_" -match '^NESTEGG-PREREQS: ' } | Select-Object -Last 1)
+          if ("$v2" -ne 'NESTEGG-PREREQS: PASS') { Write-Host "FAIL: second run $v2"; exit 1 }
+          if ($t | Where-Object { "$_" -match 'installing winget package' }) { Write-Host 'FAIL: second run installed something'; exit 1 }
+          Get-Content (Join-Path $root '.adastra\prereqs.json')
+          Write-Host 'NESTEGG-PHASE1-WINDOWS: PASS'
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nestegg-prereqs-logs
+          path: ${{ runner.temp }}/AdAstra/.adastra
+          include-hidden-files: true
