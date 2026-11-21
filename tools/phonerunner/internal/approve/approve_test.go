@@ -256,6 +256,11 @@ func TestBeginRefusals(t *testing.T) {
 	if _, err := a.Begin(Request{ItemID: "x"}); !errors.Is(err, ErrBadRequest) {
 		t.Fatal(err)
 	}
+	odd := req
+	odd.Action = "delete-everything"
+	if _, err := a.Begin(odd); !errors.Is(err, ErrBadRequest) {
+		t.Fatal(err)
+	}
 	if _, err := a.Begin(req); !errors.Is(err, ErrNoPasskey) {
 		t.Fatal(err)
 	}

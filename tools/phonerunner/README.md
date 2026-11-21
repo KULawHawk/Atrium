@@ -76,6 +76,22 @@ The page can show the words in the front window, read through Windows UI Automat
 - **Storage.** Passkeys live in `private\passkeys.json` (SYSTEM and Administrators only). A damaged file stops the service rather than starting with none.
 - **Under "Always notify" (Decision 274):** no PIN is stored. The page will carry this risk note: *Your PC uses "Always notify". It closes the known quiet routes to admin rights. Microsoft still does not treat the Windows prompt as a security wall, so a program running as you might one day find a way to admin without a prompt. If that happened, it could read the phone tool's private files and fake a tap. The tool shows every run on your phone and logs it, and it never stores your PIN.*
 
+## Staged items and their manifest (PR 6, part 2a: no page or run yet)
+
+`internal/inbox` reads what lanes stage for the Run button. Each item is a folder: `item.json` (title, claimed_by, entry `.ps1`, estimate_time, estimate_cost, needs_desktop), the entry script, and any other files.
+
+- **Manifest.** Every file with its sha256, in path order, in the same form `sha256sum` prints. The manifest sha256 is what a tap approves. `item.json` is in the manifest, so the entry script and its settings are pinned too.
+- **Run is refused, with the reason shown, when:**
+  - the header is missing a title or claimed_by, or has a field the tool does not know;
+  - the entry is not a `.ps1` file in the item folder itself;
+  - the item contains a link or special file, a file over 10 MB, or more than 200 files.
+- **Estimates.** A missing time or cost estimate shows "not stated" in red.
+- **Badges (plan 6.4), written by the tool, not the proposer.** Installs software · reads a key or secret · starts a billed service · deletes files · changes Windows settings · needs a Windows security box · **REMOTE CODE** (`iex`, downloads, `eval(`, base64 blobs). The badges come from a pattern match: they help, but they prove nothing, and the coordinator's read-through stays.
+- **Changes since the last approved version.** Shown per file (added, changed, removed), with a line diff of text files (up to 2,000 lines each).
+- **Copying what was approved.** `CopyApproved` copies the item into a new store folder. It hashes the bytes it writes, refuses on any difference, and re-checks that no file appeared or vanished in the inbox. The run (next PR) uses only that copy.
+- **Approval actions.** Taps approve only `run`, `stop` or `resume`; anything else is refused.
+- **Threat note.** Passkey registration accepts the "none" attestation format, so the tool cannot prove which phone model made the passkey. What stops a passkey made elsewhere is the registration window: it opens only at the desk, accepts only the phone's Tailscale device and only one passkey, and Jake must confirm the code. The device check also stays on every tap, because Android passkeys sync between devices.
+
 ## Build (cloud, reproducible)
 
 ```
