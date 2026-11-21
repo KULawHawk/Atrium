@@ -42,15 +42,33 @@ func threadSDDL(userSID string) string {
 	return fmt.Sprintf("D:P(A;;GA;;;SY)(A;;0x0801;;;%s)(A;;0x0801;;;OW)", userSID)
 }
 
+// defaultDACL is set as the session token's default DACL, so every object the
+// session part creates later (Go runtime threads above all) gets SYSTEM full
+// control and Jake only read-permissions + wait: no suspend, context, or
+// impersonation rights on any later thread (reviewer point on #53). OWNER RIGHTS
+// is listed so the owner's implicit permission-change right is removed too.
+func defaultDACL(userSID string) string {
+	return fmt.Sprintf("D:P(A;;GA;;;SY)(A;;0x120000;;;%s)(A;;0x120000;;;OW)", userSID)
+}
+
+// tokenDefaultDACL is TOKEN_DEFAULT_DACL.
+type tokenDefaultDACL struct{ DefaultDacl *windows.ACL }
+
 // LaunchSession starts exe in the active console session as the signed-in user.
 func LaunchSession(exe string, args []string) (*Child, error) {
 	sess := windows.WTSGetActiveConsoleSessionId()
 	if sess == 0xFFFFFFFF {
 		return nil, ErrNobodySignedIn
 	}
-	var tok windows.Token
-	if err := windows.WTSQueryUserToken(sess, &tok); err != nil {
+	var userTok windows.Token
+	if err := windows.WTSQueryUserToken(sess, &userTok); err != nil {
 		return nil, fmt.Errorf("%w (%v)", ErrNobodySignedIn, err)
+	}
+	defer userTok.Close()
+	// Work on a private copy so the change below never touches Jake's own token.
+	var tok windows.Token
+	if err := windows.DuplicateTokenEx(userTok, windows.MAXIMUM_ALLOWED, nil, windows.SecurityImpersonation, windows.TokenPrimary, &tok); err != nil {
+		return nil, fmt.Errorf("launch: token copy: %w", err)
 	}
 	defer tok.Close()
 	tu, err := tok.GetTokenUser()
@@ -58,6 +76,18 @@ func LaunchSession(exe string, args []string) (*Child, error) {
 		return nil, fmt.Errorf("launch: user lookup: %w", err)
 	}
 	userSID := tu.User.Sid.String()
+	sdD, err := windows.SecurityDescriptorFromString(defaultDACL(userSID))
+	if err != nil {
+		return nil, fmt.Errorf("launch: default rights: %w", err)
+	}
+	dacl, _, err := sdD.DACL()
+	if err != nil {
+		return nil, fmt.Errorf("launch: default rights: %w", err)
+	}
+	tdd := tokenDefaultDACL{DefaultDacl: dacl}
+	if err := windows.SetTokenInformation(tok, windows.TokenDefaultDacl, (*byte)(unsafe.Pointer(&tdd)), uint32(unsafe.Sizeof(tdd))); err != nil {
+		return nil, fmt.Errorf("launch: default rights: %w", err)
+	}
 
 	inherit := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), InheritHandle: 1}
 	var r, w windows.Handle
