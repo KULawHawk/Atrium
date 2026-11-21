@@ -144,17 +144,23 @@ func TestRunPerms(t *testing.T) {
 }
 
 func TestCheckDenied(t *testing.T) {
-	el := func(v bool, e error) func() (bool, error) { return func() (bool, error) { return v, e } }
 	denied := func(string) error { return fs.ErrPermission }
 	listDenied := func(string) ([]string, error) { return nil, fs.ErrPermission }
-	if r := CheckDenied(el(false, nil), denied, listDenied, `C:\D`); !r.Pass || r.Test != "T-07b" {
+	if r := CheckDenied(fakeProc{}, denied, listDenied, `C:\D`); !r.Pass || r.Test != "T-07b" || !strings.Contains(r.Detail, "[ran as S-1-5-21-1, Medium integrity]") {
 		t.Fatal(r.Line())
 	}
-	if r := CheckDenied(el(true, nil), denied, listDenied, `C:\D`); r.Pass || !strings.Contains(r.Detail, "normal (not elevated)") {
-		t.Fatal(r.Line())
-	}
-	if r := CheckDenied(el(false, errors.New("x")), denied, listDenied, `C:\D`); r.Pass || !strings.Contains(r.Detail, "cannot tell") {
-		t.Fatal(r.Line())
+	for _, c := range []struct {
+		p    fakeProc
+		want string
+	}{
+		{fakeProc{elevated: true}, "normal (not elevated)"},
+		{fakeProc{elErr: errors.New("x")}, "cannot tell"},
+		{fakeProc{idErr: errors.New("x")}, "which account"},
+		{fakeProc{il: "Low"}, "Medium integrity"},
+	} {
+		if r := CheckDenied(c.p, denied, listDenied, `C:\D`); r.Pass || !strings.Contains(r.Detail, c.want) {
+			t.Fatal(r.Line())
+		}
 	}
 	opened := func(string) error { return nil }
 	mixed := func(d string) ([]string, error) {
@@ -166,7 +172,7 @@ func TestCheckDenied(t *testing.T) {
 		}
 		return []string{"x"}, nil
 	}
-	r := CheckDenied(el(false, nil), opened, mixed, `C:\D`)
+	r := CheckDenied(fakeProc{}, opened, mixed, `C:\D`)
 	for _, w := range []string{"4 problem(s)", "config.json succeeded", "not found", "another reason: disk on fire", `list captures\ succeeded`} {
 		if r.Pass || !strings.Contains(r.Detail, w) {
 			t.Fatalf("%q missing: %s", w, r.Line())

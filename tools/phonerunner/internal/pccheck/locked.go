@@ -56,10 +56,15 @@ const QueryLimited = 0x1000
 // so its answer would prove nothing about agents.
 var ErrElevated = errors.New("run this check from a normal (not elevated) window: admin rights bypass the lock-down")
 
-// Proc is the platform part.
-type Proc interface {
+// Self says who the running check is.
+type Self interface {
 	Elevated() (bool, error)
 	Identity() (sid, integrity string, err error) // who this check runs as
+}
+
+// Proc is the platform part.
+type Proc interface {
+	Self
 	FindAll(exe string) ([]uint32, error)
 	Threads(pid uint32) ([]uint32, error)
 	Open(pid, access uint32) error       // nil if the open succeeded

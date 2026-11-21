@@ -18,6 +18,12 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, capture.New()))
 }
 
+// reader returns c's screen-text reader when it has one.
+func reader(c capture.Capturer) capture.TextReader {
+	r, _ := c.(capture.TextReader)
+	return r
+}
+
 func run(args []string, out, errw interface{ Write([]byte) (int, error) }, c capture.Capturer) int {
 	fs := flag.NewFlagSet("phonerunner-session", flag.ContinueOnError)
 	fs.SetOutput(errw)
@@ -38,9 +44,13 @@ func run(args []string, out, errw interface{ Write([]byte) (int, error) }, c cap
 		ctx, cancel = context.WithTimeout(ctx, *maxRun)
 		defer cancel()
 	}
-	err = capture.Loop(ctx, c, cfg.DenyRules,
-		time.Duration(cfg.CaptureTextSeconds)*time.Second,
-		time.Duration(cfg.CaptureShotSeconds)*time.Second, out, time.Now)
+	err = capture.Loop(ctx, c, capture.LoopConfig{
+		Rules:           cfg.DenyRules,
+		TextEvery:       time.Duration(cfg.CaptureTextSeconds) * time.Second,
+		ShotEvery:       time.Duration(cfg.CaptureShotSeconds) * time.Second,
+		ScreenTextEvery: time.Duration(cfg.ScreenTextSeconds) * time.Second,
+		Reader:          reader(c),
+	}, out, time.Now)
 	if err != nil {
 		fmt.Fprintln(errw, "FAIL", err)
 		return 1

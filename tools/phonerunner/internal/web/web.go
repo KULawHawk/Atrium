@@ -35,7 +35,8 @@ type Setting struct {
 // setting needs the desk for now (the phone-side switch arrives with the passkey).
 func Settings(c config.Config) []Setting {
 	return []Setting{
-		{"Screen text every (seconds)", c.CaptureTextSeconds, "How often the tool notes which window is in front of the PC and whether it is locked."},
+		{"Front-window check every (seconds)", c.CaptureTextSeconds, "How often the tool notes which window is in front of the PC and whether it is locked."},
+		{"Screen text every (seconds)", c.ScreenTextSeconds, "How often the tool reads the words in the front window (Windows accessibility). 0 means off: it stays off until the PC test (T-10) shows it works on your PC. Paused on key, security, password and patient windows; shown on this page only, never copied to the share."},
 		{"Screenshot every (seconds)", c.CaptureShotSeconds, "How often the tool takes a picture of the PC screen. A picture is only kept when the screen changed."},
 		{"Pictures copied to the share", false, "Off until the picture filter is built (Decision 266 = A: copied only after key and patient blackout; built last). Until then pictures stay in an admin-only folder on the PC and on your phone."},
 		{"Pause pictures on", len(c.DenyRules), "Number of window rules (key pages, Windows security screens, password managers, patient-mode windows, titles with a birth date or record number) that stop pictures and hide the window title while that window is in front. Only the FRONT window is checked: a key page or patient file in a side window or on a second monitor is still in the picture."},

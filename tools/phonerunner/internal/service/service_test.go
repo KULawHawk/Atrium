@@ -218,3 +218,27 @@ func TestLogsHeldFromStatusFile(t *testing.T) {
 		t.Fatalf("may_copy log not passed through: %+v", file.Logs[1])
 	}
 }
+
+func TestScreenTextIngest(t *testing.T) {
+	s, st, _, clock := setup(t)
+	ctx := context.Background()
+	s.Ingest(ctx, capture.Frame{Type: "text", At: *clock, Window: capture.Window{Title: "PowerShell"}, Lines: []string{"PASS 3/92", "token=abc123"}})
+	page := s.Refresh(ctx)
+	if len(page.Session.ScreenText) != 2 || page.Session.ScreenText[0] != "PASS 3/92" || strings.Contains(page.Session.ScreenText[1], "abc123") {
+		t.Fatalf("%+v", page.Session.ScreenText)
+	}
+	b, _ := os.ReadFile(filepath.Join(st.Root(), "status.json"))
+	if strings.Contains(string(b), "PASS 3/92") {
+		t.Fatal("screen text in the copied status file")
+	}
+	// A session process that sent text for a denied window: dropped.
+	s.Ingest(ctx, capture.Frame{Type: "text", At: *clock, Window: capture.Window{Title: "Smith_John_DOB_1980-02-03.pdf"}, Lines: []string{"patient notes"}})
+	if got := s.Refresh(ctx).Session; len(got.ScreenText) != 0 || got.TextPaused != "paused: patient-mode window" {
+		t.Fatalf("%+v", got)
+	}
+	// Paused text frame clears old text.
+	s.Ingest(ctx, capture.Frame{Type: "text", At: *clock, Window: capture.Window{Title: "x"}, Paused: "the PC is locked", Locked: true})
+	if got := s.Refresh(ctx).Session; len(got.ScreenText) != 0 || got.TextPaused == "" {
+		t.Fatalf("%+v", got)
+	}
+}

@@ -114,3 +114,18 @@ func TestTitleRegexRules(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestScreenTextSeconds(t *testing.T) {
+	c := Defaults()
+	if c.ScreenTextSeconds != 0 {
+		t.Fatal("screen text must default off")
+	}
+	c.ScreenTextSeconds = 1
+	if err := c.Validate(); err == nil {
+		t.Fatal("1 s accepted")
+	}
+	c.ScreenTextSeconds = 10
+	if err := c.Validate(); err != nil || c.SessionSettings().ScreenTextSeconds != 10 {
+		t.Fatal(err)
+	}
+}

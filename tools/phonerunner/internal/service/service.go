@@ -8,6 +8,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -53,6 +54,9 @@ type Session struct {
 	Locked     bool           `json:"locked"`
 	ShotPaused string         `json:"shot_paused,omitempty"`
 	LastShotAt time.Time      `json:"last_shot_at"`
+	ScreenText []string       `json:"screen_text"`
+	TextAt     time.Time      `json:"text_at"`
+	TextPaused string         `json:"text_paused,omitempty"`
 	LastError  string         `json:"last_error,omitempty"`
 	Note       string         `json:"note"`
 }
@@ -108,8 +112,8 @@ func (s *Service) Ingest(ctx context.Context, f capture.Frame) {
 	// Second check here, not only in the session process (which runs as Jake).
 	if reason := capture.Denied(f.Window, s.cfg.DenyRules); reason != "" {
 		f.Window = capture.Withhold(f.Window, reason)
-		if f.Type == "shot" && len(f.PNG) > 0 {
-			f.PNG = nil
+		if (f.Type == "shot" && len(f.PNG) > 0) || (f.Type == "text" && len(f.Lines) > 0) {
+			f.PNG, f.Lines = nil, nil
 			f.Paused = "paused: " + reason
 		}
 	}
@@ -128,6 +132,16 @@ func (s *Service) Ingest(ctx context.Context, f capture.Frame) {
 		s.log("pc.unlocked", nil)
 	}
 	s.wasLocked = f.Locked
+	if f.Type == "text" {
+		s.sess.TextAt = f.At
+		s.sess.TextPaused = f.Paused
+		s.sess.ScreenText = []string{}
+		if f.Paused == "" && !f.Locked && !strings.HasPrefix(f.Window.Title, capture.WithheldPrefix) {
+			lines, _ := redact.Lines(capture.ClampLines(f.Lines))
+			s.sess.ScreenText = lines
+		}
+		return
+	}
 	if f.Type != "shot" {
 		return
 	}
@@ -187,6 +201,7 @@ func (s *Service) Refresh(ctx context.Context) Status {
 	s.copyLag = lag
 	file := st
 	file.Session.Window = capture.Window{Title: TitleHold}
+	file.Session.ScreenText = []string{TitleHold}
 	file.Logs = make([]LogTail, len(st.Logs))
 	for i, lt := range st.Logs {
 		if !s.cfg.WatchedLogs[i].MayCopy {

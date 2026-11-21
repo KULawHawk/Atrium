@@ -40,7 +40,7 @@ func run(t *testing.T, f *fake, d time.Duration) []Frame {
 	var buf syncBuf
 	ctx, cancel := context.WithTimeout(context.Background(), d)
 	defer cancel()
-	if err := Loop(ctx, f, config.DefaultDenyRules(), 5*time.Millisecond, 7*time.Millisecond, &buf, time.Now); err != nil {
+	if err := Loop(ctx, f, LoopConfig{Rules: config.DefaultDenyRules(), TextEvery: 5 * time.Millisecond, ShotEvery: 7 * time.Millisecond}, &buf, time.Now); err != nil {
 		t.Fatal(err)
 	}
 	var frames []Frame
@@ -124,11 +124,11 @@ func TestLoopPipeClosed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	// window tick fails first
-	if err := Loop(ctx, &fake{}, nil, time.Millisecond, time.Hour, &failW{}, time.Now); err == nil {
+	if err := Loop(ctx, &fake{}, LoopConfig{TextEvery: time.Millisecond, ShotEvery: time.Hour}, &failW{}, time.Now); err == nil {
 		t.Fatal("window write error not reported")
 	}
 	// shot tick fails first
-	if err := Loop(ctx, &fake{png: []byte("p")}, nil, time.Hour, time.Millisecond, &failW{}, time.Now); err == nil {
+	if err := Loop(ctx, &fake{png: []byte("p")}, LoopConfig{TextEvery: time.Hour, ShotEvery: time.Millisecond}, &failW{}, time.Now); err == nil {
 		t.Fatal("shot write error not reported")
 	}
 }
@@ -232,7 +232,7 @@ func TestPictureDiscardedWhenScreenChanges(t *testing.T) {
 		s := &switching{fake: fake{w: Window{Title: "Notepad"}}, after: after}
 		var buf syncBuf
 		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
-		_ = Loop(ctx, s, config.DefaultDenyRules(), time.Hour, 7*time.Millisecond, &buf, time.Now)
+		_ = Loop(ctx, s, LoopConfig{Rules: config.DefaultDenyRules(), TextEvery: time.Hour, ShotEvery: 7 * time.Millisecond}, &buf, time.Now)
 		cancel()
 		var frames []Frame
 		_ = Read(strings.NewReader(buf.String()), func(fr Frame) { frames = append(frames, fr) })
@@ -247,5 +247,142 @@ func TestPictureDiscardedWhenScreenChanges(t *testing.T) {
 				t.Fatal("denied title leaked on discard")
 			}
 		}
+	}
+}
+
+type reader struct {
+	lines []string
+	err   error
+	after func() // runs after each read (to change the window)
+}
+
+func (r *reader) ScreenText() ([]string, error) {
+	if r.after != nil {
+		r.after()
+	}
+	return r.lines, r.err
+}
+
+func runText(t *testing.T, f Capturer, r TextReader) []Frame {
+	t.Helper()
+	var buf syncBuf
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+	defer cancel()
+	lc := LoopConfig{Rules: config.DefaultDenyRules(), TextEvery: time.Hour, ShotEvery: time.Hour, ScreenTextEvery: 5 * time.Millisecond, Reader: r}
+	if err := Loop(ctx, f, lc, &buf, time.Now); err != nil {
+		t.Fatal(err)
+	}
+	var frames []Frame
+	_ = Read(strings.NewReader(buf.String()), func(fr Frame) { frames = append(frames, fr) })
+	return frames
+}
+
+func TestScreenText(t *testing.T) {
+	ok := runText(t, &fake{w: Window{Title: "PowerShell"}}, &reader{lines: []string{" PASS step 3 ", "", "done"}})
+	if count(ok, func(fr Frame) bool { return fr.Type == "text" && len(fr.Lines) == 2 && fr.Lines[0] == "PASS step 3" }) == 0 {
+		t.Fatalf("no text frames: %+v", ok)
+	}
+	denied := runText(t, &fake{w: Window{Title: "RunPod - API Keys"}}, &reader{lines: []string{"secret"}})
+	for _, fr := range denied {
+		if len(fr.Lines) > 0 || strings.Contains(fr.Window.Title, "API Keys") {
+			t.Fatalf("denied window text leaked: %+v", fr)
+		}
+	}
+	locked := runText(t, &fake{w: Window{Title: "x"}, locked: true}, &reader{lines: []string{"x"}})
+	if count(locked, func(fr Frame) bool { return fr.Paused == "the PC is locked" && len(fr.Lines) == 0 }) == 0 {
+		t.Fatal("locked text not paused")
+	}
+	if n := count(runText(t, &fake{w: Window{Title: "x"}}, &reader{err: errors.New("uia")}), func(fr Frame) bool { return fr.Type == "error" && strings.Contains(fr.Error, "screen text") }); n == 0 {
+		t.Fatal("reader error not reported")
+	}
+	if n := count(runText(t, &fake{wErr: errors.New("fg")}, &reader{}), func(fr Frame) bool { return fr.Type == "error" }); n == 0 {
+		t.Fatal("state error not reported")
+	}
+	for _, next := range []Window{{Title: "other"}, {Title: "RunPod - API Keys"}} {
+		next := next
+		f := &fake{w: Window{Title: "PowerShell"}}
+		r := &reader{lines: []string{"x"}}
+		r.after = func() { // every read sees the window change
+			f.mu.Lock()
+			if f.w == next {
+				f.w = Window{Title: "PowerShell"}
+			} else {
+				f.w = next
+			}
+			f.mu.Unlock()
+		}
+		frames := runText(t, f, r)
+		for _, fr := range frames {
+			if len(fr.Lines) > 0 {
+				t.Fatalf("text kept after window changed: %+v", fr)
+			}
+			if strings.Contains(fr.Window.Title, "API Keys") {
+				t.Fatalf("denied title leaked: %+v", fr)
+			}
+		}
+	}
+	// Off when no reader or zero interval.
+	var buf syncBuf
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_ = Loop(ctx, &fake{}, LoopConfig{TextEvery: time.Hour, ShotEvery: time.Hour, ScreenTextEvery: time.Millisecond}, &buf, time.Now)
+	if buf.String() != "" {
+		t.Fatal("text sent with no reader")
+	}
+	// Pipe failure on a text frame.
+	ctx2, cancel2 := context.WithTimeout(context.Background(), time.Second)
+	defer cancel2()
+	if err := Loop(ctx2, &fake{}, LoopConfig{TextEvery: time.Hour, ShotEvery: time.Hour, ScreenTextEvery: time.Millisecond, Reader: &reader{}}, &failW{}, time.Now); err == nil {
+		t.Fatal("text write error not reported")
+	}
+}
+
+func TestClampLines(t *testing.T) {
+	many := make([]string, MaxTextLines+5)
+	for i := range many {
+		many[i] = "l"
+	}
+	if len(ClampLines(many)) != MaxTextLines {
+		t.Fatal("count not capped")
+	}
+	long := ClampLines([]string{strings.Repeat("é", MaxTextLineLen+3)})
+	if len([]rune(long[0])) != MaxTextLineLen+1 {
+		t.Fatal("length not capped by letters")
+	}
+}
+
+type slowReader struct {
+	release chan struct{}
+	err     error
+}
+
+func (s slowReader) ScreenText() ([]string, error) {
+	<-s.release
+	return []string{"late"}, s.err
+}
+
+func TestWithTimeout(t *testing.T) {
+	sr := slowReader{release: make(chan struct{})}
+	r := WithTimeout(sr, 20*time.Millisecond)
+	if _, err := r.ScreenText(); !errors.Is(err, ErrReadTimeout) {
+		t.Fatal(err)
+	}
+	if _, err := r.ScreenText(); !errors.Is(err, ErrReadBusy) {
+		t.Fatal(err)
+	}
+	close(sr.release)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		l, err := r.ScreenText()
+		if err == nil {
+			if len(l) != 1 || l[0] != "late" {
+				t.Fatal(l)
+			}
+			break
+		}
+		if !errors.Is(err, ErrReadBusy) || time.Now().After(deadline) {
+			t.Fatal(err)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }

@@ -64,7 +64,7 @@ func run(args []string, out io.Writer, d deps) int {
 	case "perms":
 		r = pccheck.RunPerms(d.proc.Elevated, d.read, d.list, *programDir, *storeDir)
 	case "denied":
-		r = pccheck.CheckDenied(d.proc.Elevated, openClose, d.list, *storeDir)
+		r = pccheck.CheckDenied(d.proc, openClose, d.list, *storeDir)
 	case "locked":
 		r = pccheck.CheckLocked(d.proc, "phonerunner-session.exe")
 	default:
