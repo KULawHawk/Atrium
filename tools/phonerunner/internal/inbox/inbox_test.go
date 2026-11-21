@@ -1,6 +1,8 @@
 package inbox
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -83,9 +85,9 @@ func TestBadges(t *testing.T) {
 	if !has(it.Badges, "REMOTE CODE") {
 		t.Fatal("a long base64-looking blob must be flagged")
 	}
-	// Binary files are not scanned.
-	it, _ = Load(item(t, map[string]string{"item.json": goodHeader, "run.ps1": "ok", "x.bin": "iex"}))
-	if len(it.Badges) != 0 {
+	// Files the scan cannot read are not scanned, and are named in a badge.
+	it, _ = Load(item(t, map[string]string{"item.json": goodHeader, "run.ps1": "ok", "x.dll": "iex", "y.js": "eval("}))
+	if len(it.Badges) != 1 || it.Badges[0] != "contains files the scan cannot read: x.dll, y.js" {
 		t.Fatal(it.Badges)
 	}
 }
@@ -107,6 +109,10 @@ func TestProblems(t *testing.T) {
 		if err != nil || it.Runnable() || !has(it.Problems, c.want) {
 			t.Errorf("%v: %v %v", c.files, err, it.Problems)
 		}
+	}
+	// A file name the copy could not handle safely.
+	if it, _ := Load(item(t, map[string]string{"item.json": goodHeader, "run.ps1": "x", "a:b": "y"})); !has(it.Problems, "a:b: file name") {
+		t.Fatal(it.Problems)
 	}
 	// Bad folder name.
 	d := filepath.Join(t.TempDir(), "Bad Name")
@@ -193,6 +199,19 @@ func TestCopyApproved(t *testing.T) {
 	if err := CopyApproved(src, dst, it.Files, it.ManifestSHA); err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Fatal(err)
 	}
+	// A list that is not the approved manifest: a file left out, same sha claimed.
+	// Only the up-front ManifestSHA check catches this one.
+	if err := CopyApproved(src, filepath.Join(store, "x0"), it.Files[:2], it.ManifestSHA); !errors.Is(err, ErrCopyMismatch) {
+		t.Fatal(err)
+	}
+	// A crafted path is refused before anything is read or written.
+	evil := append([]File{{Rel: "../outside", SHA256: it.Files[0].SHA256}}, it.Files...)
+	if err := CopyApproved(src, filepath.Join(store, "x00"), evil, ManifestSHA(evil)); !errors.Is(err, ErrBadPath) {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(store, "x00")); err == nil {
+		t.Fatal("nothing may be written for a bad path")
+	}
 	// Manifest that does not match its own files.
 	if err := CopyApproved(src, filepath.Join(store, "x1"), it.Files, "00"); !errors.Is(err, ErrCopyMismatch) {
 		t.Fatal(err)
@@ -268,5 +287,36 @@ func TestChangesAndDiff(t *testing.T) {
 	long := strings.Repeat("l\n", MaxDiffLines+1)
 	if d := LineDiff(long, "x"); len(d) != 1 || !strings.Contains(d[0], "too long") {
 		t.Fatal(d)
+	}
+}
+
+func TestSafeRel(t *testing.T) {
+	for _, ok := range []string{"run.ps1", "lib/h.ps1", "a/b/c.txt", "..x", "x..y"} {
+		if err := SafeRel(ok); err != nil {
+			t.Errorf("%q: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"", "/abs", "C:/x", "C:x", `a\b`, "..", "../x", "a/../b", "a//b", "./a", "a/.", "a/", "\\\\server\\share"} {
+		if err := SafeRel(bad); !errors.Is(err, ErrBadPath) {
+			t.Errorf("%q must be refused", bad)
+		}
+	}
+}
+
+func TestManifestForm(t *testing.T) {
+	files := []File{
+		{Rel: "item.json", SHA256: strings.Repeat("a", 64)},
+		{Rel: "run.ps1", SHA256: strings.Repeat("b", 64)},
+	}
+	// Golden: sha256 of exactly what sha256sum prints for these two lines.
+	text := strings.Repeat("a", 64) + "  item.json\n" + strings.Repeat("b", 64) + "  run.ps1\n"
+	sum := sha256.Sum256([]byte(text))
+	if ManifestSHA(files) != hex.EncodeToString(sum[:]) {
+		t.Fatal("manifest text form changed")
+	}
+	// Renaming a file (same bytes) changes the manifest.
+	renamed := []File{files[0], {Rel: "go.ps1", SHA256: files[1].SHA256}}
+	if ManifestSHA(renamed) == ManifestSHA(files) {
+		t.Fatal("a rename must change the manifest")
 	}
 }

@@ -117,6 +117,10 @@ func Load(dir string) (Item, error) {
 		if d.IsDir() {
 			return nil
 		}
+		if SafeRel(rel) != nil {
+			it.Problems = append(it.Problems, rel+": file name must not contain a backslash or colon")
+			return nil
+		}
 		rels = append(rels, rel)
 		return nil
 	})
@@ -129,6 +133,7 @@ func Load(dir string) (Item, error) {
 		rels = rels[:MaxFiles]
 	}
 	seen := map[string]bool{}
+	var unread []string
 	for _, rel := range rels {
 		b, err := readCapped(filepath.Join(dir, filepath.FromSlash(rel)))
 		if err != nil {
@@ -137,7 +142,9 @@ func Load(dir string) (Item, error) {
 		}
 		h := sha256.Sum256(b)
 		it.Files = append(it.Files, File{Rel: rel, SHA256: hex.EncodeToString(h[:]), Size: int64(len(b))})
-		if textExt[strings.ToLower(filepath.Ext(rel))] {
+		if !textExt[strings.ToLower(filepath.Ext(rel))] {
+			unread = append(unread, rel)
+		} else {
 			for _, r := range badgeRules {
 				if !seen[r.name] && r.re.Match(b) {
 					seen[r.name] = true
@@ -152,6 +159,9 @@ func Load(dir string) (Item, error) {
 				it.Problems = append(it.Problems, "item.json: "+err.Error())
 			}
 		}
+	}
+	if len(unread) > 0 {
+		it.Badges = append(it.Badges, "contains files the scan cannot read: "+strings.Join(unread, ", "))
 	}
 	it.checkHeader()
 	it.ManifestSHA = ManifestSHA(it.Files)
@@ -241,6 +251,23 @@ func List(inbox string) ([]Item, error) {
 	return out, nil
 }
 
+// ErrBadPath means a manifest path could point outside the item folder.
+var ErrBadPath = errors.New("a file path in the manifest is not a plain path inside the item")
+
+// SafeRel accepts only a plain relative path inside the item: forward slashes,
+// no absolute or volume prefix, no "..", ".", empty segment, backslash or colon.
+func SafeRel(rel string) error {
+	if rel == "" || strings.ContainsAny(rel, "\\:") || strings.HasPrefix(rel, "/") {
+		return fmt.Errorf("%w: %q", ErrBadPath, rel)
+	}
+	for _, seg := range strings.Split(rel, "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return fmt.Errorf("%w: %q", ErrBadPath, rel)
+		}
+	}
+	return nil
+}
+
 // ErrCopyMismatch means a file changed between the tap and the copy.
 var ErrCopyMismatch = errors.New("a file changed after you approved it; nothing was copied or run")
 
@@ -249,9 +276,17 @@ var ErrCopyMismatch = errors.New("a file changed after you approved it; nothing 
 // manifest. On any mismatch dst is left incomplete and an error is returned;
 // the caller must not run it. It hashes the bytes it writes, not the source
 // afterwards, so what runs is exactly what was approved.
+//
+// approved must be the service's own Load snapshot taken when the tap began,
+// never a list sent back by the page.
 func CopyApproved(src, dst string, approved []File, approvedSHA string) error {
 	if ManifestSHA(approved) != approvedSHA {
 		return ErrCopyMismatch
+	}
+	for _, f := range approved {
+		if err := SafeRel(f.Rel); err != nil {
+			return err
+		}
 	}
 	if _, err := os.Stat(dst); err == nil {
 		return fmt.Errorf("inbox: %s already exists", dst)
