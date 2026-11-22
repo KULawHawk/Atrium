@@ -393,6 +393,12 @@ def test_engine_file_linux_markers_must_be_dropped_on_windows(tmp_path, monkeypa
     m.side_envs(rep, part, tmp_path / "src", tmp_path / "envs", tmp_path / "l", Path("py"))
     out = capsys.readouterr().out
     assert rep.fails == 1 and "odd-pkg" in out and "Linux-only" in out
+    # the other direction: the rule drops a package on Windows that the spoke's file installs there
+    m.CFG_LOCK.update({"linux_only": "^(nvidia-.*|triton|odd-pkg|six)$"})
+    rep = m.Report()
+    m.side_envs(rep, part, tmp_path / "src", tmp_path / "envs", tmp_path / "l", Path("py"))
+    out = capsys.readouterr().out
+    assert rep.fails == 1 and "drops ['six']" in out
 
 
 def test_locutus_rulings_plugin_is_in_every_part_that_loads_it() -> None:

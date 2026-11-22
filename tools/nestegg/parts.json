@@ -7,7 +7,7 @@
   },
   "lock": {
     "about": "Known-good lists and measured hashes in locks/ (copied byte for byte from the package accounting thread's backup; locks/SOURCE_SHA256.txt has the source hashes). One set of lists: changes are made there and copied here.",
-    "linux_only": "^(nvidia-.*|triton)$",
+    "linux_only": "^(nvidia-.*|cuda-.*|triton)$",
     "cuda_local": "^cu[0-9]+$",
     "windows_extras": {"colorama": {"version": "0.4.6", "when": ["click", "tqdm", "colorlog"], "why": "these use colorama only on Windows, so a list measured on Linux leaves it out; pip check on Windows names anything else"}}
   },

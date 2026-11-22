@@ -506,6 +506,11 @@ def side_envs(rep: Report, part: dict, src: Path, envs: Path, log: Path, py: Pat
                 rep.row("FAIL", f"{label} not locked", f"{se['engine_file']} marks {bad} Linux-only; the installer's "
                         f"linux_only rule ({CFG_LOCK['linux_only']}) does not leave them out on Windows")
                 return
+            elif extra := sorted(n for n in own if re.match(CFG_LOCK["linux_only"], n) and n not in engine_linux_only(ef)):
+                # the installer would skip them on Windows while the spoke's own setup installs them there
+                rep.row("FAIL", f"{label} not locked", f"the installer's linux_only rule drops {extra} on Windows, but "
+                        f"{se['engine_file']} does not mark them Linux-only")
+                return
             else:
                 rep.row("INFO", label, f"built from {se['engine_file']} (equals the saved list {lst}; files hash-checked)")
         missing = [p for p in se["packages"] if pins.get(_req_name(p)) != p.split("==")[1]]
