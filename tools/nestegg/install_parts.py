@@ -197,6 +197,9 @@ def lock_reqs(pins: dict[str, str], cfg: dict, win: bool, sums: dict) -> tuple[l
             if n not in pins and any(t in pins for t in x["when"]):
                 pins[n] = x["version"]
     lines, probs = [], []
+    locals_ = sorted({v.partition("+")[2] for v in pins.values() if re.match(lk["cuda_local"], v.partition("+")[2])})
+    for tag in locals_:  # +cu124 files live only on PyTorch's own index; the hash still decides what is accepted
+        lines.append(f"--extra-index-url https://download.pytorch.org/whl/{tag}")
     for n, v in sorted(pins.items()):
         hs = sums.get((n, v))
         if hs:
@@ -299,7 +302,8 @@ def scan_imports(dirs: list[Path], local: set[str], skip: tuple[str, ...] = (),
         base = d / "src" if (d / "src").is_dir() else d
         pkgs += [c.name for c in base.iterdir() if c.is_dir() and (c / "__init__.py").exists()
                  and c.name not in ("tests", "test", "scripts", "docs")]
-        for f in d.rglob("*.py"):
+        # a src-layout distribution installs only src/: tools/ and other loose scripts next to it never reach the env
+        for f in base.rglob("*.py"):
             rel = f.relative_to(d).parts
             local.add(f.stem)  # a flat-script part imports its sibling files by name
             if any(p in ("tests", "test", "docs", "scripts") or p.startswith(".") for p in rel) or f.name.startswith("test_") \

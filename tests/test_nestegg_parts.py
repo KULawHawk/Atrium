@@ -276,6 +276,17 @@ def test_not_reached_vendored_modules_are_skipped_and_printed(tmp_path, capsys) 
     assert 'or any(mi.name == k or mi.name.startswith(k + ".") for k in skip)' in m.PROBE  # submodule walk skips it too
 
 
+def test_src_layout_scans_only_what_is_installed(tmp_path) -> None:
+    m = _mod()
+    d = tmp_path / "conclave_vendor_locutus"
+    (d / "src" / "locutus").mkdir(parents=True)
+    (d / "src" / "locutus" / "__init__.py").write_text("import jsonschema\n")
+    (d / "tools").mkdir()
+    (d / "tools" / "driver.py").write_text("import reportlab\n")  # loose script, not in the installed package
+    _, third = m.scan_imports([d], set())
+    assert third == ["jsonschema"]
+
+
 def test_locutus_rulings_plugin_is_in_every_part_that_loads_it() -> None:
     # entry-point plugin: ReviewConsole wraps every Console with it, the Bridge refuses repeats without it
     parts = {p["name"]: p for p in json.loads((NESTEGG / "parts.json").read_text(encoding="utf-8"))["parts"]}
@@ -306,6 +317,9 @@ def test_cuda_build_from_a_pod_freeze(tmp_path, monkeypatch) -> None:
     assert probs == [] and lines == ["torch==2.6.0 --hash=sha256:aa"]
     _, probs = m.part_lock(p, _cfg(), tmp_path, False, True, _sums())  # Linux: the +cu124 file itself must be hashed
     assert probs == ["torch==2.6.0+cu124 has no measured hash for Linux"]
+    sums = {**_sums(), ("torch", "2.6.0+cu124"): ["cc"]}
+    lines, probs = m.part_lock(p, _cfg(), tmp_path, False, True, sums)  # Linux, hashed: PyTorch's index, hash-checked
+    assert probs == [] and lines == ["--extra-index-url https://download.pytorch.org/whl/cu124", "torch==2.6.0+cu124 --hash=sha256:cc"]
 
 
 def test_linux_cuda_hashes_come_from_the_saved_cu124_list() -> None:
