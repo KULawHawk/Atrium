@@ -48,13 +48,16 @@ def test_report_items_are_carried() -> None:
     assert any(m["step"] == "htrlens_models" for m in by["HtrLens"]["models"])
 
 
-def test_dry_run_passes_and_writes_nothing(tmp_path: Path, capsys) -> None:
+def test_dry_run_writes_nothing_and_never_passes_an_unlocked_part(tmp_path: Path, capsys) -> None:
     for r in ("Conclave", "locutus", "sequoia", "obsidian", "atrium"):
         (tmp_path / "src" / r).mkdir(parents=True)
     rc = _mod().main(["--src", str(tmp_path / "src"), "--envs", str(tmp_path / "envs"), "--dry-run"])
-    assert rc == 0 and not (tmp_path / "envs").exists()
+    assert not (tmp_path / "envs").exists()
     out = capsys.readouterr().out
-    assert out.count("TODO ") == len(PARTS["parts"]) and out.rstrip().endswith("NESTEGG-PARTS: PASS")
+    assert out.count("TODO ") == len(PARTS["parts"])
+    fails = [ln for ln in out.splitlines() if ln.startswith("FAIL ")]
+    assert fails and all(" not locked " in ln for ln in fails)  # launcher + sequoia_bridge have no list yet
+    assert rc == 1 and out.rstrip().endswith(f"NESTEGG-PARTS: FAIL {len(fails)}")
 
 
 def test_missing_source_and_unknown_part_fail_loudly(tmp_path: Path, capsys) -> None:
@@ -101,3 +104,124 @@ def test_no_secret_reads() -> None:
     src = (NESTEGG / "install_parts.py").read_text(encoding="utf-8")
     for bad in ("keyring.get", "CredRead", "ANTHROPIC_API_KEY", "RUNPOD_API_KEY", "HF_TOKEN", "setx", "winreg"):
         assert bad not in src, bad
+
+
+# ---------------------------------------------------------------- exact-version locks
+LOCKS = NESTEGG / "locks"
+
+
+def test_lock_copy_is_byte_identical_to_its_recorded_source() -> None:
+    import hashlib
+    for ln in (LOCKS / "SOURCE_SHA256.txt").read_text(encoding="utf-8").splitlines():
+        h, rel = ln.split()
+        assert hashlib.sha256((LOCKS / rel).read_bytes()).hexdigest() == h, rel
+
+
+def test_every_list_belongs_to_a_part() -> None:
+    names = {f"{p['name']}_py{p['python']}.txt" for p in PARTS["parts"]} | {"votingengine_beta_py3.13.txt"}  # betacal hold (PA-3)
+    for f in (LOCKS / "lists").iterdir():
+        assert f.name in names, f.name
+
+
+def _cfg():
+    return {"lock": PARTS["lock"], "torch": {"t": {"pins": ["torch==2.6.0"]}},
+            "gate3_constraints": {"file": "g.txt", "names": ["numpy"]}}
+
+
+def _sums():
+    return {("torch", "2.6.0"): ["aa"], ("click", "8.5.1"): ["bb"], ("colorama", "0.4.6"): ["cc"],
+            ("nvidia-cublas-cu12", "12.4.5.8"): ["dd"], ("numpy", "2.4.4"): ["ee"]}
+
+
+def _part(tmp_path, monkeypatch, body: str, **kw):
+    m = _mod()
+    (tmp_path / "lists").mkdir(exist_ok=True)
+    (tmp_path / "lists" / "P_py3.13.txt").write_text(body, encoding="utf-8")
+    monkeypatch.setattr(m, "LOCKS", tmp_path)
+    return m, dict({"name": "P", "python": "3.13"}, **kw)
+
+
+def test_lock_lines_carry_every_hash_and_linux_keeps_nvidia(tmp_path, monkeypatch) -> None:
+    m, p = _part(tmp_path, monkeypatch, "torch==2.6.0\nclick==8.5.1\nnvidia-cublas-cu12==12.4.5.8\n", torch="t")
+    lines, probs = m.part_lock(p, _cfg(), tmp_path, False, True, _sums())
+    assert probs == [] and lines == ["click==8.5.1 --hash=sha256:bb", "nvidia-cublas-cu12==12.4.5.8 --hash=sha256:dd",
+                                     "torch==2.6.0 --hash=sha256:aa"]
+
+
+def test_windows_drops_linux_only_adds_colorama_and_refuses_cuda_torch(tmp_path, monkeypatch) -> None:
+    m, p = _part(tmp_path, monkeypatch, "torch==2.6.0\nclick==8.5.1\nnvidia-cublas-cu12==12.4.5.8\n", torch="t")
+    lines, probs = m.part_lock(p, _cfg(), tmp_path, True, False, _sums())
+    assert probs == [] and [x.split()[0] for x in lines] == ["click==8.5.1", "colorama==0.4.6", "torch==2.6.0"]
+    _, probs = m.part_lock(p, _cfg(), tmp_path, True, True, _sums())
+    assert probs == ["CUDA torch for Windows has no measured hash yet (only the CPU build is measured)"]
+
+
+def test_unlocked_cases_are_named(tmp_path, monkeypatch) -> None:
+    m, p = _part(tmp_path, monkeypatch, "torch==2.5.0\nrequests==2.0\nnumpy==2.5.5\n", torch="t", add=["six==1.17.0"], gate3=True)
+    (tmp_path / "g.txt").write_text("numpy==2.4.4\n", encoding="utf-8")
+    _, probs = m.part_lock(p, _cfg(), tmp_path, False, False, _sums())
+    assert "parts.json adds six==1.17.0, the known-good list has nothing" in probs
+    assert "parts.json pins torch==2.6.0, the known-good list has 2.5.0" in probs
+    assert "gate-3 constraint numpy==2.4.4, the known-good list has 2.5.5" in probs
+    assert "requests==2.0 has no measured hash for Linux" in probs
+    _, probs = m.part_lock(dict(p, name="Q"), _cfg(), tmp_path, False, False, _sums())
+    assert probs == ["no known-good list measured yet (locks/lists/Q_py3.13.txt)"]
+
+
+def test_unlocked_part_fails_and_is_never_installed(tmp_path: Path, capsys) -> None:
+    (tmp_path / "src" / "Conclave").mkdir(parents=True)
+    rc = _mod().main(["--src", str(tmp_path / "src"), "--envs", str(tmp_path / "envs"), "--only", "launcher"])
+    out = capsys.readouterr().out
+    assert rc == 1 and "FAIL  launcher not locked" in out and not (tmp_path / "envs").exists()
+
+
+def test_locked_install_uses_require_hashes_and_no_deps(tmp_path, monkeypatch) -> None:
+    m = _mod()
+    seen = []
+    monkeypatch.setattr(m, "run", lambda cmd, log, **k: seen.append([str(c) for c in cmd]) or 0)
+    assert m.locked_install(Path("py"), [], tmp_path / "l.txt", tmp_path / "x.log") == 0 and seen == []
+    m.locked_install(Path("py"), ["a==1 --hash=sha256:ff"], tmp_path / "l.txt", tmp_path / "x.log")
+    assert seen[0][:6] == ["py", "-m", "pip", "install", "--require-hashes", "--no-deps"]
+    assert (tmp_path / "l.txt").read_text(encoding="utf-8") == "a==1 --hash=sha256:ff\n"
+
+
+# ---------------------------------------------------------------- reviewer 2: unpinned and broken never PASS
+def _models(tmp_path, monkeypatch, model, rc=0):
+    m = _mod()
+    monkeypatch.setattr(m, "run", lambda *a, **k: rc)
+    rep = m.Report()
+    part = {"name": "P", "roots": ["spoke"], "models": [model]}
+    m.models(rep, part, tmp_path, tmp_path, tmp_path / "envs", Path("py"), tmp_path / "x.log")
+    return rep
+
+
+def test_every_unpinned_model_step_fails(tmp_path, monkeypatch, capsys) -> None:
+    for model in ({"step": "unpinned", "what": "w"}, {"step": "docling_download"}, {"step": "mineru_download"},
+                  {"step": "spoke_script", "script": "s.py", "unpinned": "revision main"}, {"step": "nonsense"}):
+        rep = _models(tmp_path, monkeypatch, model)
+        assert rep.fails == 1, model
+    assert "PASS" not in capsys.readouterr().out
+
+
+def test_pinned_spoke_script_passes_only_when_it_works(tmp_path, monkeypatch) -> None:
+    assert _models(tmp_path, monkeypatch, {"step": "spoke_script", "script": "s.py"}).fails == 0
+    assert _models(tmp_path, monkeypatch, {"step": "spoke_script", "script": "s.py"}, rc=1).fails == 1
+    assert _models(tmp_path, monkeypatch, {"step": "spoke_script", "script": "s.py", "expect": "missing.json"}).fails == 1
+
+
+def _probe(tmp_path, monkeypatch, stdout):
+    import subprocess
+    m = _mod()
+    monkeypatch.setattr(m, "scan_imports", lambda *a: (["pkg"], ["requests", "paddle"]))
+    monkeypatch.setattr(m.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout, ""))
+    rep = m.Report()
+    m.probe(rep, {"name": "P", "roots": ["spoke"], "probe_ignore": {"paddle": "why"}}, tmp_path, Path("py"), set(), tmp_path / "l")
+    return rep
+
+
+def test_probe_import_failures_are_fail_rows(tmp_path, monkeypatch, capsys) -> None:
+    rep = _probe(tmp_path, monkeypatch, '{"requests": "ModuleNotFoundError: No module named requests"}\n')
+    out = capsys.readouterr().out
+    assert rep.fails == 1 and "FAIL  P import" in out and "requests" in out
+    assert _probe(tmp_path, monkeypatch, "Traceback ...\n").fails == 1
+    assert _probe(tmp_path, monkeypatch, "{}\n").fails == 0

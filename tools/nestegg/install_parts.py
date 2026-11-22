@@ -6,6 +6,12 @@ in-repo closure, its torch pin, its side engines and its model files, and then a
 every module of the part plus every outside package its code names. Anything missing is a FAIL
 row naming it. Nothing is skipped quietly; a model file with no pin yet is a FAIL ("not pinned").
 
+Exact versions (coordinator 11/22, reading of the same rule): every outside package comes from the
+part's known-good list in locks/lists/ (measured by the package accounting thread) and is installed
+with --require-hashes against locks/SHA256SUMS_*.txt, then the part's own source with --no-deps,
+then `pip check`. A part with no measured list, or a package with no measured hash, is FAIL
+"not locked" and is not installed from the open index.
+
 Ported from the proven pod kit (POD_CALIB_GPU_v5.sh) to Windows and Linux.
 
   python -I install_parts.py --src <folder holding Conclave, locutus, sequoia, obsidian, atrium>
@@ -27,6 +33,7 @@ import tomllib
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+LOCKS = HERE / "locks"
 WIN = os.name == "nt"
 STD = set(sys.stdlib_module_names)
 
@@ -130,6 +137,92 @@ def closure(repo: Path, roots: list[str]) -> list[str]:
     return out
 
 
+# ---------------------------------------------------------------- exact-version locks (with hashes)
+def _dist_ver(fn: str) -> tuple[str, str]:
+    if fn.endswith(".whl"):
+        d, v = fn.split("-")[:2]
+    else:
+        d, v = re.sub(r"\.(tar\.gz|zip)$", "", fn).rsplit("-", 1)
+    return _norm(d), v
+
+
+def load_sums(win: bool) -> dict[tuple[str, str], list[str]]:
+    """(name, version) -> the measured sha256 values of the saved files for this platform."""
+    out: dict[tuple[str, str], list[str]] = {}
+    for f in ("SHA256SUMS_win_amd64.txt" if win else "SHA256SUMS_linux_x86_64.txt", "SHA256SUMS_sdist.txt"):
+        for ln in (LOCKS / f).read_text(encoding="utf-8").splitlines():
+            if ln.strip():
+                h, fn = ln.split()
+                out.setdefault(_dist_ver(fn), []).append(h)
+    return out
+
+
+def read_list(path: Path) -> dict[str, str] | None:
+    if not path.is_file():
+        return None
+    out = {}
+    for ln in path.read_text(encoding="utf-8").splitlines():
+        if "==" in ln and not ln.lstrip().startswith("#"):
+            n, v = ln.strip().split("==", 1)
+            out[_norm(n)] = v
+    return out
+
+
+def lock_reqs(pins: dict[str, str], cfg: dict, win: bool, sums: dict) -> tuple[list[str], list[str]]:
+    """Requirement lines with every measured hash, and the problems that make it 'not locked'."""
+    lk = cfg["lock"]
+    pins = dict(pins)
+    if win:
+        pins = {n: v for n, v in pins.items() if not re.match(lk["linux_only"], n)}
+        for n, x in lk["windows_extras"].items():
+            if n not in pins and any(t in pins for t in x["when"]):
+                pins[n] = x["version"]
+    lines, probs = [], []
+    for n, v in sorted(pins.items()):
+        hs = sums.get((n, v))
+        if hs:
+            lines.append(f"{n}=={v} " + " ".join(f"--hash=sha256:{h}" for h in sorted(set(hs))))
+        else:
+            probs.append(f"{n}=={v} has no measured hash for {'Windows' if win else 'Linux'}")
+    return lines, probs
+
+
+def part_lock(part: dict, cfg: dict, src: Path, win: bool, gpu: bool, sums: dict) -> tuple[list[str], list[str]]:
+    pins = read_list(LOCKS / "lists" / f"{part['name']}_py{part['python']}.txt")
+    if pins is None:
+        return [], [f"no known-good list measured yet (locks/lists/{part['name']}_py{part['python']}.txt)"]
+    probs = []
+    for a in part.get("add", []):
+        want = a.split("==")[1] if "==" in a else None
+        if _req_name(a) not in pins or (want and pins[_req_name(a)] != want):
+            probs.append(f"parts.json adds {a}, the known-good list has {pins.get(_req_name(a), 'nothing')}")
+    tor = cfg["torch"].get(part.get("torch", ""))
+    for t in tor["pins"] if tor else []:
+        n, v = t.split("==")
+        if pins.get(n) != v:
+            probs.append(f"parts.json pins {t}, the known-good list has {pins.get(n, 'nothing')}")
+    if win and gpu and "torch" in pins:
+        probs.append("CUDA torch for Windows has no measured hash yet (only the CPU build is measured)")
+    if part.get("gate3"):
+        f = src / cfg["gate3_constraints"]["file"]
+        names = {_norm(x) for x in cfg["gate3_constraints"]["names"]}
+        g = read_list(f)
+        if g is None:
+            probs.append(f"constraints file missing: {f}")
+        else:
+            probs += [f"gate-3 constraint {n}=={g[n]}, the known-good list has {pins.get(n, 'nothing')}"
+                      for n in sorted(names & set(g)) if pins.get(n) != g[n]]
+    lines, more = lock_reqs(pins, cfg, win, sums)
+    return lines, probs + more
+
+
+def locked_install(py: Path, lines: list[str], lockfile: Path, log: Path) -> int:
+    if not lines:  # a part with no outside packages (an empty known-good list)
+        return 0
+    lockfile.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return run([py, "-m", "pip", "install", "--require-hashes", "--no-deps", "-r", lockfile], log)
+
+
 # ---------------------------------------------------------------- what the code imports (for the probe)
 def scan_imports(dirs: list[Path], local: set[str], skip: tuple[str, ...] = ()) -> tuple[list[str], list[str]]:
     """Packages of the part, and every outside top-level module its non-test code imports."""
@@ -184,7 +277,8 @@ print(json.dumps(bad))
 
 
 # ---------------------------------------------------------------- one part
-def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: bool, gpu: bool, local: set[str]) -> None:
+def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: bool, gpu: bool, local: set[str],
+               sums: dict | None = None) -> None:
     name = part["name"]
     repo = src / part["repo"]
     env = envs / name
@@ -193,10 +287,15 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
         rep.row("FAIL", name, f"source folder missing: {repo}")
         return
     tor = cfg["torch"].get(part.get("torch", ""), None)
+    lines, probs = part_lock(part, cfg, src, WIN, gpu, sums if sums is not None else load_sums(WIN))
+    for p in probs:
+        rep.row("FAIL", f"{name} not locked", p)
     if dry:
         rep.row("TODO", name, f"Python {part['python']}, {' '.join(part['roots'])}"
                 + (f", {' '.join(tor['pins'])}" if tor else "") + (f", +{','.join(part.get('add', []))}" if part.get("add") else ""))
         return
+    if probs:
+        return  # never installed from the open index
     log.parent.mkdir(parents=True, exist_ok=True)
     need = part.get("free_gb", 5)
     if free_gb(envs) < need:
@@ -210,29 +309,22 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
         rep.row("FAIL", name, f"could not create the environment (see {log})")
         return
     py = env_python(env)
-    run([py, "-m", "pip", "install", "--upgrade", "pip"], log)
-    cons = envs / "_logs" / f"{name}.constraints.txt"
-    lines = list(tor["pins"]) if tor else []
-    if part.get("gate3"):
-        names = set(cfg["gate3_constraints"]["names"])
-        f = src / cfg["gate3_constraints"]["file"]
-        if not f.is_file():
-            rep.row("FAIL", name, f"constraints file missing: {f}")
-            return
-        lines += [ln for ln in f.read_text(encoding="utf-8").splitlines() if ln.split("==")[0].lower() in names]
-    cons.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    if tor:
-        idx = cfg["torch"]["index_gpu" if gpu else "index_cpu"]
-        if run([py, "-m", "pip", "install", *tor["pins"], "--index-url", idx], log):
-            rep.row("FAIL", name, f"torch install failed from {idx} (see {log})")
-            return
-    args = closure(repo, part["roots"]) + list(part.get("add", []))
+    if locked_install(py, lines, envs / "_logs" / f"{name}.lock.txt", log):
+        rep.row("FAIL", name, f"locked install failed (see {log})")
+        return
+    args = closure(repo, part["roots"])
     for r in part.get("add_repos", []):
         args += ["-e", str(src / r)]
-    if run([py, "-m", "pip", "install", "-c", cons, *args], log):
-        rep.row("FAIL", name, f"pip install failed (see {log})")
+    if run([py, "-m", "pip", "install", "--no-deps", *args], log):
+        rep.row("FAIL", name, f"installing the part's own source failed (see {log})")
         return
-    rep.row("PASS", name, "installed")
+    chk = subprocess.run([py, "-m", "pip", "check"], capture_output=True, text=True)
+    if chk.returncode:
+        for ln in (chk.stdout or chk.stderr).strip().splitlines():
+            rep.row("FAIL", f"{name} pip check", ln)
+        return
+    rep.row("PASS", name, f"installed {len(lines)} locked packages (hash-checked) + its own source; pip check clean")
+    rep.row("INFO", f"{name} build tools", "pip fetches the build backend for the part's own source (e.g. setuptools) at install time; not locked yet")
     side_envs(rep, part, src, envs, log, py)
     models(rep, part, src, repo, envs, py, log)  # before the probe: a model can be an importable package
     probe(rep, part, repo, py, local, log)
@@ -245,31 +337,11 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
 def side_envs(rep: Report, part: dict, src: Path, envs: Path, log: Path, py: Path) -> None:
     se = part.get("side_env")
     if se:
-        env = envs / f"_{se['name']}_cli"
-        base = base_python(se["python"])
-        if not base:
-            rep.row("FAIL", f"{part['name']} engine", f"Python {se['python']} not found")
-            return
-        if (not env_python(env).exists() and run(base + ["-m", "venv", env], log)) or \
-                run([env_python(env), "-m", "pip", "install", *se["packages"]], log):
-            rep.row("FAIL", f"{part['name']} engine", f"{' '.join(se['packages'])} did not install (see {log})")
-            return
-        exe = env_bin(env, se["check"][0])
-        ok = exe.exists() and run([exe, *se["check"][1:]], log) == 0
-        rep.row("PASS" if ok else "FAIL", f"{part['name']} engine", f"{se['check'][0]} {'runs' if ok else 'does not run'}")
-    sse = part.get("spoke_side_env")
-    if sse:
-        base = base_python(sse["python"])
-        script = src / part["repo"] / part["roots"][0].split("[")[0] / sse["script"]
-        if not base or not script.is_file():
-            rep.row("FAIL", f"{part['name']} side env", f"Python {sse['python']} or {script} missing")
-            return
-        exe = subprocess.run(base + ["-c", "import sys; print(sys.executable)"], capture_output=True, text=True).stdout.strip()
-        if WIN:
-            rc = run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-Python", exe], log)
-        else:  # the spoke ships a matching .sh recipe for Linux
-            rc = run(["bash", script.with_suffix(".sh"), "--python", exe], log)
-        rep.row("PASS" if rc == 0 else "FAIL", f"{part['name']} side env", "built by the spoke's own script" if rc == 0 else f"exit {rc} (see {log})")
+        rep.row("FAIL", f"{part['name']} engine not locked",
+                f"no known-good list for the {se['name']} engine ({' '.join(se['packages'])}) yet; not built from the open index")
+    if part.get("spoke_side_env"):
+        rep.row("FAIL", f"{part['name']} side env not locked",
+                "the spoke's own script installs from the open index without hashes; needs a known-good list and a hashed install")
 
 
 def probe(rep: Report, part: dict, repo: Path, py: Path, local: set[str], log: Path) -> None:
@@ -312,18 +384,25 @@ def models(rep: Report, part: dict, src: Path, repo: Path, envs: Path, py: Path,
             rc = run([py, m["script"], *args], log, cwd=spoke)
             exp = m.get("expect_abs", "").replace("{models}", str(mdir)) or (str(spoke / m["expect"]) if m.get("expect") else "")
             ok = rc == 0 and (not exp or Path(exp).is_file())
-            rep.row("PASS" if ok else "FAIL", label, f"{m['script']} {'done' if ok else 'failed'}" + ("" if ok else f" (see {log})"))
+            if not ok:
+                rep.row("FAIL", label, f"{m['script']} failed (see {log})")
+            elif m.get("unpinned"):
+                rep.row("FAIL", label, f"{m['script']} fetched it, but {m['unpinned']}; not trusted until pinned")
+            else:
+                rep.row("PASS", label, f"{m['script']} done (the script pins revision and hash)")
         elif step == "docling_download":
             rc = run([py, "-c", "import sys;from pathlib import Path;from docling.utils.model_downloader import download_models;"
                       "download_models(output_dir=Path(sys.argv[1]))", mdir / "docling_artifacts"], log)
-            rep.row("PASS" if rc == 0 else "FAIL", label, "Docling models downloaded" if rc == 0 else f"see {log}")
+            rep.row("FAIL", label, "Docling models fetched, but with no pinned revision or hash; not trusted until pinned"
+                    if rc == 0 else f"Docling model download failed (see {log})")
         elif step == "mineru_download":
             cli = env_python(envs / "_mineru_cli")
             e = dict(os.environ, MINERU_MODEL_SOURCE="huggingface")
             rc = run([cli, "-m", "mineru.cli.models_download", "-s", "huggingface", "-m", "pipeline"], log, env=e)
-            rep.row("PASS" if rc == 0 else "FAIL", label, "PDF-Extract-Kit downloaded" if rc == 0 else f"see {log}")
+            rep.row("FAIL", label, "PDF-Extract-Kit fetched, but with no pinned revision or hash; not trusted until pinned"
+                    if rc == 0 else f"PDF-Extract-Kit download failed (see {log})")
         elif step == "spacy_model":
-            rc = run([py, "-m", "pip", "install", m["wheel"]], log)
+            rc = run([py, "-m", "pip", "install", "--no-deps", f"{m['wheel']}#sha256={m['wheel_sha256']}"], log)
             chk = ("import sys, en_core_web_sm; from pathlib import Path; from obsidian.detect import PINNED_MODELS, model_sha256;"
                    "d = Path(en_core_web_sm.__file__).parent / sys.argv[1];"
                    "sys.exit(0 if model_sha256(d) == PINNED_MODELS[sys.argv[1]] else 3)")
@@ -355,8 +434,9 @@ def main(argv: list[str] | None = None) -> int:
             for b in (pp.parent / "src", pp.parent):
                 if b.is_dir():
                     local |= {c.name for c in b.iterdir() if c.is_dir() and (c / "__init__.py").exists()}
+    sums = load_sums(WIN)
     for p in parts:
-        build_part(rep, p, cfg, a.src, a.envs, a.dry_run, gpu, local)
+        build_part(rep, p, cfg, a.src, a.envs, a.dry_run, gpu, local, sums)
     if rep.fails:
         print(f"NESTEGG-PARTS: FAIL {rep.fails}" + (f" (and {rep.holds} held for Jake's decision)" if rep.holds else ""))
     elif rep.holds:

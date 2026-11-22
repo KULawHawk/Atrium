@@ -55,9 +55,20 @@ jobs:
         shell: powershell
         run: |
           $root = Join-Path $env:RUNNER_TEMP 'AdAstra'
-          # which winget ids exist for MuPDF (so a wrong id is caught with the right one beside it)
-          winget search mutool --source winget --accept-source-agreements 2>&1 | ForEach-Object { Write-Host "  search| $_" }
           $f = "tools\nestegg\Install-Prereqs.ps1"
+          # every pinned version must still be offered by winget; an unmeasured one prints what winget offers
+          $bad = 0
+          foreach ($m in [regex]::Matches((Get-Content $f -Raw), "(?m)^\s*Ensure '[^']+'\s+\$\{function:Find-\w+\}\s+'([^']+)'\s+'([^']*)'")) {
+            $id = $m.Groups[1].Value; $ver = $m.Groups[2].Value
+            if ($ver) {
+              winget show --id $id --exact --version $ver --source winget --accept-source-agreements --disable-interactivity *> $null
+              if ($LASTEXITCODE -eq 0) { Write-Host "  pin OK    $id $ver" } else { Write-Host "  pin GONE  $id $ver (winget exit $LASTEXITCODE)"; $bad++ }
+            } else {
+              Write-Host "  not measured: $id; winget offers:"
+              winget show --id $id --exact --versions --source winget --accept-source-agreements --disable-interactivity 2>&1 | Select-Object -Last 6 | ForEach-Object { Write-Host "      $_" }
+            }
+          }
+          if ($bad) { Write-Host "FAIL: $bad pinned version(s) no longer offered by winget"; exit 1 }
           $dry = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -DryRun *>&1 | Tee-Object -Variable d
           if (Test-Path $root) { Write-Host 'FAIL: the dry run created the install folder'; exit 1 }
           $one = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -AssumeYes *>&1 | Tee-Object -Variable o
@@ -120,14 +131,14 @@ jobs:
           $n = (Get-Content (Join-Path $env:RUNNER_TEMP 'htrlens_measure.txt') | Where-Object { $_ -match '^MEASURED ' }).Count
           if ($n -lt 11) { Write-Host "FAIL: only $n MEASURED lines (want 9 TrOCR files + Kraken file + Kraken licence)"; exit 1 }
           exit 0
-      - name: Fetch, verify and load offline (only once every pin is filled in)
+      - name: Fetch, verify and load offline (every pin must be filled in)
         shell: powershell
         env:
           HF_HUB_DISABLE_PROGRESS_BARS: "1"
         run: |
           $ErrorActionPreference = 'Continue'
           $m = Get-Content tools\nestegg\htrlens_models.json -Raw
-          if ($m -match '"sha256": null') { Write-Host 'SKIPPED: pins not filled in yet; copy them from the measure step'; exit 0 }
+          if ($m -match '"sha256": null') { Write-Host 'FAIL: a pin in htrlens_models.json is empty; copy it from the measure step'; exit 1 }
           $t0 = Get-Date
           python -I tools\nestegg\htrlens_models.py --load-check direct *>&1 | Tee-Object -Variable o
           Write-Host ("TIMING fetch-verify-load {0:N0} s" -f ((Get-Date) - $t0).TotalSeconds)
@@ -165,7 +176,11 @@ jobs:
           foreach ($r in 'Conclave','locutus','sequoia','obsidian') { New-Item -ItemType Directory -Force -Path (Join-Path 'src' $r) | Out-Null }
           $b = 'src\atrium\tools\nestegg\install_parts.py'
           python -I $b --src src --envs (Join-Path $env:RUNNER_TEMP 'envs') --dry-run *>&1 | Tee-Object -Variable d
-          if ("$(($d | Select-Object -Last 1))" -ne 'NESTEGG-PARTS: PASS') { Write-Host 'FAIL: dry run'; exit 1 }
+          # the dry run reports every part not locked yet (FAIL rows, by name); it must never print PASS while any is unlocked
+          $dv = "$(($d | Select-Object -Last 1))"
+          if ($dv -notmatch '^NESTEGG-PARTS: (PASS|FAIL \d+)') { Write-Host "FAIL: dry run gave no verdict ($dv)"; exit 1 }
+          if ($d | Where-Object { "$_" -match '^FAIL ' -and "$_" -notmatch ' not locked ' }) { Write-Host 'FAIL: dry run failed for a reason other than "not locked"'; exit 1 }
+          Write-Host "dry run: $dv"
           python -I $b --src src --envs (Join-Path $env:RUNNER_TEMP 'envs') --only atrium *>&1 | Tee-Object -Variable o
           $v = "$(($o | Where-Object { "$_" -match '^NESTEGG-PARTS: ' } | Select-Object -Last 1))"
           if ($v -ne 'NESTEGG-PARTS: PASS') { Write-Host "FAIL: $v"; exit 1 }

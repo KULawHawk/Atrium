@@ -138,12 +138,15 @@ function Find-VC {
 }
 
 # --- One part: detect, install through winget if missing, detect again -------------------------
-function Ensure([string]$Name, [scriptblock]$Find, [string]$WingetId, [string[]]$Extra, [string]$Note, [string]$Key) {
+# Every install is pinned to one measured version (--version). A program with no measured version
+# yet is FAIL "not locked" when it would have to be installed, and is never installed unpinned.
+function Ensure([string]$Name, [scriptblock]$Find, [string]$WingetId, [string]$Version, [string[]]$Extra, [string]$Note, [string]$Key) {
     $have = & $Find
     if ($have) { Row 'PASS' $Name "already present: $have"; $script:found[$Key] = $have; return }
-    if ($DryRun) { Row 'TODO' $Name ("would install winget package {0} {1}" -f $WingetId, $Note); return }
-    Say ("....  {0,-20} installing winget package {1} {2}" -f $Name, $WingetId, $Note)
-    $a = @('install', '--id', $WingetId, '--exact', '--source', 'winget') + $Extra
+    if (-not $Version) { Row 'FAIL' $Name ("not locked: no measured version of winget package {0} yet, so it is not installed" -f $WingetId); return }
+    if ($DryRun) { Row 'TODO' $Name ("would install winget package {0} {1} {2}" -f $WingetId, $Version, $Note); return }
+    Say ("....  {0,-20} installing winget package {1} {2} {3}" -f $Name, $WingetId, $Version, $Note)
+    $a = @('install', '--id', $WingetId, '--exact', '--version', $Version, '--source', 'winget') + $Extra
     if ($AssumeYes) { $a += @('--accept-source-agreements', '--accept-package-agreements', '--disable-interactivity') }
     & winget @a 2>&1 | ForEach-Object { Say ("      " + $_) }
     $rc = $LASTEXITCODE
@@ -158,14 +161,16 @@ Say ("Nestegg phase 1 (prerequisites) {0}  install folder: {1}{2}" -f (Get-Date 
 if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     Row 'FAIL' 'winget' 'not found. Install "App Installer" from the Microsoft Store (the person''s own step), then run this again.'
 } else {
-    Ensure 'Python 3.13'      ${function:Find-Python}    'Python.Python.3.13'          @('--scope', 'user') '(per user, no Windows security box)' 'python'
-    Ensure 'Python 3.12'      ${function:Find-Python312} 'Python.Python.3.12'          @('--scope', 'user') '(per user; HtrLens, MinerU and Paddle need it)' 'python312'
-    Ensure 'Git'              ${function:Find-Git}       'Git.Git'                     @()                  '(one Windows security box)'          'git'
-    Ensure 'GitHub CLI'       ${function:Find-Gh}        'GitHub.cli'                  @()                  '(one Windows security box)'          'gh'
-    Ensure 'Tesseract OCR'    ${function:Find-Tesseract} 'UB-Mannheim.TesseractOCR'    @()                  '(one Windows security box)'          'tesseract_dir'
-    Ensure 'Poppler'          ${function:Find-Poppler}   'oschwartz10612.Poppler'      @('--scope', 'user') '(per user, no Windows security box)' 'poppler_bin'
-    Ensure 'MuPDF mutool'     ${function:Find-Mutool}    'ArtifexSoftware.mutool'      @()                  '(Hierarchy reader)'                   'mutool_dir'
-    Ensure 'VC++ runtime x64' ${function:Find-VC}        'Microsoft.VCRedist.2015+.x64' @()                 '(one Windows security box)'          'vcredist'
+    # Versions: the ones found working on the GitHub Windows runner 11/21-22/2026; CI checks winget still offers
+    # each one ('winget show --version'). '' = not measured yet, so that program is never installed by this script.
+    Ensure 'Python 3.13'      ${function:Find-Python}    'Python.Python.3.13'           '3.13.17'         @('--scope', 'user') '(per user, no Windows security box)' 'python'
+    Ensure 'Python 3.12'      ${function:Find-Python312} 'Python.Python.3.12'           '3.12.10'         @('--scope', 'user') '(per user; HtrLens, MinerU and Paddle need it)' 'python312'
+    Ensure 'Git'              ${function:Find-Git}       'Git.Git'                      '2.56.1'        @()                  '(one Windows security box)'          'git'
+    Ensure 'GitHub CLI'       ${function:Find-Gh}        'GitHub.cli'                   '2.104.0'       @()                  '(one Windows security box)'          'gh'
+    Ensure 'Tesseract OCR'    ${function:Find-Tesseract} 'UB-Mannheim.TesseractOCR'     ''              @()                  '(one Windows security box)'          'tesseract_dir'
+    Ensure 'Poppler'          ${function:Find-Poppler}   'oschwartz10612.Poppler'       '26.09.0'       @('--scope', 'user') '(per user, no Windows security box)' 'poppler_bin'
+    Ensure 'MuPDF mutool'     ${function:Find-Mutool}    'ArtifexSoftware.mutool'       '1.28.5'        @()                  '(Hierarchy reader)'                   'mutool_dir'
+    Ensure 'VC++ runtime x64' ${function:Find-VC}        'Microsoft.VCRedist.2015+.x64' '14.52.37029.0' @()                  '(one Windows security box)'          'vcredist'
 }
 
 if (-not $DryRun) {
