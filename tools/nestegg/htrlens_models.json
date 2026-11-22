@@ -1,0 +1,27 @@
+{
+  "_about": "Pinned model files for the HtrLens handwriting reader (Jake 11/21: every install includes them; a missing or changed file fails loudly). Read by htrlens_models.py.",
+  "kraken": {
+    "doi": "10.5281/zenodo.10592716",
+    "cache_name": "10.5281_zenodo.10592716",
+    "sha256": "1ed39e732b26ccdd0f14b9abd3edc66c4b04a02e3d827d7f9e96a7fe7b585b64",
+    "sha256_source": "the file HtrLens loaded and fingerprinted in the GPU acceptance runs of 2026-06-07 (Conclave runs/20260607T081441Z-*, T100836Z-*, T154903Z-*)",
+    "license_note": "Zenodo record licence is read and printed at install time"
+  },
+  "trocr": {
+    "repo_id": "microsoft/trocr-base-handwritten",
+    "revision": "eaacaf452b06415df8f10bb6fad3a4c11e609406",
+    "revision_source": "Conclave docs/offline_store/needed_files.allowlist.json (offline load proven sufficient with these files)",
+    "license_expected": "mit",
+    "files": {
+      "README.md": {"bytes": 2999, "sha256": null},
+      "config.json": {"bytes": 4165, "sha256": null},
+      "generation_config.json": {"bytes": 190, "sha256": null},
+      "merges.txt": {"bytes": 456318, "sha256": null},
+      "model.safetensors": {"bytes": 1333384464, "sha256": null},
+      "preprocessor_config.json": {"bytes": 224, "sha256": null},
+      "special_tokens_map.json": {"bytes": 772, "sha256": null},
+      "tokenizer_config.json": {"bytes": 1118, "sha256": null},
+      "vocab.json": {"bytes": 898822, "sha256": null}
+    }
+  }
+}

@@ -77,3 +77,60 @@ jobs:
           name: nestegg-prereqs-logs
           path: ${{ runner.temp }}/AdAstra/.adastra
           include-hidden-files: true
+
+  htrlens-models:
+    # Jake 11/21: every install includes the HtrLens model files and fails loudly without them.
+    # This job measures the pinned files once (sha256 of each TrOCR file, the Kraken model's size
+    # and licence), then, once the pins are filled in, fetches + verifies + loads them offline.
+    # kraken 5.x needs Python 3.12 or older (Requires-Python <3.13), so this reader gets its own 3.12.
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the reader's engines (CPU torch, as on a PC with no NVIDIA card)
+        shell: powershell
+        run: |
+          $t0 = Get-Date
+          python -m pip install --upgrade pip
+          python -m pip install "torch==2.4.1" "torchvision==0.19.1" --index-url https://download.pytorch.org/whl/cpu
+          if ($LASTEXITCODE -ne 0) { Write-Host 'FAIL: torch CPU install'; exit 1 }
+          python -m pip install "kraken>=5.2,<6.0" "transformers>=4.40,<5.0" "huggingface_hub>=0.20"
+          if ($LASTEXITCODE -ne 0) { Write-Host 'FAIL: kraken/transformers install'; exit 1 }
+          python -m pip freeze | Select-String -Pattern '^(torch|torchvision|kraken|transformers|huggingface.hub|coremltools)=='
+          $sp = python -c 'import sysconfig; print(sysconfig.get_paths()[''purelib''])'
+          $mb = [math]::Round(((Get-ChildItem $sp -Recurse -File | Measure-Object Length -Sum).Sum) / 1MB)
+          Write-Host ("TIMING engines-install {0:N0} s, site-packages {1} MB" -f ((Get-Date) - $t0).TotalSeconds, $mb)
+      - name: Measure the pinned files
+        shell: powershell
+        run: |
+          $t0 = Get-Date
+          python -I tools\nestegg\htrlens_models.py --measure *>&1 | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'htrlens_measure.txt')
+          Write-Host ("TIMING measure-download {0:N0} s" -f ((Get-Date) - $t0).TotalSeconds)
+          # measure mode always ends FAIL by design; this step passes only if every file was measured
+          $n = (Get-Content (Join-Path $env:RUNNER_TEMP 'htrlens_measure.txt') | Where-Object { $_ -match '^MEASURED ' }).Count
+          if ($n -lt 11) { Write-Host "FAIL: only $n MEASURED lines (want 9 TrOCR files + Kraken file + Kraken licence)"; exit 1 }
+          exit 0
+      - name: Fetch, verify and load offline (only once every pin is filled in)
+        shell: powershell
+        run: |
+          $m = Get-Content tools\nestegg\htrlens_models.json -Raw
+          if ($m -match '"sha256": null') { Write-Host 'SKIPPED: pins not filled in yet; copy them from the measure step'; exit 0 }
+          $t0 = Get-Date
+          python -I tools\nestegg\htrlens_models.py --load-check direct *>&1 | Tee-Object -Variable o
+          Write-Host ("TIMING fetch-verify-load {0:N0} s" -f ((Get-Date) - $t0).TotalSeconds)
+          $v = ($o | Where-Object { "$_" -match '^NESTEGG-HTRLENS: ' } | Select-Object -Last 1)
+          if ("$v" -ne 'NESTEGG-HTRLENS: PASS') { Write-Host "FAIL: $v"; exit 1 }
+          # second run must verify from the cache without downloading again
+          python -I tools\nestegg\htrlens_models.py --load-check direct *>&1 | Tee-Object -Variable o2
+          $v2 = ($o2 | Where-Object { "$_" -match '^NESTEGG-HTRLENS: ' } | Select-Object -Last 1)
+          if ("$v2" -ne 'NESTEGG-HTRLENS: PASS') { Write-Host "FAIL second run: $v2"; exit 1 }
+          Write-Host 'NESTEGG-HTRLENS-WINDOWS: PASS'
+      - name: Keep the measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: htrlens-measure
+          path: ${{ runner.temp }}/htrlens_measure.txt
