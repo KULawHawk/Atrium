@@ -246,11 +246,17 @@ def is_reader(part: dict) -> bool:
 def own_tests(rep: Report, part: dict, repo: Path, py: Path, envs: Path, log: Path, done: str, status: str) -> None:
     """A part that is not a reader is measured by its own tests passing under the exact locked set."""
     name = part["name"]
-    tools = read_list(LOCKS / "lists" / f"_test_tools_py{part['python']}.txt")
+    if part.get("test_env"):
+        py = _test_env(rep, part, repo, envs, log, done, status)
+        if py is None:
+            return
+        tools = {}  # the test environment is a full locked environment of its own, test tools included
+    else:
+        tools = read_list(LOCKS / "lists" / f"_test_tools_py{part['python']}.txt")
     if tools is None:
         rep.row("HOLD", name, f"{done}; {status}; its own tests not run under this set yet (no locked test-tools list)")
         return
-    lines, probs = lock_reqs(tools, CFG_LOCK, WIN, load_sums(WIN))
+    lines, probs = lock_reqs(tools, CFG_LOCK, WIN, load_sums(WIN)) if tools else ([], [])
     if probs or locked_install(py, lines, envs / "_logs" / f"{name}.testtools.txt", log):
         rep.row("HOLD", name, f"{done}; {status}; test tools could not be installed locked ({'; '.join(probs) or 'see ' + str(log)})")
         return
@@ -264,10 +270,42 @@ def own_tests(rep: Report, part: dict, repo: Path, py: Path, envs: Path, log: Pa
     rc = 0
     for d in dirs:  # from the project folder, as its own CI runs them (its pytest settings and import paths apply)
         rc = rc or run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", *noqt, "tests"], log, cwd=d.parent)
+    where = "its locked test environment" if part.get("test_env") else "this exact set"
+    if part.get("test_env"):
+        shutil.rmtree(envs / f"{name}-test", ignore_errors=True)  # used only for the proof; never left installed
     if rc == 0:
-        rep.row("PASS", name, f"{done}; {status}; its own tests pass under this exact set")
+        rep.row("PASS", name, f"{done}; {status}; its own tests pass under {where}")
     else:
-        rep.row("FAIL", name, f"{done}; its own tests fail under this exact set (exit {rc}, see {log})")
+        rep.row("FAIL", name, f"{done}; its own tests fail under {where} (exit {rc}, see {log})")
+
+
+def _test_env(rep: Report, part: dict, repo: Path, envs: Path, log: Path, done: str, status: str) -> Path | None:
+    """Some parts' tests need packages the installed part must not carry (e.g. a sibling's conflicting pin), so
+    they run in a separate locked environment, built only for the test run and deleted after it."""
+    name, te = part["name"], part["test_env"]
+    pins = read_list(LOCKS / "lists" / te["list"])
+    lines, probs = lock_reqs(pins, CFG_LOCK, WIN, load_sums(WIN)) if pins is not None else ([], [f"no list {te['list']}"])
+    if probs:
+        rep.row("HOLD", name, f"{done}; {status}; its test environment is not locked ({'; '.join(probs)})")
+        return None
+    env = envs / f"{name}-test"
+    shutil.rmtree(env, ignore_errors=True)
+    base = base_python(part["python"])
+    if base is None or run(base + ["-m", "venv", env], log):
+        rep.row("HOLD", name, f"{done}; {status}; could not create its test environment (see {log})")
+        return None
+    py = env_python(env)
+    if locked_install(py, lines, envs / "_logs" / f"{name}.testenv.txt", log) \
+            or run([py, "-m", "pip", "install", "--no-deps", *closure(repo, te["roots"])], log):
+        rep.row("FAIL", name, f"{done}; its locked test environment could not be installed (see {log})")
+        shutil.rmtree(env, ignore_errors=True)
+        return None
+    chk = subprocess.run([py, "-m", "pip", "check"], capture_output=True, text=True)
+    if chk.returncode:
+        rep.row("FAIL", name, f"{done}; its test environment fails pip check: {(chk.stdout or chk.stderr).strip()[:200]}")
+        shutil.rmtree(env, ignore_errors=True)
+        return None
+    return py
 
 
 def list_status(name: str) -> str:

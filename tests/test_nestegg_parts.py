@@ -121,6 +121,7 @@ def test_every_list_belongs_to_a_part() -> None:
     names = {f"{p['name']}_py{p['python']}.txt" for p in PARTS["parts"]} | {"votingengine_beta_py3.13.txt", "_test_tools_py3.13.txt"}  # betacal hold (PA-3); test tools for non-readers
     names |= {f"_{p['side_env']['name']}_cli_py{p['side_env']['python']}.txt" for p in PARTS["parts"] if p.get("side_env")}
     names |= {f"{p['name']}_side_py{p['spoke_side_env']['python']}.txt" for p in PARTS["parts"] if p.get("spoke_side_env")}
+    names |= {p["test_env"]["list"] for p in PARTS["parts"] if p.get("test_env")}
     for f in (LOCKS / "lists").iterdir():
         assert f.name in names, f.name
 
@@ -285,6 +286,39 @@ def test_src_layout_scans_only_what_is_installed(tmp_path) -> None:
     (d / "tools" / "driver.py").write_text("import reportlab\n")  # loose script, not in the installed package
     _, third = m.scan_imports([d], set())
     assert third == ["jsonschema"]
+
+
+def test_test_env_part_runs_its_tests_in_a_separate_locked_env_then_deletes_it(tmp_path, monkeypatch, capsys) -> None:
+    import subprocess
+    m = _mod()
+    lists = tmp_path / "locks" / "lists"
+    lists.mkdir(parents=True)
+    (lists / "_te.txt").write_text("click==8.5.1\n")
+    monkeypatch.setattr(m, "LOCKS", tmp_path / "locks")
+    monkeypatch.setattr(m, "load_sums", lambda win: _sums())
+    m.CFG_LOCK.update({"lock": PARTS["lock"]})
+    repo = tmp_path / "repo"
+    (repo / "spoke" / "tests").mkdir(parents=True)
+    calls = []
+    def fake_run(cmd, log, cwd=None, env=None):
+        calls.append([str(c) for c in cmd])
+        if cmd[1:3] == ["-m", "venv"]:
+            m.env_python(Path(cmd[3])).parent.mkdir(parents=True, exist_ok=True)
+        return 0
+    monkeypatch.setattr(m, "run", fake_run)
+    monkeypatch.setattr(m, "base_python", lambda v: ["py"])
+    monkeypatch.setattr(m, "closure", lambda r, roots: ["-e", str(r / "spoke")])
+    monkeypatch.setattr(m.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, "", ""))
+    part = {"name": "P", "roots": ["spoke"], "python": "3.13", "test_env": {"list": "_te.txt", "roots": ["spoke"]}}
+    (tmp_path / "envs" / "_logs").mkdir(parents=True)
+    rep = m.Report()
+    m.own_tests(rep, part, repo, Path("main_py"), tmp_path / "envs", tmp_path / "l", "done", "status")
+    out = capsys.readouterr().out
+    test_env_py = str(m.env_python(tmp_path / "envs" / "P-test"))
+    assert any(c[0] == test_env_py and "pytest" in c for c in calls)  # tests ran in the test env
+    assert not any(c[0] == "main_py" for c in calls)  # never in the installed part's env
+    assert "PASS  P" in out and "its locked test environment" in out
+    assert not (tmp_path / "envs" / "P-test").exists()  # deleted after the run
 
 
 def test_locutus_rulings_plugin_is_in_every_part_that_loads_it() -> None:

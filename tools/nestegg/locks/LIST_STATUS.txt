@@ -68,3 +68,12 @@ NOT PROBED, with reason:
 - betacal: stays HOLD (PA-3 class).
 - lens_roster test-only needs (reportlab in tests/conftest.py, conclave_bridge in 3 tests) belong in the test tools, not the runtime list.
 All four rebuilt lists pass uv pip check. Every added wheel was already saved (triton and nccl have no Windows build, as before). Old copies are in lists/superseded_2026-11-22/before_closure_probe/.
+
+11/22 ~5:15 AM CT: rulings on installer RESULTS_all_conclave_parts_probe_2026-11-22.md.
+1) py3.12 files: my backup script de-duplicated by name==version, so cp312 wheels were skipped wherever a cp313 file existed. Fixed: every py3.12 list (HtrLens, OcrPaddle_side, _mineru_cli; 211 unique) was re-fetched for cp312. 17 new Linux files and 13 new Windows files (markupsafe 3.0.3 cp312 among them). nvidia cu13 libraries are py3-none files and were already saved. Windows has no build for triton, nccl, cufile, nvshmem or coremltools (as before). SHA256SUMS regenerated. Saved total is now Linux 12,034,697,016 bytes and Windows 8,107,346,879 bytes (sandbox only).
+2) sequoia_bridge: + observatory_sink, locutus_pack, torch 2.6.0 (Bridge inside, same as apexbridge). conclave_observatory comes in with the sink.
+3) harness_adapters: + locutus_pack, PdfText and StructuredHeuristic as source roots. No package change: their packages were already present. Note: StructuredHeuristic runs here with pillow 10.4.0, but it was measured with 13.0.0, so in this environment it is not MATCHED. colpali_engine and peft are NOT added: ColPaliVerify runs in its own environment through colpali_subprocess_verifier_client.py, because colpali-engine's transformers 4.45-4.49 pin conflicts with this environment. Probe row = not probed, with that reason.
+4) betacal: HOLD in every part that carries votingengine. Agreed.
+5) torch in OcrTesseract, OcrPaddle, PdfText: not probed. None of them constructs a LensRunner (the import is only LensRunner._is_lens_runnable in the closure).
+6) pytesseract and im2latex: PA-3, expected.
+7) Test-only: a separate locked list per part, used only for the test run, never shipped. First one: lists/_test_env_lens_roster_py3.13.txt (84 packages). It is lens_roster[cpu-roster] + the Bridge closure + reportlab 5.1.0 + test tools minus pytest-qt, resolved with the Hierarchy list as constraint, because the runtime list's pypdf 7.1.1 conflicts with Hierarchy's pypdf<7. pip check clean, and lens_roster's own tests pass in it (1 skip, 1 xfail). pdfminer.six 20221105 saved for it.
