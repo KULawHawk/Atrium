@@ -169,7 +169,7 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     Ensure 'Git'              ${function:Find-Git}       'Git.Git'                      '2.56.1'        @()                  '(one Windows security box)'          'git'
     Ensure 'GitHub CLI'       ${function:Find-Gh}        'GitHub.cli'                   '2.104.0'       @()                  '(one Windows security box)'          'gh'
     Ensure 'Tesseract OCR'    ${function:Find-Tesseract} 'UB-Mannheim.TesseractOCR'     ''              @()                  '(one Windows security box)'          'tesseract_dir'
-    Ensure 'Poppler'          ${function:Find-Poppler}   'oschwartz10612.Poppler'       '25.07.0'       @('--scope', 'user') '(per user, no Windows security box)' 'poppler_bin'
+    Ensure 'Poppler'          ${function:Find-Poppler}   'oschwartz10612.Poppler'       '25.07.0-0'     @('--scope', 'user') '(per user, no Windows security box)' 'poppler_bin'
     Ensure 'MuPDF mutool'     ${function:Find-Mutool}    'ArtifexSoftware.mutool'       '1.23.0'        @()                  '(Hierarchy reader)'                   'mutool_dir'
     Ensure 'VC++ runtime x64' ${function:Find-VC}        'Microsoft.VCRedist.2015+.x64' '14.52.37029.0' @()                  '(one Windows security box)'          'vcredist'
 }
