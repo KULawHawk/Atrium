@@ -350,6 +350,26 @@ def test_workbench_harness_script_never_overwrites_a_chosen_value() -> None:
     assert '"-m", "conclave_harness_adapters.pipeline_run", "--help"' in src
 
 
+def test_engine_file_is_read_and_must_equal_the_saved_list(tmp_path, monkeypatch, capsys) -> None:
+    m = _mod()
+    f = tmp_path / "engine_requirements.txt"
+    f.write_text("# header\nmineru[core]==3.2.2 \\\n    --hash=sha256:aa \\\n    --hash=sha256:bb\nsix==1.17.0 --hash=sha256:cc\n")
+    assert m.read_engine_file(f) == {"mineru": "3.2.2", "six": "1.17.0"}
+    assert m.read_engine_file(tmp_path / "missing.txt") is None
+    lists = tmp_path / "locks" / "lists"
+    lists.mkdir(parents=True)
+    (lists / "_mineru_cli_py3.12.txt").write_text("mineru==3.2.2\nsix==1.16.0\n")  # disagrees on six
+    monkeypatch.setattr(m, "LOCKS", tmp_path / "locks")
+    (tmp_path / "src" / "Conclave" / "s").mkdir(parents=True)
+    (tmp_path / "src" / "Conclave" / "s" / "engine_requirements.txt").write_text(f.read_text())
+    part = {"name": "MinerU", "repo": "Conclave", "side_env": {"name": "mineru", "python": "3.12", "packages": [],
+            "check": ["mineru", "--help"], "engine_file": "s/engine_requirements.txt"}}
+    rep = m.Report()
+    m.side_envs(rep, part, tmp_path / "src", tmp_path / "envs", tmp_path / "l", Path("py"))
+    out = capsys.readouterr().out
+    assert rep.fails == 1 and "disagree" in out  # never built from either when the two differ
+
+
 def test_locutus_rulings_plugin_is_in_every_part_that_loads_it() -> None:
     # entry-point plugin: ReviewConsole wraps every Console with it, the Bridge refuses repeats without it
     parts = {p["name"]: p for p in json.loads((NESTEGG / "parts.json").read_text(encoding="utf-8"))["parts"]}

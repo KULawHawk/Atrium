@@ -185,6 +185,21 @@ def read_list(path: Path) -> dict[str, str] | None:
     return out
 
 
+def read_engine_file(path: Path) -> dict[str, str] | None:
+    """A pip requirements file with exact pins (and --hash continuation lines): {name: version}, extras dropped."""
+    if not path.is_file():
+        return None
+    out = {}
+    for ln in path.read_text(encoding="utf-8").splitlines():
+        ln = ln.strip()
+        if not ln or ln.startswith(("#", "-", "--")) or "==" not in ln:
+            continue
+        req = ln.split()[0].rstrip("\\")
+        n, v = req.split("==", 1)
+        out[_norm(n.split("[")[0])] = v.split(";")[0]
+    return out
+
+
 def lock_reqs(pins: dict[str, str], cfg: dict, win: bool, sums: dict) -> tuple[list[str], list[str]]:
     """Requirement lines with every measured hash, and the problems that make it 'not locked'."""
     lk = cfg["lock"]
@@ -465,6 +480,17 @@ def side_envs(rep: Report, part: dict, src: Path, envs: Path, log: Path, py: Pat
         if pins is None:
             rep.row("FAIL", f"{label} not locked", f"no known-good list (locks/lists/{lst}); not built from the open index")
             return
+        if se.get("engine_file"):  # Jake PA-2 A+: the spoke's own engine list is the one source; the saved list must equal it
+            ef = src / part["repo"] / se["engine_file"]
+            own = read_engine_file(ef)
+            if own is None:
+                rep.row("INFO", label, f"{se['engine_file']} is not in this checkout yet; building from the saved list {lst}")
+            elif own != pins:
+                diff = sorted(set(own.items()) ^ set(pins.items()))[:6]
+                rep.row("FAIL", f"{label} not locked", f"{se['engine_file']} and the saved list {lst} disagree: {diff}")
+                return
+            else:
+                rep.row("INFO", label, f"built from {se['engine_file']} (equals the saved list {lst}; files hash-checked)")
         missing = [p for p in se["packages"] if pins.get(_req_name(p)) != p.split("==")[1]]
         lines, probs = lock_reqs(pins, CFG_LOCK, WIN, load_sums(WIN))
         probs += [f"the engine needs {p}, the known-good list has {pins.get(_req_name(p), 'nothing')}" for p in missing]
