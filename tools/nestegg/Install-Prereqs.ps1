@@ -67,23 +67,26 @@ function Try-Cmd([string]$Exe, [string[]]$CmdArgs) {
 }
 
 # --- Detectors: each returns a path or version string, or $null --------------------------------
-function Find-Python {
+function Find-PythonVer([string]$Want) {
+    # $Want is '3.13' or '3.12'. Some readers (HtrLens/kraken, MinerU, Paddle) refuse 3.13.
     $cands = @()
     if (Get-Command py -ErrorAction SilentlyContinue) {
-        $p = Try-Cmd 'py' @('-3.13', '-c', 'import sys; print(sys.executable)')
+        $p = Try-Cmd 'py' @("-$Want", '-c', 'import sys; print(sys.executable)')
         if ($p) { $cands += $p }
     }
-    $cands += (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python313\python.exe')
+    $cands += (Join-Path $env:LOCALAPPDATA ('Programs\Python\Python{0}\python.exe' -f $Want.Replace('.', '')))
     foreach ($c in $cands) {
         if ($c -and (Test-Path -LiteralPath $c)) {
             # No double quotes inside the -c text: Windows PowerShell 5.1 strips them when it calls a
             # program, which turned the old check into a Python syntax error (clean-Windows run 4).
             $v = Try-Cmd $c @('-c', 'import sys; print(''.''.join(map(str, sys.version_info[:3])))')
-            if ($v -and $v.StartsWith('3.13.')) { return "$c ($v)" }
+            if ($v -and $v.StartsWith("$Want.")) { return "$c ($v)" }
         }
     }
     return $null
 }
+function Find-Python { return (Find-PythonVer '3.13') }
+function Find-Python312 { return (Find-PythonVer '3.12') }
 function Find-Git { $v = Try-Cmd 'git' @('--version'); if ($v) { return $v }; return $null }
 function Find-Gh {
     $v = Try-Cmd 'gh' @('--version'); if ($v) { return $v }
@@ -110,6 +113,17 @@ function Find-Poppler {
                (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\oschwartz10612.Poppler*'))
     foreach ($r in $roots) {
         $hit = Get-ChildItem -Path $r -Recurse -Filter 'pdftoppm.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($hit) { return $hit.DirectoryName }
+    }
+    return $null
+}
+function Find-Mutool {
+    $g = Get-Command mutool -ErrorAction SilentlyContinue
+    if ($g) { return (Split-Path -Parent $g.Source) }
+    $roots = @((Join-Path $env:ProgramFiles 'MuPDF*'), (Join-Path $env:ProgramFiles 'Artifex*'),
+               (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\ArtifexSoftware.*'))
+    foreach ($r in $roots) {
+        $hit = Get-ChildItem -Path $r -Recurse -Filter 'mutool.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($hit) { return $hit.DirectoryName }
     }
     return $null
@@ -145,10 +159,12 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     Row 'FAIL' 'winget' 'not found. Install "App Installer" from the Microsoft Store (the person''s own step), then run this again.'
 } else {
     Ensure 'Python 3.13'      ${function:Find-Python}    'Python.Python.3.13'          @('--scope', 'user') '(per user, no Windows security box)' 'python'
+    Ensure 'Python 3.12'      ${function:Find-Python312} 'Python.Python.3.12'          @('--scope', 'user') '(per user; HtrLens, MinerU and Paddle need it)' 'python312'
     Ensure 'Git'              ${function:Find-Git}       'Git.Git'                     @()                  '(one Windows security box)'          'git'
     Ensure 'GitHub CLI'       ${function:Find-Gh}        'GitHub.cli'                  @()                  '(one Windows security box)'          'gh'
     Ensure 'Tesseract OCR'    ${function:Find-Tesseract} 'UB-Mannheim.TesseractOCR'    @()                  '(one Windows security box)'          'tesseract_dir'
     Ensure 'Poppler'          ${function:Find-Poppler}   'oschwartz10612.Poppler'      @('--scope', 'user') '(per user, no Windows security box)' 'poppler_bin'
+    Ensure 'MuPDF mutool'     ${function:Find-Mutool}    'ArtifexSoftware.mutool'      @()                  '(Hierarchy reader)'                   'mutool_dir'
     Ensure 'VC++ runtime x64' ${function:Find-VC}        'Microsoft.VCRedist.2015+.x64' @()                 '(one Windows security box)'          'vcredist'
 }
 

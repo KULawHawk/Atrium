@@ -96,10 +96,12 @@ def test_prereqs_installs_only_through_winget_with_exact_ids() -> None:
     ids = re.findall(r"^\s*Ensure '[^']+'\s+\$\{function:Find-\w+\}\s+'([^']+)'", code, flags=re.M)
     assert ids == [
         "Python.Python.3.13",
+        "Python.Python.3.12",
         "Git.Git",
         "GitHub.cli",
         "UB-Mannheim.TesseractOCR",
         "oschwartz10612.Poppler",
+        "ArtifexSoftware.mutool",
         "Microsoft.VCRedist.2015+.x64",
     ]
 

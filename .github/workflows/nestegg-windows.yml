@@ -55,6 +55,8 @@ jobs:
         shell: powershell
         run: |
           $root = Join-Path $env:RUNNER_TEMP 'AdAstra'
+          # which winget ids exist for MuPDF (so a wrong id is caught with the right one beside it)
+          winget search mutool --source winget --accept-source-agreements 2>&1 | ForEach-Object { Write-Host "  search| $_" }
           $f = "tools\nestegg\Install-Prereqs.ps1"
           $dry = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -DryRun *>&1 | Tee-Object -Variable d
           if (Test-Path $root) { Write-Host 'FAIL: the dry run created the install folder'; exit 1 }

@@ -92,6 +92,12 @@ if (-not $py -and (Get-Command python -ErrorAction SilentlyContinue)) {
 }
 if ($py) { Row 'PASS' 'Python 3.13' $py } else { Row 'GAP' 'Python 3.13' 'not found; installer adds it per-user (no admin)' }
 
+# --- Python 3.12 (HtrLens/kraken, MinerU and Paddle refuse 3.13) ------------------------------
+$py12 = $null
+if (Get-Command py -ErrorAction SilentlyContinue) { $py12 = Try-Cmd 'py' @('-3.12', '-c', 'import sys; print(''.''.join(map(str, sys.version_info[:3])))') }
+if (-not ($py12 -and $py12.StartsWith('3.12.'))) { $py12 = $null }
+if ($py12) { Row 'PASS' 'Python 3.12' $py12 } else { Row 'GAP' 'Python 3.12' 'not found; installer adds it per-user (three readers need it)' }
+
 # --- Git -------------------------------------------------------------------------------------
 $git = Try-Cmd 'git' @('--version')
 if ($git) { Row 'PASS' 'Git' $git } else { Row 'GAP' 'Git' 'not found; installer adds it (one Windows security box, the person clicks it)' }
@@ -119,6 +125,10 @@ if (-not $pop) {
     }
 }
 if ($pop) { Row 'PASS' 'Poppler' $pop } else { Row 'GAP' 'Poppler' 'not found; installer unpacks a sha-checked copy under the install folder (no admin)' }
+
+# --- MuPDF mutool (Hierarchy reader) ---------------------------------------------------------
+$mu = Get-Command mutool -ErrorAction SilentlyContinue
+if ($mu) { Row 'PASS' 'MuPDF mutool' $mu.Source } else { Row 'GAP' 'MuPDF mutool' 'not found; installer adds it' }
 
 # --- Visual C++ runtime ----------------------------------------------------------------------
 $vc = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64' -ErrorAction SilentlyContinue
