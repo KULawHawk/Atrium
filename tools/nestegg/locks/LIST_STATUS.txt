@@ -33,7 +33,7 @@ documentprofiler_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no 
 harness_adapters_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
 launcher_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
 lens_roster_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
-locutus_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+locutus_py3.13.txt: RESOLVED TODAY, NOT MEASURED. Built from locutus main 5eb87e1 [coupling,forge] PLUS obsidian main c09a544 base packages (no ui or ner), because the Forge export refuses to run without Obsidian (src/locutus/forge/egress.py). Changed after the installer test run: needs a re-test.
 observatory_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
 obsidian_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
 reviewconsole_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
