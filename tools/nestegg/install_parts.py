@@ -440,7 +440,13 @@ def side_envs(rep: Report, part: dict, src: Path, envs: Path, log: Path, py: Pat
 
 def probe(rep: Report, part: dict, repo: Path, py: Path, local: set[str], log: Path) -> None:
     dirs = [repo] if part["roots"][0].startswith(".") else [repo / r.split("[")[0] for r in part["roots"]]
-    pkgs, third = scan_imports(dirs, set(local), tuple(part.get("probe_skip", [])))
+    for dist in part.get("no_caller", []):  # SET-9: shipped because it is production code, though nothing calls it yet
+        rep.row("INFO", f"{part['name']} {dist}", "installed, no shipped caller yet")
+    skip = part.get("probe_skip", [])
+    if isinstance(skip, dict):  # {folder prefix: why}; every skipped folder is printed with its reason
+        for k, why in sorted(skip.items()):
+            rep.row("INFO", f"{part['name']} not probed", f"{k}: {why}")
+    pkgs, third = scan_imports(dirs, set(local), tuple(skip))
     ignore = part.get("probe_ignore", {})
     third = [t for t in third if t not in ignore]
     for mod, why in sorted(ignore.items()):

@@ -235,6 +235,28 @@ def test_probe_import_failures_are_fail_rows(tmp_path, monkeypatch, capsys) -> N
     assert _probe(tmp_path, monkeypatch, "{}\n").fails == 0
 
 
+def test_skipped_folders_and_uncalled_adapters_are_printed(tmp_path, monkeypatch, capsys) -> None:
+    import subprocess
+    m = _mod()
+    seen = {}
+    monkeypatch.setattr(m, "scan_imports", lambda d, l, skip=(): (seen.setdefault("skip", skip), ([], []))[1])
+    monkeypatch.setattr(m.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, "{}\n", ""))
+    rep = m.Report()
+    part = {"name": "P", "roots": ["."], "probe_skip": {"tools/": "runs elsewhere"}, "no_caller": ["conclave_x"]}
+    m.probe(rep, part, tmp_path, Path("py"), set(), tmp_path / "l")
+    out = capsys.readouterr().out
+    assert seen["skip"] == ("tools/",)  # the folder really is skipped
+    assert "INFO  P not probed" in out and "tools/: runs elsewhere" in out  # and never silently
+    assert "INFO  P conclave_x" in out and "no shipped caller yet" in out and rep.fails == 0
+
+
+def test_locutus_rulings_plugin_is_in_every_part_that_loads_it() -> None:
+    # entry-point plugin: ReviewConsole wraps every Console with it, the Bridge refuses repeats without it
+    parts = {p["name"]: p for p in json.loads((NESTEGG / "parts.json").read_text(encoding="utf-8"))["parts"]}
+    for n in ("harness_adapters", "apexbridge", "sequoia_bridge", "launcher", "workbench", "reviewconsole"):
+        assert "conclave_integration_locutus_rulings" in parts[n]["roots"], n
+
+
 def test_pip_check_problem_fails_the_part(tmp_path, monkeypatch, capsys) -> None:
     import subprocess
     m = _mod()
