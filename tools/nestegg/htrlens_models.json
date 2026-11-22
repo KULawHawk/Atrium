@@ -16,16 +16,17 @@
     "revision": "eaacaf452b06415df8f10bb6fad3a4c11e609406",
     "revision_source": "Conclave docs/offline_store/needed_files.allowlist.json (offline load proven sufficient with these files)",
     "license_expected": "mit",
+    "measured": "GitHub Windows runner 2026-11-22 (Atrium run 44991575042); every byte count matched the Hub listing; the verify job re-downloads on a fresh runner and must match",
     "files": {
-      "README.md": {"bytes": 2999, "sha256": null},
-      "config.json": {"bytes": 4165, "sha256": null},
-      "generation_config.json": {"bytes": 190, "sha256": null},
-      "merges.txt": {"bytes": 456318, "sha256": null},
-      "model.safetensors": {"bytes": 1333384464, "sha256": null},
-      "preprocessor_config.json": {"bytes": 224, "sha256": null},
-      "special_tokens_map.json": {"bytes": 772, "sha256": null},
-      "tokenizer_config.json": {"bytes": 1118, "sha256": null},
-      "vocab.json": {"bytes": 898822, "sha256": null}
+      "README.md": {"bytes": 2999, "sha256": "9f808e1fc12dcb61c89a38f00303506dbc85db8ea988cec441a9324e0c8f2843"},
+      "config.json": {"bytes": 4165, "sha256": "4c779f24e063c437c3dafd5b2e6c9f59f2fa2bd1dbb4ae6a30153bbbbf19e647"},
+      "generation_config.json": {"bytes": 190, "sha256": "41149cdcffec4d657f32dfcddd9b208037f01286c9e07945c724908c58ed0193"},
+      "merges.txt": {"bytes": 456318, "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5"},
+      "model.safetensors": {"bytes": 1333384464, "sha256": "25a40cddc7e6120140a3d5b9e3dd3878a92ada7b4f312953ab22edc19c2a5acc"},
+      "preprocessor_config.json": {"bytes": 224, "sha256": "2fcc0da9466ee00be0403b26027373039e032820ebac409e207b32e52e52119d"},
+      "special_tokens_map.json": {"bytes": 772, "sha256": "c611b1f7d416eb001ee4f293d903ea8c88e703463f1d403f1866a0352743fd00"},
+      "tokenizer_config.json": {"bytes": 1118, "sha256": "5a1356884c6ae736a621841535264ba7c5bebd52f169258add2c48fcbb32d50a"},
+      "vocab.json": {"bytes": 898822, "sha256": "06b4d46c8e752d410213d9548eb27a54db70fda0319b6271fb8d59dead5e1cab"}
     }
   }
 }

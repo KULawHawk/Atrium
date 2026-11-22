@@ -32,7 +32,7 @@ def test_manifest_pins_are_well_formed() -> None:
     assert "model.safetensors" in t["files"]
     for name, f in t["files"].items():
         assert isinstance(f["bytes"], int) and f["bytes"] > 0, name
-        assert f["sha256"] is None or re.fullmatch(r"[0-9a-f]{64}", f["sha256"]), name
+        assert re.fullmatch(r"[0-9a-f]{64}", f["sha256"]), name
 
 
 def test_check_file_fails_loudly_on_every_mismatch(tmp_path: Path, capsys) -> None:
