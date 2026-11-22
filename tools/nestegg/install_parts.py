@@ -260,7 +260,8 @@ def own_tests(rep: Report, part: dict, repo: Path, py: Path, envs: Path, log: Pa
     if probs or locked_install(py, lines, envs / "_logs" / f"{name}.testtools.txt", log):
         rep.row("HOLD", name, f"{done}; {status}; test tools could not be installed locked ({'; '.join(probs) or 'see ' + str(log)})")
         return
-    dirs = [repo / "tests"] if part["roots"][0].startswith(".") else [repo / r.split("[")[0] / "tests" for r in part["roots"]]
+    # the part's own spoke's tests; a spoke it carries (a lens, a plugin) is proven by its own part
+    dirs = [repo / "tests"] if part["roots"][0].startswith(".") else [repo / part["roots"][0].split("[")[0] / "tests"]
     dirs = [d for d in dirs if d.is_dir()]
     if not dirs:
         rep.row("HOLD", name, f"{done}; {status}; it has no tests folder to measure it by")
