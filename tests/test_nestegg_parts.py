@@ -57,14 +57,14 @@ def test_dry_run_writes_nothing_and_never_passes_an_unlocked_part(tmp_path: Path
     assert out.count("TODO ") == len(PARTS["parts"])
     fails = [ln for ln in out.splitlines() if ln.startswith("FAIL ")]
     assert fails and all(" not locked " in ln for ln in fails)  # launcher + sequoia_bridge have no list yet
-    assert rc == 1 and out.rstrip().endswith(f"NESTEGG-PARTS: FAIL {len(fails)}")
+    assert rc == 1 and out.rstrip().endswith(f"NESTEGG-PARTS: FAIL {len(fails)}, HOLD 0, PASS 0")
 
 
 def test_missing_source_and_unknown_part_fail_loudly(tmp_path: Path, capsys) -> None:
     rc = _mod().main(["--src", str(tmp_path), "--envs", str(tmp_path / "e"), "--only", "atrium,NoSuchPart"])
     out = capsys.readouterr().out
     assert rc == 1 and "source folder missing" in out and "not a part in parts.json" in out
-    assert out.rstrip().endswith("NESTEGG-PARTS: FAIL 2")
+    assert out.rstrip().endswith("NESTEGG-PARTS: FAIL 2, HOLD 0, PASS 0")
 
 
 def test_holds_never_read_as_pass(capsys) -> None:
@@ -273,3 +273,45 @@ def test_engine_without_list_or_with_wrong_pin_fails(tmp_path, monkeypatch, caps
     out = capsys.readouterr().out
     assert rep.fails == 3 and "no known-good list" in out and "the engine needs tool==2.0, the known-good list has 1.0" in out
     assert not (tmp_path / "envs").exists()
+
+
+def _built(tmp_path, monkeypatch, part, status, tools=None, test_rc=0):
+    import subprocess
+    m = _mod()
+    src = tmp_path / "src"
+    (src / "Conclave" / "conclave_x" / "tests").mkdir(parents=True)
+    locks = tmp_path / "locks"
+    (locks / "lists").mkdir(parents=True)
+    (locks / "LIST_STATUS.txt").write_text(f"{part['name']}_py3.13.txt: {status}\n", encoding="utf-8")
+    (locks / "lists" / f"{part['name']}_py3.13.txt").write_text("", encoding="utf-8")
+    for f in ("SHA256SUMS_win_amd64.txt", "SHA256SUMS_linux_x86_64.txt", "SHA256SUMS_sdist.txt"):
+        (locks / f).write_text("ab  pytest-9.0-py3-none-any.whl\n" if tools else "", encoding="utf-8")
+    if tools:
+        (locks / "lists" / "_test_tools_py3.13.txt").write_text("pytest==9.0\n", encoding="utf-8")
+    monkeypatch.setattr(m, "LOCKS", locks)
+    m.CFG_LOCK.update(PARTS)
+    monkeypatch.setattr(m, "base_python", lambda v: ["py"])
+    monkeypatch.setattr(m, "run", lambda cmd, *a, **k: test_rc if "pytest" in map(str, cmd) and "-q" in map(str, cmd) else 0)
+    monkeypatch.setattr(m, "closure", lambda repo, roots: [])
+    monkeypatch.setattr(m, "probe", lambda *a, **k: None)
+    monkeypatch.setattr(m.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, "", ""))
+    rep = m.Report()
+    m.build_part(rep, dict({"repo": "Conclave", "python": "3.13"}, **part), PARTS, src, tmp_path / "envs", False, False, set(), None)
+    return rep
+
+
+def test_reader_on_an_unmatched_list_is_held_never_passed(tmp_path, monkeypatch) -> None:
+    rep = _built(tmp_path, monkeypatch, {"name": "R", "roots": ["conclave_lens_x"]}, "RESOLVED TODAY, NOT MEASURED")
+    assert (rep.holds, rep.passes, rep.fails) == (1, 0, 0)
+
+
+def test_reader_on_a_matched_list_passes(tmp_path, monkeypatch) -> None:
+    rep = _built(tmp_path, monkeypatch, {"name": "R", "roots": ["conclave_lens_x"]}, "MATCHED to pod freeze f.txt")
+    assert (rep.holds, rep.passes, rep.fails) == (0, 1, 0)
+
+
+def test_non_reader_needs_its_own_tests_under_the_locked_set(tmp_path, monkeypatch) -> None:
+    part = {"name": "N", "roots": ["conclave_x"]}
+    assert _built(tmp_path / "a", monkeypatch, part, "RESOLVED TODAY").holds == 1  # no locked test tools
+    assert _built(tmp_path / "b", monkeypatch, part, "RESOLVED TODAY", tools=True).passes == 1
+    assert _built(tmp_path / "c", monkeypatch, part, "RESOLVED TODAY", tools=True, test_rc=1).fails == 1

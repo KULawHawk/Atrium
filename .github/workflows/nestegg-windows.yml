@@ -181,10 +181,10 @@ jobs:
           python -I $b --src src --envs (Join-Path $env:RUNNER_TEMP 'envs') --dry-run *>&1 | Tee-Object -Variable d
           # the dry run reports every part not locked yet (FAIL rows, by name); it must never print PASS while any is unlocked
           $dv = "$(($d | Select-Object -Last 1))"
-          if ($dv -notmatch '^NESTEGG-PARTS: (PASS|FAIL \d+)') { Write-Host "FAIL: dry run gave no verdict ($dv)"; exit 1 }
+          if ($dv -notmatch '^NESTEGG-PARTS: (PASS \d+|HOLD \d+|FAIL \d+)') { Write-Host "FAIL: dry run gave no verdict ($dv)"; exit 1 }
           if ($d | Where-Object { "$_" -match '^FAIL ' -and "$_" -notmatch ' not locked ' }) { Write-Host 'FAIL: dry run failed for a reason other than "not locked"'; exit 1 }
           Write-Host "dry run: $dv"
           python -I $b --src src --envs (Join-Path $env:RUNNER_TEMP 'envs') --only atrium *>&1 | Tee-Object -Variable o
           $v = "$(($o | Where-Object { "$_" -match '^NESTEGG-PARTS: ' } | Select-Object -Last 1))"
-          if ($v -ne 'NESTEGG-PARTS: PASS') { Write-Host "FAIL: $v"; exit 1 }
+          if ($v -notmatch '^NESTEGG-PARTS: PASS \d+$') { Write-Host "FAIL: $v"; exit 1 }
           Write-Host 'NESTEGG-PHASE2-WINDOWS: PASS'

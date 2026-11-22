@@ -26,7 +26,8 @@ For each part in `parts.json`:
 2. **Not locked = FAIL, never installed from the open index:** no known-good list yet; a package with no measured hash for this platform; a `parts.json` torch pin, added package or gate-3 constraint that the list disagrees with; CUDA torch on Windows (only the CPU build is measured); the Marker and MinerU engines and the Paddle side env (no known-good lists yet).
 3. **Model files.** Pinned steps (HtrLens, the spaCy model, spoke scripts that pin revision and hash) must verify; unpinned ones (Docling, MinerU, VisionLocal's revision "main", and the `unpinned` entries) are FAIL "not pinned", even when the download worked.
 4. **Probe.** Imports every module of the part plus every outside package its code names; each failure is a FAIL row by name. Programs the part needs (tesseract, pdftoppm, mutool) must be on PATH.
-5. **Held** items (for example betacal, PA-3) print HOLD and never count as PASS.
+5. **Measured or not.** A reader (`conclave_lens_*`, and the Marker/MinerU engines) PASSes only when its list is MATCHED to a measured pod run; on a list resolved today it installs exactly and shows HOLD "locked, not measured". A part that is not a reader PASSes on a list resolved today only when its own tests pass under that exact set (test tools from `locks/lists/_test_tools_py<ver>.txt`, hash-checked); until that list exists it is HOLD. The status of each list is in `locks/LIST_STATUS.txt`.
+6. **Held** items (for example betacal, PA-3) print HOLD and never count as PASS. The last line counts FAIL, HOLD and PASS separately (`NESTEGG-PARTS: FAIL n, HOLD n, PASS n`), so a HOLD never reads as a clean install.
 
 Known open item: pip fetches the build backend for each part's own source (for example setuptools) at install time; it is not locked yet (printed as an INFO row on every part).
 

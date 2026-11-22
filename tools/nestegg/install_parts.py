@@ -16,7 +16,11 @@ Ported from the proven pod kit (POD_CALIB_GPU_v5.sh) to Windows and Linux.
 
   python -I install_parts.py --src <folder holding Conclave, locutus, sequoia, obsidian, atrium>
                              --envs <folder for environments> [--only A,B] [--dry-run]
-Last line: NESTEGG-PARTS: PASS | HOLD n | FAIL n (exit 0 / 2 / 1)
+Measured or not (coordinator 11/22): a reader (conclave_lens_*, and the engines) PASSes only on a list MATCHED to a
+measured run; otherwise it installs exactly and shows HOLD "locked, not measured". A part that is not a reader
+PASSes on a list resolved today only when its own tests pass under that exact locked set (the test tools come
+from locks/lists/_test_tools_py<ver>.txt, hash-checked); otherwise HOLD.
+Last line: NESTEGG-PARTS: PASS n | HOLD n, PASS n | FAIL n, HOLD n, PASS n (exit 0 / 2 / 1)
 """
 
 from __future__ import annotations
@@ -43,10 +47,13 @@ class Report:
     def __init__(self) -> None:
         self.fails = 0
         self.holds = 0
+        self.passes = 0
 
     def row(self, status: str, what: str, detail: str) -> None:
         if status == "FAIL":
             self.fails += 1
+        if status == "PASS":
+            self.passes += 1
         if status == "HOLD":  # left out on purpose until Jake decides; never reported as PASS
             self.holds += 1
         print(f"{status:<5} {what:<30} {detail}", flush=True)
@@ -219,6 +226,34 @@ def part_lock(part: dict, cfg: dict, src: Path, win: bool, gpu: bool, sums: dict
     return lines, probs + more
 
 
+def is_reader(part: dict) -> bool:
+    """Anything whose output was or will be calibrated: the lens spokes."""
+    return any(r.startswith("conclave_lens_") for r in part["roots"])
+
+
+def own_tests(rep: Report, part: dict, repo: Path, py: Path, envs: Path, log: Path, done: str, status: str) -> None:
+    """A part that is not a reader is measured by its own tests passing under the exact locked set."""
+    name = part["name"]
+    tools = read_list(LOCKS / "lists" / f"_test_tools_py{part['python']}.txt")
+    if tools is None:
+        rep.row("HOLD", name, f"{done}; {status}; its own tests not run under this set yet (no locked test-tools list)")
+        return
+    lines, probs = lock_reqs(tools, CFG_LOCK, WIN, load_sums(WIN))
+    if probs or locked_install(py, lines, envs / "_logs" / f"{name}.testtools.txt", log):
+        rep.row("HOLD", name, f"{done}; {status}; test tools could not be installed locked ({'; '.join(probs) or 'see ' + str(log)})")
+        return
+    dirs = [repo / "tests"] if part["roots"][0].startswith(".") else [repo / r.split("[")[0] / "tests" for r in part["roots"]]
+    dirs = [d for d in dirs if d.is_dir()]
+    if not dirs:
+        rep.row("HOLD", name, f"{done}; {status}; it has no tests folder to measure it by")
+        return
+    rc = run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", *dirs], log)
+    if rc == 0:
+        rep.row("PASS", name, f"{done}; {status}; its own tests pass under this exact set")
+    else:
+        rep.row("FAIL", name, f"{done}; its own tests fail under this exact set (exit {rc}, see {log})")
+
+
 def list_status(name: str) -> str:
     for ln in (LOCKS / "LIST_STATUS.txt").read_text(encoding="utf-8").splitlines():
         if ln.startswith(name + ":"):
@@ -333,8 +368,14 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
         for ln in (chk.stdout or chk.stderr).strip().splitlines():
             rep.row("FAIL", f"{name} pip check", ln)
         return
-    rep.row("PASS", name, f"installed {len(lines)} locked packages (hash-checked) + its own source; pip check clean")
-    rep.row("INFO", f"{name} list status", list_status(f"{name}_py{part['python']}.txt"))
+    status = list_status(f"{name}_py{part['python']}.txt")
+    done = f"installed {len(lines)} locked packages (hash-checked) + its own source; pip check clean"
+    if status.startswith("MATCHED") or status.startswith("empty on purpose"):
+        rep.row("PASS", name, f"{done}; list measured ({status.split('(')[0].strip()})")
+    elif is_reader(part):
+        rep.row("HOLD", name, f"{done}; locked, not measured: {status}")
+    else:
+        own_tests(rep, part, repo, py, envs, log, done, status)
     rep.row("INFO", f"{name} build tools", "pip fetches the build backend for the part's own source (e.g. setuptools) at install time; not locked yet")
     side_envs(rep, part, src, envs, log, py)
     models(rep, part, src, repo, envs, py, log)  # before the probe: a model can be an importable package
@@ -372,8 +413,13 @@ def side_envs(rep: Report, part: dict, src: Path, envs: Path, log: Path, py: Pat
             return
         exe = env_bin(env, se["check"][0])
         ok = exe.exists() and run([exe, *se["check"][1:]], log) == 0
-        rep.row("PASS" if ok else "FAIL", label, f"{se['check'][0]} {'runs' if ok else 'does not run'} ({len(lines)} locked packages)")
-        rep.row("INFO", f"{label} list status", list_status(lst))
+        st = list_status(lst)
+        if not ok:
+            rep.row("FAIL", label, f"{se['check'][0]} does not run ({len(lines)} locked packages, see {log})")
+        elif st.startswith("MATCHED"):
+            rep.row("PASS", label, f"{se['check'][0]} runs ({len(lines)} locked packages); list measured")
+        else:
+            rep.row("HOLD", label, f"{se['check'][0]} runs ({len(lines)} locked packages); locked, not measured: {st}")
     if part.get("spoke_side_env"):
         rep.row("FAIL", f"{part['name']} side env not locked",
                 "the spoke's own script installs from the open index without hashes (a known-good list exists in locks/lists "
@@ -474,12 +520,13 @@ def main(argv: list[str] | None = None) -> int:
     CFG_LOCK.update(cfg)
     for p in parts:
         build_part(rep, p, cfg, a.src, a.envs, a.dry_run, gpu, local, sums)
+    counts = f"HOLD {rep.holds}, PASS {rep.passes}"
     if rep.fails:
-        print(f"NESTEGG-PARTS: FAIL {rep.fails}" + (f" (and {rep.holds} held for Jake's decision)" if rep.holds else ""))
+        print(f"NESTEGG-PARTS: FAIL {rep.fails}, {counts}")
     elif rep.holds:
-        print(f"NESTEGG-PARTS: HOLD {rep.holds} (everything else passed; the held items wait on Jake's decision)")
+        print(f"NESTEGG-PARTS: {counts} (not a clean install: each HOLD is installed but waits on a measurement or Jake's decision)")
     else:
-        print("NESTEGG-PARTS: PASS")
+        print(f"NESTEGG-PARTS: PASS {rep.passes}")
     return 1 if rep.fails else (2 if rep.holds else 0)
 
 
