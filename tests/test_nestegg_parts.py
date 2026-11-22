@@ -225,3 +225,20 @@ def test_probe_import_failures_are_fail_rows(tmp_path, monkeypatch, capsys) -> N
     assert rep.fails == 1 and "FAIL  P import" in out and "requests" in out
     assert _probe(tmp_path, monkeypatch, "Traceback ...\n").fails == 1
     assert _probe(tmp_path, monkeypatch, "{}\n").fails == 0
+
+
+def test_pip_check_problem_fails_the_part(tmp_path, monkeypatch, capsys) -> None:
+    import subprocess
+    m = _mod()
+    src = tmp_path / "src"
+    (src / "atrium").mkdir(parents=True)
+    monkeypatch.setattr(m, "base_python", lambda v: ["py"])
+    monkeypatch.setattr(m, "run", lambda *a, **k: 0)
+    monkeypatch.setattr(m, "closure", lambda repo, roots: ["-e", str(repo)])
+    monkeypatch.setattr(m.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 1, "x 1.0 requires y, which is not installed.\n", ""))
+    rep = m.Report()
+    part = {"name": "atrium", "repo": "atrium", "roots": ["."], "python": "3.13"}
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    out = capsys.readouterr().out
+    assert rep.fails == 1 and "FAIL  atrium pip check" in out and "requires y" in out
+    assert "PASS  atrium " not in out

@@ -41,7 +41,7 @@ GitHub CLI, Tesseract OCR, Poppler (per user), MuPDF mutool, VC++ runtime. Every
 winget at one pinned version (`--version`), and winget checks each download against its signed
 manifest's sha256. A program with no measured version yet (today: Tesseract) is FAIL "not locked"
 if it would have to be installed, and is never installed unpinned. CI checks winget still offers
-every pinned version. `-DryRun` only says what it would do.
+every pinned version. A program that is already present is left alone at whatever version it is (only fresh installs are pinned); phase 0 reports the version it finds. `-DryRun` only says what it would do.
 Windows security boxes and winget's agreement question are the person's own answers; `-AssumeYes`
 exists only for the clean-Windows test machine. Nothing is deleted and no Windows setting or
 permanent PATH is changed by this script. Log: `<InstallRoot>\.adastra\install_log\`; found paths:
