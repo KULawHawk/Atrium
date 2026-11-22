@@ -119,13 +119,15 @@ def test_lock_copy_is_byte_identical_to_its_recorded_source() -> None:
 
 def test_every_list_belongs_to_a_part() -> None:
     names = {f"{p['name']}_py{p['python']}.txt" for p in PARTS["parts"]} | {"votingengine_beta_py3.13.txt"}  # betacal hold (PA-3)
+    names |= {f"_{p['side_env']['name']}_cli_py{p['side_env']['python']}.txt" for p in PARTS["parts"] if p.get("side_env")}
+    names |= {f"{p['name']}_side_py{p['spoke_side_env']['python']}.txt" for p in PARTS["parts"] if p.get("spoke_side_env")}
     for f in (LOCKS / "lists").iterdir():
         assert f.name in names, f.name
 
 
 def _cfg():
     return {"lock": PARTS["lock"], "torch": {"t": {"pins": ["torch==2.6.0"]}},
-            "gate3_constraints": {"file": "g.txt", "names": ["numpy"]}}
+            "gate3_constraints": {"file": "g.txt", "names": ["numpy", "timm"]}}
 
 
 def _sums():
@@ -158,19 +160,25 @@ def test_windows_drops_linux_only_adds_colorama_and_refuses_cuda_torch(tmp_path,
 
 def test_unlocked_cases_are_named(tmp_path, monkeypatch) -> None:
     m, p = _part(tmp_path, monkeypatch, "torch==2.5.0\nrequests==2.0\nnumpy==2.5.5\n", torch="t", add=["six==1.17.0"], gate3=True)
-    (tmp_path / "g.txt").write_text("numpy==2.4.4\n", encoding="utf-8")
+    (tmp_path / "g.txt").write_text("numpy==2.4.4\ntimm==1.0.27\n", encoding="utf-8")
     _, probs = m.part_lock(p, _cfg(), tmp_path, False, False, _sums())
     assert "parts.json adds six==1.17.0, the known-good list has nothing" in probs
     assert "parts.json pins torch==2.6.0, the known-good list has 2.5.0" in probs
     assert "gate-3 constraint numpy==2.4.4, the known-good list has 2.5.5" in probs
+    assert not any("timm" in x for x in probs)  # a constraint for a package the part does not install is not a disagreement
     assert "requests==2.0 has no measured hash for Linux" in probs
     _, probs = m.part_lock(dict(p, name="Q"), _cfg(), tmp_path, False, False, _sums())
     assert probs == ["no known-good list measured yet (locks/lists/Q_py3.13.txt)"]
 
 
-def test_unlocked_part_fails_and_is_never_installed(tmp_path: Path, capsys) -> None:
+def test_unlocked_part_fails_and_is_never_installed(tmp_path: Path, capsys, monkeypatch) -> None:
     (tmp_path / "src" / "Conclave").mkdir(parents=True)
-    rc = _mod().main(["--src", str(tmp_path / "src"), "--envs", str(tmp_path / "envs"), "--only", "launcher"])
+    m = _mod()
+    (tmp_path / "locks" / "lists").mkdir(parents=True)
+    for f in ("SHA256SUMS_win_amd64.txt", "SHA256SUMS_linux_x86_64.txt", "SHA256SUMS_sdist.txt"):
+        (tmp_path / "locks" / f).write_text("", encoding="utf-8")
+    monkeypatch.setattr(m, "LOCKS", tmp_path / "locks")  # launcher has no list here
+    rc = m.main(["--src", str(tmp_path / "src"), "--envs", str(tmp_path / "envs"), "--only", "launcher"])
     out = capsys.readouterr().out
     assert rc == 1 and "FAIL  launcher not locked" in out and not (tmp_path / "envs").exists()
 
@@ -242,3 +250,26 @@ def test_pip_check_problem_fails_the_part(tmp_path, monkeypatch, capsys) -> None
     out = capsys.readouterr().out
     assert rep.fails == 1 and "FAIL  atrium pip check" in out and "requires y" in out
     assert "PASS  atrium " not in out
+
+
+def test_cuda_build_from_a_pod_freeze(tmp_path, monkeypatch) -> None:
+    m, p = _part(tmp_path, monkeypatch, "torch==2.6.0+cu124\n", torch="t")
+    lines, probs = m.part_lock(p, _cfg(), tmp_path, True, False, _sums())  # Windows, no NVIDIA card: PyPI CPU build
+    assert probs == [] and lines == ["torch==2.6.0 --hash=sha256:aa"]
+    _, probs = m.part_lock(p, _cfg(), tmp_path, False, True, _sums())  # Linux: the +cu124 file itself must be hashed
+    assert probs == ["torch==2.6.0+cu124 has no measured hash for Linux"]
+
+
+def test_engine_without_list_or_with_wrong_pin_fails(tmp_path, monkeypatch, capsys) -> None:
+    m, _ = _part(tmp_path, monkeypatch, "")
+    for f in ("SHA256SUMS_win_amd64.txt", "SHA256SUMS_linux_x86_64.txt", "SHA256SUMS_sdist.txt"):
+        (tmp_path / f).write_text("", encoding="utf-8")
+    m.CFG_LOCK.update(_cfg())
+    se = {"name": "eng", "python": "3.13", "packages": ["tool==2.0"], "check": ["tool", "--help"]}
+    rep = m.Report()
+    m.side_envs(rep, {"name": "P", "side_env": se}, tmp_path, tmp_path / "envs", tmp_path / "l", Path("py"))
+    (tmp_path / "lists" / "_eng_cli_py3.13.txt").write_text("tool==1.0\n", encoding="utf-8")
+    m.side_envs(rep, {"name": "P", "side_env": se}, tmp_path, tmp_path / "envs", tmp_path / "l", Path("py"))
+    out = capsys.readouterr().out
+    assert rep.fails == 3 and "no known-good list" in out and "the engine needs tool==2.0, the known-good list has 1.0" in out
+    assert not (tmp_path / "envs").exists()

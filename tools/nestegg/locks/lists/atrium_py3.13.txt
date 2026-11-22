@@ -1,1 +1,0 @@
-# atrium declares no outside packages (pyproject.toml: dependencies = []); measured 11/22/2026 by the installer thread from atrium@e59b2e1

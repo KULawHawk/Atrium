@@ -1,0 +1,50 @@
+# Status of each list (11/22/2026). Only a list matched line for line to a pod freeze may be called MEASURED (known-good).
+# Built at Conclave main 0f03c13 with the calibration kit's own recipe (POD_CALIB_GPU_v5.sh): torch 2.6.0 + torchvision 0.21.0 for every
+# torch reader, torch 2.4.1 + torchvision 0.19.1 on Python 3.12 for HtrLens, the gate-3 pins for Docling and TableSurgeon, six 1.17.0 for
+# MarkerPdf and MinerU, the kit's engine pins. Packages the kit did not pin were resolved today.
+
+Adjudicator_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+ColPaliVerify_py3.13.txt: MATCHED to pod freeze pod2_20261121-151703__freeze_ColPaliVerify.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
+Docling_py3.13.txt: MATCHED to pod freeze 20261119-182018-quick__freeze_Docling.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
+FormFieldLens_py3.13.txt: MATCHED to pod freeze pod2_20261121-151703__freeze_FormFieldLens.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
+FormulaLens_py3.13.txt: KIT RECIPE, resolved today, NOT matched to a pod freeze (ran on pod 1, whose freezes were never copied home and are gone)
+GlmOcr_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+GotOcrUnified_py3.13.txt: MATCHED to pod freeze pod2_20261121-151703__freeze_GotOcrUnified.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
+Hierarchy_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+HtrHosted_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+HtrLens_py3.12.txt: MATCHED to pod freeze shard1_20261121-235751__freeze_HtrLens.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
+HtrQwen_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+MarkerPdf_py3.13.txt: KIT RECIPE, resolved today, NOT matched to a pod freeze (ran on pod 1, whose freezes were never copied home and are gone)
+MinerU_py3.13.txt: MATCHED to pod freeze shard5_20261121-224430__freeze_MinerU.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
+NougatScience_py3.13.txt: KIT RECIPE, resolved today, NOT matched to a pod freeze (ran on pod 1, whose freezes were never copied home and are gone)
+OcrPaddle_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+OcrPaddle_side_py3.12.txt: spoke's own side_env_requirements.txt, resolved today, NOT MEASURED; the proof run's freeze is also a fresh resolve
+OcrTesseract_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+PdfText_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+StructuredHeuristic_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+TableSurgeon_py3.13.txt: KIT RECIPE, resolved today, NOT matched to a pod freeze (ran on pod 1, whose freezes were never copied home and are gone)
+VisionClaude_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+VisionLocal_py3.13.txt: MATCHED to pod freeze pod2_20261121-151703__freeze_VisionLocal.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
+_marker_cli_py3.13.txt: KIT RECIPE, resolved today; pod freeze PENDING from pod 2 / VisionLocal shards
+_mineru_cli_py3.12.txt: KIT RECIPE, resolved today; pod freeze PENDING from pod 2 / VisionLocal shards
+apexbridge_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+atrium_py3.13.txt: empty on purpose: atrium declares no dependencies
+documentprofiler_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+harness_adapters_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+launcher_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+lens_roster_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+locutus_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+observatory_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+obsidian_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+reviewconsole_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+sequoia_bridge_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+sequoia_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+symbolspotter_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+vault_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+votingengine_beta_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+votingengine_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+workbench_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+
+Superseded lists (kept, not used): lists/superseded_2026-11-22/.
+
+Still kit recipe, not matched: TableSurgeon, MarkerPdf, NougatScience, FormulaLens, _marker_cli, _mineru_cli (proof run will give a fresh-resolve freeze only; it installs PyPI torch).

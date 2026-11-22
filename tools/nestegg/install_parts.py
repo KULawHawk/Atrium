@@ -34,6 +34,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 LOCKS = HERE / "locks"
+CFG_LOCK: dict = {}  # parts.json, filled by main() (side_envs reads the lock settings from it)
 WIN = os.name == "nt"
 STD = set(sys.stdlib_module_names)
 
@@ -174,6 +175,8 @@ def lock_reqs(pins: dict[str, str], cfg: dict, win: bool, sums: dict) -> tuple[l
     pins = dict(pins)
     if win:
         pins = {n: v for n, v in pins.items() if not re.match(lk["linux_only"], n)}
+        # a CUDA build named by a pod freeze (torch==2.6.0+cu124) is the CPU build on Windows (no NVIDIA card)
+        pins = {n: (v.split("+")[0] if re.match(lk["cuda_local"], v.partition("+")[2]) else v) for n, v in pins.items()}
         for n, x in lk["windows_extras"].items():
             if n not in pins and any(t in pins for t in x["when"]):
                 pins[n] = x["version"]
@@ -199,9 +202,9 @@ def part_lock(part: dict, cfg: dict, src: Path, win: bool, gpu: bool, sums: dict
     tor = cfg["torch"].get(part.get("torch", ""))
     for t in tor["pins"] if tor else []:
         n, v = t.split("==")
-        if pins.get(n) != v:
+        if pins.get(n, "").split("+")[0] != v:
             probs.append(f"parts.json pins {t}, the known-good list has {pins.get(n, 'nothing')}")
-    if win and gpu and "torch" in pins:
+    if win and gpu and "torch" in pins:  # the CPU build would run, but it is not what a GPU PC should get
         probs.append("CUDA torch for Windows has no measured hash yet (only the CPU build is measured)")
     if part.get("gate3"):
         f = src / cfg["gate3_constraints"]["file"]
@@ -211,9 +214,16 @@ def part_lock(part: dict, cfg: dict, src: Path, win: bool, gpu: bool, sums: dict
             probs.append(f"constraints file missing: {f}")
         else:
             probs += [f"gate-3 constraint {n}=={g[n]}, the known-good list has {pins.get(n, 'nothing')}"
-                      for n in sorted(names & set(g)) if pins.get(n) != g[n]]
+                      for n in sorted(names & set(g) & set(pins)) if pins[n] != g[n]]  # a constraint only binds what is installed
     lines, more = lock_reqs(pins, cfg, win, sums)
     return lines, probs + more
+
+
+def list_status(name: str) -> str:
+    for ln in (LOCKS / "LIST_STATUS.txt").read_text(encoding="utf-8").splitlines():
+        if ln.startswith(name + ":"):
+            return ln.split(":", 1)[1].strip()
+    return "no status recorded"
 
 
 def locked_install(py: Path, lines: list[str], lockfile: Path, log: Path) -> int:
@@ -324,6 +334,7 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
             rep.row("FAIL", f"{name} pip check", ln)
         return
     rep.row("PASS", name, f"installed {len(lines)} locked packages (hash-checked) + its own source; pip check clean")
+    rep.row("INFO", f"{name} list status", list_status(f"{name}_py{part['python']}.txt"))
     rep.row("INFO", f"{name} build tools", "pip fetches the build backend for the part's own source (e.g. setuptools) at install time; not locked yet")
     side_envs(rep, part, src, envs, log, py)
     models(rep, part, src, repo, envs, py, log)  # before the probe: a model can be an importable package
@@ -337,11 +348,36 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
 def side_envs(rep: Report, part: dict, src: Path, envs: Path, log: Path, py: Path) -> None:
     se = part.get("side_env")
     if se:
-        rep.row("FAIL", f"{part['name']} engine not locked",
-                f"no known-good list for the {se['name']} engine ({' '.join(se['packages'])}) yet; not built from the open index")
+        label = f"{part['name']} engine"
+        lst = f"_{se['name']}_cli_py{se['python']}.txt"
+        pins = read_list(LOCKS / "lists" / lst)
+        if pins is None:
+            rep.row("FAIL", f"{label} not locked", f"no known-good list (locks/lists/{lst}); not built from the open index")
+            return
+        missing = [p for p in se["packages"] if pins.get(_req_name(p)) != p.split("==")[1]]
+        lines, probs = lock_reqs(pins, CFG_LOCK, WIN, load_sums(WIN))
+        probs += [f"the engine needs {p}, the known-good list has {pins.get(_req_name(p), 'nothing')}" for p in missing]
+        if probs:
+            for p in probs:
+                rep.row("FAIL", f"{label} not locked", p)
+            return
+        env = envs / f"_{se['name']}_cli"
+        base = base_python(se["python"])
+        if not base:
+            rep.row("FAIL", label, f"Python {se['python']} not found")
+            return
+        if (not env_python(env).exists() and run(base + ["-m", "venv", env], log)) or \
+                locked_install(env_python(env), lines, envs / "_logs" / f"_{se['name']}_cli.lock.txt", log):
+            rep.row("FAIL", label, f"locked install failed (see {log})")
+            return
+        exe = env_bin(env, se["check"][0])
+        ok = exe.exists() and run([exe, *se["check"][1:]], log) == 0
+        rep.row("PASS" if ok else "FAIL", label, f"{se['check'][0]} {'runs' if ok else 'does not run'} ({len(lines)} locked packages)")
+        rep.row("INFO", f"{label} list status", list_status(lst))
     if part.get("spoke_side_env"):
         rep.row("FAIL", f"{part['name']} side env not locked",
-                "the spoke's own script installs from the open index without hashes; needs a known-good list and a hashed install")
+                "the spoke's own script installs from the open index without hashes (a known-good list exists in locks/lists "
+                "but the script cannot take it yet); needs a hashed install in the spoke (Conclave PR)")
 
 
 def probe(rep: Report, part: dict, repo: Path, py: Path, local: set[str], log: Path) -> None:
@@ -435,6 +471,7 @@ def main(argv: list[str] | None = None) -> int:
                 if b.is_dir():
                     local |= {c.name for c in b.iterdir() if c.is_dir() and (c / "__init__.py").exists()}
     sums = load_sums(WIN)
+    CFG_LOCK.update(cfg)
     for p in parts:
         build_part(rep, p, cfg, a.src, a.envs, a.dry_run, gpu, local, sums)
     if rep.fails:
