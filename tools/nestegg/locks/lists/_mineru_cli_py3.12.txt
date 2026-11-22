@@ -10,6 +10,7 @@ cffi==2.1.1
 charset-normalizer==3.5.2
 click==8.5.1
 cobble==0.1.4
+colorama==0.4.6
 colorlog==6.12.0
 cryptography==50.0.2
 cuda-bindings==13.5.0
@@ -127,4 +128,5 @@ tzdata==2026.6
 urllib3==2.8.0
 uvicorn==0.54.0
 wcwidth==0.9.5
+win32-setctime==1.2.1
 xlsxwriter==3.3.3
