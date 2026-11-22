@@ -144,3 +144,29 @@ jobs:
         with:
           name: htrlens-measure
           path: ${{ runner.temp }}/htrlens_measure.txt
+
+  phase2-parts:
+    # Builds the one part this public-to-the-runner repo holds (atrium) through the real builder on Windows:
+    # proves the py launcher lookup, Scripts\python.exe paths, the import probe and the verdict line. The
+    # other repos are private to this runner, so the full 38-part build is proven on the PC or a rented machine.
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src/atrium
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Dry run of every part, then a real build of the atrium part
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          foreach ($r in 'Conclave','locutus','sequoia','obsidian') { New-Item -ItemType Directory -Force -Path (Join-Path 'src' $r) | Out-Null }
+          $b = 'src\atrium\tools\nestegg\install_parts.py'
+          python -I $b --src src --envs (Join-Path $env:RUNNER_TEMP 'envs') --dry-run *>&1 | Tee-Object -Variable d
+          if ("$(($d | Select-Object -Last 1))" -ne 'NESTEGG-PARTS: PASS') { Write-Host 'FAIL: dry run'; exit 1 }
+          python -I $b --src src --envs (Join-Path $env:RUNNER_TEMP 'envs') --only atrium *>&1 | Tee-Object -Variable o
+          $v = "$(($o | Where-Object { "$_" -match '^NESTEGG-PARTS: ' } | Select-Object -Last 1))"
+          if ($v -ne 'NESTEGG-PARTS: PASS') { Write-Host "FAIL: $v"; exit 1 }
+          Write-Host 'NESTEGG-PHASE2-WINDOWS: PASS'
