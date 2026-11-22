@@ -196,7 +196,19 @@ def read_engine_file(path: Path) -> dict[str, str] | None:
             continue
         req = ln.split()[0].rstrip("\\")
         n, v = req.split("==", 1)
-        out[_norm(n.split("[")[0])] = v.split(";")[0]
+        out[_norm(n.split("[")[0])] = v.split(";")[0].strip()
+    return out
+
+
+def engine_linux_only(path: Path) -> set[str]:
+    """Names an engine file marks `; sys_platform == "linux"` (no Windows wheel; the Windows build leaves them out)."""
+    out = set()
+    for ln in path.read_text(encoding="utf-8").splitlines():
+        ln = ln.strip()
+        if ln.startswith("#") or "==" not in ln or ";" not in ln:
+            continue
+        if re.search(r"""sys_platform\s*==\s*["']linux["']""", ln.split(";", 1)[1]):
+            out.add(_norm(ln.split("==", 1)[0].split("[")[0]))
     return out
 
 
@@ -488,6 +500,11 @@ def side_envs(rep: Report, part: dict, src: Path, envs: Path, log: Path, py: Pat
             elif own != pins:
                 diff = sorted(set(own.items()) ^ set(pins.items()))[:6]
                 rep.row("FAIL", f"{label} not locked", f"{se['engine_file']} and the saved list {lst} disagree: {diff}")
+                return
+            elif bad := sorted(n for n in engine_linux_only(ef) if not re.match(CFG_LOCK["linux_only"], n)):
+                # the spoke says Linux-only, but the Windows build would still try to install them: the two disagree
+                rep.row("FAIL", f"{label} not locked", f"{se['engine_file']} marks {bad} Linux-only; the installer's "
+                        f"linux_only rule ({CFG_LOCK['linux_only']}) does not leave them out on Windows")
                 return
             else:
                 rep.row("INFO", label, f"built from {se['engine_file']} (equals the saved list {lst}; files hash-checked)")

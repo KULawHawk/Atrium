@@ -370,6 +370,31 @@ def test_engine_file_is_read_and_must_equal_the_saved_list(tmp_path, monkeypatch
     assert rep.fails == 1 and "disagree" in out  # never built from either when the two differ
 
 
+def test_engine_file_linux_markers_must_be_dropped_on_windows(tmp_path, monkeypatch, capsys) -> None:
+    # the MarkerPdf file (PA-2) marks four packages `; sys_platform == "linux"` (no Windows wheel)
+    m = _mod()
+    body = ('six==1.17.0 \\\n    --hash=sha256:aa\n'
+            'triton==3.9.0 ; sys_platform == "linux" \\\n    --hash=sha256:bb\n'
+            'odd-pkg==1.0 ; sys_platform == "linux" \\\n    --hash=sha256:cc\n')
+    f = tmp_path / "e.txt"
+    f.write_text(body)
+    assert m.read_engine_file(f) == {"six": "1.17.0", "triton": "3.9.0", "odd-pkg": "1.0"}
+    assert m.engine_linux_only(f) == {"triton", "odd-pkg"}
+    lists = tmp_path / "locks" / "lists"
+    lists.mkdir(parents=True)
+    (lists / "_marker_cli_py3.13.txt").write_text("six==1.17.0\ntriton==3.9.0\nodd-pkg==1.0\n")
+    monkeypatch.setattr(m, "LOCKS", tmp_path / "locks")
+    m.CFG_LOCK.update({"linux_only": "^(nvidia-.*|triton)$"})
+    (tmp_path / "src" / "Conclave" / "s").mkdir(parents=True)
+    (tmp_path / "src" / "Conclave" / "s" / "engine_requirements.txt").write_text(body)
+    part = {"name": "MarkerPdf", "repo": "Conclave", "side_env": {"name": "marker", "python": "3.13", "packages": [],
+            "check": ["marker_single", "--help"], "engine_file": "s/engine_requirements.txt"}}
+    rep = m.Report()
+    m.side_envs(rep, part, tmp_path / "src", tmp_path / "envs", tmp_path / "l", Path("py"))
+    out = capsys.readouterr().out
+    assert rep.fails == 1 and "odd-pkg" in out and "Linux-only" in out
+
+
 def test_locutus_rulings_plugin_is_in_every_part_that_loads_it() -> None:
     # entry-point plugin: ReviewConsole wraps every Console with it, the Bridge refuses repeats without it
     parts = {p["name"]: p for p in json.loads((NESTEGG / "parts.json").read_text(encoding="utf-8"))["parts"]}
