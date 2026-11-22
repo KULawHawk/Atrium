@@ -62,7 +62,10 @@ jobs:
             $id = $m.Groups[1].Value; $ver = $m.Groups[2].Value
             if ($ver) {
               winget show --id $id --exact --version $ver --source winget --accept-source-agreements --disable-interactivity *> $null
-              if ($LASTEXITCODE -eq 0) { Write-Host "  pin OK    $id $ver" } else { Write-Host "  pin GONE  $id $ver (winget exit $LASTEXITCODE)"; $bad++ }
+              if ($LASTEXITCODE -eq 0) { Write-Host "  pin OK    $id $ver" } else {
+                Write-Host "  pin GONE  $id $ver (winget exit $LASTEXITCODE); winget offers:"; $bad++
+                winget show --id $id --exact --versions --source winget --accept-source-agreements --disable-interactivity 2>&1 | Select-Object -Last 6 | ForEach-Object { Write-Host "      $_" }
+              }
             } else {
               Write-Host "  not measured: $id; winget offers:"
               winget show --id $id --exact --versions --source winget --accept-source-agreements --disable-interactivity 2>&1 | Select-Object -Last 6 | ForEach-Object { Write-Host "      $_" }

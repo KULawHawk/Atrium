@@ -96,7 +96,7 @@ def test_prereqs_installs_only_through_winget_with_exact_ids() -> None:
     assert "if (-not $Version) { Row 'FAIL' $Name (\"not locked:" in code
     rows = re.findall(r"^\s*Ensure '[^']+'\s+\$\{function:Find-\w+\}\s+'([^']+)'\s+'([^']*)'", code, flags=re.M)
     ids = [i for i, _ in rows]
-    assert dict(rows)["ArtifexSoftware.mutool"] == "1.28.5" and dict(rows)["UB-Mannheim.TesseractOCR"] == ""  # not measured yet
+    assert dict(rows)["ArtifexSoftware.mutool"] == "1.23.0" and dict(rows)["UB-Mannheim.TesseractOCR"] == ""  # not measured yet
     assert ids == [
         "Python.Python.3.13",
         "Python.Python.3.12",
