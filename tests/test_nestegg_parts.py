@@ -321,6 +321,35 @@ def test_test_env_part_runs_its_tests_in_a_separate_locked_env_then_deletes_it(t
     assert not (tmp_path / "envs" / "P-test").exists()  # deleted after the run
 
 
+def test_workbench_run_button_points_at_the_harness_env(tmp_path, monkeypatch, capsys) -> None:
+    import subprocess
+    m = _mod()
+    envs = tmp_path / "envs"
+    rep = m.Report()
+    part = {"name": "workbench", "harness_from": "harness_adapters"}
+    m.harness(rep, part, envs, Path("wb_py"), tmp_path / "log")
+    assert rep.fails == 1 and "environment is not built" in capsys.readouterr().out  # never silently blank
+    hp = m.env_python(envs / "harness_adapters")
+    hp.parent.mkdir(parents=True)
+    hp.write_text("")
+    seen = []
+    for out, rc, fails in (("WORKBENCH-HARNESS: OK /x (written to /s)\n", 0, 0), ("WORKBENCH-HARNESS: FAIL already set\n", 1, 1)):
+        monkeypatch.setattr(m.subprocess, "run", lambda a, **k: (seen.append(a), subprocess.CompletedProcess(a, rc, out, ""))[1])
+        rep = m.Report()
+        m.harness(rep, part, envs, Path("wb_py"), tmp_path / "log")
+        assert rep.fails == fails
+    assert seen[0][0] == Path("wb_py") and seen[0][-1] == str(hp)  # run by the Workbench's Python, given the harness one
+    parts = {p["name"]: p for p in PARTS["parts"]}
+    assert parts["workbench"]["harness_from"] == "harness_adapters"
+
+
+def test_workbench_harness_script_never_overwrites_a_chosen_value() -> None:
+    src = (NESTEGG / "workbench_harness.py").read_text(encoding="utf-8")
+    assert "if current is None:\n        save_user_value" in src  # writes only when blank
+    assert "harness_python_reader(schema, layers)()" in src  # reads back through the Workbench's own resolver
+    assert '"-m", "conclave_harness_adapters.pipeline_run", "--help"' in src
+
+
 def test_locutus_rulings_plugin_is_in_every_part_that_loads_it() -> None:
     # entry-point plugin: ReviewConsole wraps every Console with it, the Bridge refuses repeats without it
     parts = {p["name"]: p for p in json.loads((NESTEGG / "parts.json").read_text(encoding="utf-8"))["parts"]}

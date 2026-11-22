@@ -447,6 +447,8 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
     rep.row("INFO", f"{name} build tools", "pip fetches the build backend for the part's own source (e.g. setuptools) at install time; not locked yet")
     side_envs(rep, part, src, envs, log, py)
     models(rep, part, src, repo, envs, py, log)  # before the probe: a model can be an importable package
+    if part.get("harness_from"):
+        harness(rep, part, envs, py, log)
     probe(rep, part, repo, py, local, log)
     for prog in part.get("programs", []):
         rep.row("PASS" if shutil.which(prog) else "FAIL", f"{name} needs {prog}",
@@ -531,6 +533,26 @@ def probe(rep: Report, part: dict, repo: Path, py: Path, local: set[str], log: P
             rep.row("FAIL", f"{part['name']} import", f"{mod}: {err}")
     else:
         rep.row("PASS", f"{part['name']} load check", f"{len(pkgs)} packages and {len(third)} outside modules import")
+
+
+def harness(rep: Report, part: dict, envs: Path, py: Path, log: Path) -> None:
+    """The Workbench's Run launches the harness with its harness.python setting; blank = the Workbench's own Python,
+    which does not carry the harness. Point the setting at the harness part's environment and prove it starts."""
+    label, hp = f"{part['name']} Run button", env_python(envs / part["harness_from"])
+    rep.row("INFO", label, "a blank harness.python on a fresh install would fail at Run, so the installer writes "
+                           f"it (the {part['harness_from']} environment) and proves it starts")
+    if not hp.exists():
+        rep.row("FAIL", label, f"the {part['harness_from']} environment is not built, so harness.python cannot point "
+                               "at it; a blank harness.python would fail at Run")
+        return
+    r = subprocess.run([py, "-I", HERE / "workbench_harness.py", str(hp)], capture_output=True, text=True)
+    out = (r.stdout.strip().splitlines() or [r.stderr.strip()[-200:]])[-1]
+    with open(log, "a", encoding="utf-8") as fh:
+        fh.write(r.stdout + r.stderr)
+    if r.returncode == 0 and out.startswith("WORKBENCH-HARNESS: OK"):
+        rep.row("PASS", label, out.removeprefix("WORKBENCH-HARNESS: "))
+    else:
+        rep.row("FAIL", label, out.removeprefix("WORKBENCH-HARNESS: "))
 
 
 def models(rep: Report, part: dict, src: Path, repo: Path, envs: Path, py: Path, log: Path) -> None:
