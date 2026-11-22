@@ -240,7 +240,7 @@ def part_lock(part: dict, cfg: dict, src: Path, win: bool, gpu: bool, sums: dict
 
 def is_reader(part: dict) -> bool:
     """Anything whose output was or will be calibrated: the lens spokes."""
-    return any(r.startswith("conclave_lens_") for r in part["roots"])
+    return part["roots"][0].startswith("conclave_lens_")  # the part's own spoke; a lens it carries does not make it one
 
 
 def own_tests(rep: Report, part: dict, repo: Path, py: Path, envs: Path, log: Path, done: str, status: str) -> None:
