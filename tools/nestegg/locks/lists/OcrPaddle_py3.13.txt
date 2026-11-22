@@ -1,7 +1,7 @@
 annotated-types==0.8.0
 click==8.5.1
 lxml==5.4.0
-numpy==2.5.4
+numpy==2.5.5
 opencv-python-headless==4.14.0.94
 pillow==10.4.0
 pydantic==2.14.4

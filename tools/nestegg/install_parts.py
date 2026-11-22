@@ -157,7 +157,15 @@ def _dist_ver(fn: str) -> tuple[str, str]:
 def load_sums(win: bool) -> dict[tuple[str, str], list[str]]:
     """(name, version) -> the measured sha256 values of the saved files for this platform."""
     out: dict[tuple[str, str], list[str]] = {}
-    for f in ("SHA256SUMS_win_amd64.txt" if win else "SHA256SUMS_linux_x86_64.txt", "SHA256SUMS_sdist.txt"):
+    for f in ("SHA256SUMS_win_amd64.txt",) if win else ("SHA256SUMS_linux_x86_64.txt", "SHA256SUMS_cu124_linux.txt"):
+        out_f = LOCKS / f
+        if not out_f.is_file():
+            continue
+        for ln in out_f.read_text(encoding="utf-8").splitlines():
+            if ln.strip():
+                h, fn = ln.split()
+                out.setdefault(_dist_ver(fn), []).append(h)
+    for f in ("SHA256SUMS_sdist.txt",):
         for ln in (LOCKS / f).read_text(encoding="utf-8").splitlines():
             if ln.strip():
                 h, fn = ln.split()
@@ -514,16 +522,13 @@ def main(argv: list[str] | None = None) -> int:
         rep.row("FAIL", u, "not a part in parts.json")
     gpu = False if a.dry_run else has_nvidia()
     print(f"Nestegg phase 2: {len(parts)} parts, torch build: {'CUDA' if gpu else 'CPU'}{'  [DRY RUN]' if a.dry_run else ''}")
-    local = {"conclave", "sequoia", "locutus", "obsidian", "atrium", "curatorplug_conclave"}
-    for r in ("Conclave", "locutus", "sequoia", "obsidian", "atrium"):
-        for pp in (a.src / r).glob("**/pyproject.toml") if (a.src / r).is_dir() and not a.dry_run else []:
-            for b in (pp.parent / "src", pp.parent):
-                if b.is_dir():
-                    local |= {c.name for c in b.iterdir() if c.is_dir() and (c / "__init__.py").exists()}
+    # Every import outside the part's own packages is checked in the part's environment, including names from the
+    # five repos (Jake 11/22: anything referenced is part of the build). A Conclave part that imports locutus,
+    # obsidian or another conclave_* distribution must have it installed, or the probe names it as a FAIL.
     sums = load_sums(WIN)
     CFG_LOCK.update(cfg)
     for p in parts:
-        build_part(rep, p, cfg, a.src, a.envs, a.dry_run, gpu, local, sums)
+        build_part(rep, p, cfg, a.src, a.envs, a.dry_run, gpu, set(), sums)
     counts = f"HOLD {rep.holds}, PASS {rep.passes}"
     if rep.fails:
         print(f"NESTEGG-PARTS: FAIL {rep.fails}, {counts}")

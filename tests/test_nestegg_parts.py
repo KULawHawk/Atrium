@@ -260,6 +260,14 @@ def test_cuda_build_from_a_pod_freeze(tmp_path, monkeypatch) -> None:
     assert probs == ["torch==2.6.0+cu124 has no measured hash for Linux"]
 
 
+def test_linux_cuda_hashes_come_from_the_saved_cu124_list() -> None:
+    m = _mod()  # real locks/ folder, not a test copy
+    linux, win = m.load_sums(False), m.load_sums(True)
+    for dv in (("torch", "2.6.0+cu124"), ("torchvision", "0.21.0+cu124"), ("torch", "2.4.1+cu124"), ("torchvision", "0.19.1+cu124")):
+        assert dv in linux and dv not in win, dv  # the GPU files are Linux-only; Windows never gets them
+    assert linux[("torch", "2.6.0+cu124")][0].startswith("0f3bc53c988c")
+
+
 def test_engine_without_list_or_with_wrong_pin_fails(tmp_path, monkeypatch, capsys) -> None:
     m, _ = _part(tmp_path, monkeypatch, "")
     for f in ("SHA256SUMS_win_amd64.txt", "SHA256SUMS_linux_x86_64.txt", "SHA256SUMS_sdist.txt"):

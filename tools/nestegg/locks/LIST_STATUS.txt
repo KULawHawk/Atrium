@@ -8,25 +8,25 @@ ColPaliVerify_py3.13.txt: MATCHED to pod freeze pod2_20261121-151703__freeze_Col
 Docling_py3.13.txt: MATCHED to pod freeze 20261119-182018-quick__freeze_Docling.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
 FormFieldLens_py3.13.txt: MATCHED to pod freeze pod2_20261121-151703__freeze_FormFieldLens.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
 FormulaLens_py3.13.txt: KIT RECIPE, resolved today, NOT matched to a pod freeze (ran on pod 1, whose freezes were never copied home and are gone)
-GlmOcr_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+GlmOcr_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly); numpy back to 2.5.5 as measured (no locutus code in this reader)
 GotOcrUnified_py3.13.txt: MATCHED to pod freeze pod2_20261121-151703__freeze_GotOcrUnified.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
-Hierarchy_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+Hierarchy_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly)
 HtrHosted_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
 HtrLens_py3.12.txt: MATCHED to pod freeze shard1_20261121-235751__freeze_HtrLens.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
-HtrQwen_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+HtrQwen_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly); numpy back to 2.5.5 as measured (no locutus code in this reader)
 MarkerPdf_py3.13.txt: KIT RECIPE, resolved today, NOT matched to a pod freeze (ran on pod 1, whose freezes were never copied home and are gone)
 MinerU_py3.13.txt: MATCHED to pod freeze shard5_20261121-224430__freeze_MinerU.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
 NougatScience_py3.13.txt: KIT RECIPE, resolved today, NOT matched to a pod freeze (ran on pod 1, whose freezes were never copied home and are gone)
-OcrPaddle_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
-OcrPaddle_side_py3.12.txt: spoke's own side_env_requirements.txt, resolved today, NOT MEASURED; the proof run's freeze is also a fresh resolve
-OcrTesseract_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
-PdfText_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
-StructuredHeuristic_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+OcrPaddle_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly); numpy back to 2.5.5 as measured (no locutus code in this reader)
+OcrPaddle_side_py3.12.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly)
+OcrTesseract_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly)
+PdfText_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly)
+StructuredHeuristic_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly)
 TableSurgeon_py3.13.txt: KIT RECIPE, resolved today, NOT matched to a pod freeze (ran on pod 1, whose freezes were never copied home and are gone)
 VisionClaude_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
 VisionLocal_py3.13.txt: MATCHED to pod freeze pod2_20261121-151703__freeze_VisionLocal.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
-_marker_cli_py3.13.txt: KIT RECIPE, resolved today; pod freeze PENDING from pod 2 / VisionLocal shards
-_mineru_cli_py3.12.txt: KIT RECIPE, resolved today; pod freeze PENDING from pod 2 / VisionLocal shards
+_marker_cli_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly)
+_mineru_cli_py3.12.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly)
 apexbridge_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
 atrium_py3.13.txt: empty on purpose: atrium declares no dependencies
 documentprofiler_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
@@ -50,3 +50,5 @@ Superseded lists (kept, not used): lists/superseded_2026-11-22/.
 
 Still kit recipe, not matched: TableSurgeon, MarkerPdf, NougatScience, FormulaLens, _marker_cli, _mineru_cli (proof run will give a fresh-resolve freeze only; it installs PyPI torch).
 Numpy: every list resolved today now carries numpy 2.5.4 (was 2.5.5), the version every measured pod freeze used and one of locutus's pinned golden sets (installer test run 11/22 2:23 AM CT). Each changed list passed an offline install + pip check from the saved files. Engine environments left as resolved.
+
+Proof run 20261122-shard3 (11/22 1:51-3:04 AM CT): readers that passed but whose list is NOT promoted, because the list follows the calibration kit (with torchvision / gate-3 pins / six) and the proof run installed declared-only: Docling, TableSurgeon, MarkerPdf, MinerU, NougatScience, HtrLens, FormFieldLens. Not passed: ColPaliVerify (test limit: no candidates), GotOcrUnified and FormulaLens (degraded on the synthetic page), VisionLocal (torchvision not declared; fix PR pending).
