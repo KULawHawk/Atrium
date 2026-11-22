@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
 import os
 import re
@@ -34,6 +35,7 @@ import shutil
 import subprocess
 import sys
 import tomllib
+from datetime import datetime, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -663,6 +665,93 @@ def models(rep: Report, part: dict, src: Path, repo: Path, envs: Path, py: Path,
             rep.row("FAIL", label, f"unknown model step {step!r}")
 
 
+READER_ENVS_SCHEMA = 1
+_MEASURE = (
+    "import json,sys,importlib.metadata as m\n"
+    "eps=sorted({e.name for e in m.entry_points(group='conclave.lenses')})\n"
+    "try:\n    cv=m.version('conclave-contracts')\nexcept m.PackageNotFoundError:\n    cv=None\n"
+    "print(json.dumps({'python_version':sys.version.split()[0],'executable':sys.executable,'lens_ids':eps,'contracts_version':cv}))\n"
+)
+
+
+def dir_bytes(path: Path) -> int:
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for f in files:
+            try:
+                total += (Path(root) / f).lstat().st_size
+            except OSError:
+                pass
+    return total
+
+
+def reader_entry(rep: Report, part: dict, envs: Path, outcome: str) -> dict:
+    """Measure, with the reader's own Python in isolated mode, what LensRunner's launcher needs to start it there
+    (design: installer/DESIGN_reader_env_launcher_2026-11-22.md section 2). Nothing is copied from parts.json."""
+    name = part["name"]
+    env = envs / name
+    py = env_python(env)
+    lst = f"{name}_py{part['python']}.txt"
+    lp = LOCKS / "lists" / lst
+    entry = {"part": name, "env": str(env), "python": str(py), "list": lst,
+             "list_sha256": hashlib.sha256(lp.read_bytes()).hexdigest() if lp.is_file() else None,
+             "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "status": outcome,
+             "host_selftest": "NOT_RUN: LensRunner has no reader host yet (design section 8, item 1)"}
+    if not py.exists():
+        rep.row("FAIL", f"{name} reader record", f"its Python is missing: {py}")
+        entry["status"] = "FAIL"
+        return entry
+    got = subprocess.run([str(py), "-I", "-c", _MEASURE], capture_output=True, text=True)
+    try:
+        facts = json.loads(got.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        rep.row("FAIL", f"{name} reader record", f"its Python did not answer (exit {got.returncode}): {got.stderr.strip()[-300:]}")
+        entry["status"] = "FAIL"
+        return entry
+    entry.update({k: facts[k] for k in ("python_version", "lens_ids", "contracts_version")})
+    entry["size_bytes"] = dir_bytes(env)
+    probs = []
+    if not facts["lens_ids"]:
+        probs.append("no reader is registered under conclave.lenses in its own environment")
+    if not facts["contracts_version"]:
+        probs.append("conclave-contracts is not installed in its own environment")
+    if not facts["python_version"].startswith(part["python"] + "."):
+        probs.append(f"runs Python {facts['python_version']}, the build declares {part['python']}")
+    if os.path.normcase(os.path.realpath(facts["executable"])) != os.path.normcase(os.path.realpath(py)):
+        probs.append(f"answered from {facts['executable']}, not {py}")
+    for pr in probs:
+        rep.row("FAIL", f"{name} reader record", pr)
+    if probs:
+        entry["status"] = "FAIL"
+    else:
+        rep.row("INFO", f"{name} reader record", f"{', '.join(facts['lens_ids'])} on Python {facts['python_version']}, "
+                f"{entry['size_bytes'] / 1e6:,.0f} MB on disk; recorded as {entry['status']}")
+    rep.row("INFO", f"{name} reader host", entry["host_selftest"])
+    return entry
+
+
+def write_reader_envs(envs: Path, entries: list[dict]) -> Path:
+    """envs/reader_envs.json: one entry per reader environment. A partial run (--only) replaces only the parts it
+    rebuilt. Written whole to a temp file, then renamed, so a reader never sees half a file."""
+    out = envs / "reader_envs.json"
+    keep: dict[str, dict] = {}
+    if out.is_file():
+        try:
+            keep = {e["part"]: e for e in json.loads(out.read_text(encoding="utf-8")).get("readers", [])}
+        except (ValueError, KeyError, AttributeError):
+            keep = {}  # unreadable: rebuilt from this run only; the parts not rebuilt are absent, so they read as not installed
+    for e in entries:
+        keep[e["part"]] = e
+    lsum = LOCKS / "SOURCE_SHA256.txt"
+    doc = {"schema": READER_ENVS_SCHEMA, "provisional": "format owned by LensRunner once its reader host lands",
+           "locks_sha256": hashlib.sha256(lsum.read_bytes()).hexdigest() if lsum.is_file() else None,
+           "readers": [keep[k] for k in sorted(keep)]}
+    tmp = out.with_suffix(".tmp")
+    tmp.write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+    os.replace(tmp, out)
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", type=Path, required=True)
@@ -685,8 +774,15 @@ def main(argv: list[str] | None = None) -> int:
     sums = load_sums(WIN)
     CFG_LOCK.update(cfg)
     PROBE_CFG.update(cfg.get("probe", {}))
+    readers = []
     for p in parts:
+        f0, h0 = rep.fails, rep.holds
         build_part(rep, p, cfg, a.src, a.envs, a.dry_run, gpu, set(), sums)
+        if is_reader(p) and not a.dry_run:  # a failed build is recorded as FAIL, never left on its last good entry
+            outcome = "FAIL" if rep.fails > f0 else "HOLD" if rep.holds > h0 else "PASS"
+            readers.append(reader_entry(rep, p, a.envs, outcome))
+    if readers:
+        rep.row("INFO", "reader record", f"{write_reader_envs(a.envs, readers)}: {len(readers)} reader environments")
     counts = f"HOLD {rep.holds}, PASS {rep.passes}"
     if rep.fails:
         print(f"NESTEGG-PARTS: FAIL {rep.fails}, {counts}")

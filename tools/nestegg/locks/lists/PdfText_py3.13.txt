@@ -3,6 +3,7 @@ cffi==2.1.1
 charset-normalizer==3.5.2
 click==8.5.1
 cryptography==50.0.2
+packaging==26.3
 pdfminer-six==20221105
 pdfplumber==0.10.3
 pillow==10.4.0

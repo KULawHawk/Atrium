@@ -533,3 +533,64 @@ def test_non_reader_needs_its_own_tests_under_the_locked_set(tmp_path, monkeypat
     assert _built(tmp_path / "a", monkeypatch, part, "RESOLVED TODAY").holds == 1  # no locked test tools
     assert _built(tmp_path / "b", monkeypatch, part, "RESOLVED TODAY", tools=True).passes == 1
     assert _built(tmp_path / "c", monkeypatch, part, "RESOLVED TODAY", tools=True, test_rc=1).fails == 1
+
+
+# ---- reader record (envs/reader_envs.json): what LensRunner's launcher needs to start each reader in its own Python
+def _fake_env(envs: Path, name: str, *, lens: bool = True, contracts: bool = True) -> None:
+    import subprocess
+    import sysconfig
+    env = envs / name
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(env)], check=True)
+    rel = Path(sysconfig.get_path("purelib")).relative_to(sysconfig.get_path("data"))
+    site = env / rel
+    if lens:
+        d = site / "conclave_lens_fake-0.1.0.dist-info"
+        d.mkdir(parents=True)
+        (d / "METADATA").write_text("Metadata-Version: 2.1\nName: conclave-lens-fake\nVersion: 0.1.0\n", encoding="utf-8")
+        (d / "entry_points.txt").write_text("[conclave.lenses]\nfake_lens = conclave_lens_fake:FakeLens\n", encoding="utf-8")
+    if contracts:
+        d = site / "conclave_contracts-1.2.3.dist-info"
+        d.mkdir(parents=True)
+        (d / "METADATA").write_text("Metadata-Version: 2.1\nName: conclave-contracts\nVersion: 1.2.3\n", encoding="utf-8")
+
+
+def _reader_part(name: str) -> dict:
+    return {"name": name, "roots": [f"conclave_lens_{name.lower()}"], "python": f"{sys.version_info[0]}.{sys.version_info[1]}"}
+
+
+def test_reader_record_measures_the_readers_own_python(tmp_path, monkeypatch) -> None:
+    m = _mod()
+    monkeypatch.setattr(m, "LOCKS", tmp_path / "locks")
+    _fake_env(tmp_path, "Fake")
+    rep = m.Report()
+    e = m.reader_entry(rep, _reader_part("Fake"), tmp_path, "PASS")
+    assert rep.fails == 0 and e["status"] == "PASS"
+    assert e["lens_ids"] == ["fake_lens"] and e["contracts_version"] == "1.2.3" and e["size_bytes"] > 0
+    assert e["host_selftest"].startswith("NOT_RUN")  # never claimed until LensRunner's reader host exists
+
+
+def test_reader_record_fails_loudly(tmp_path, monkeypatch, capsys) -> None:
+    m = _mod()
+    monkeypatch.setattr(m, "LOCKS", tmp_path / "locks")
+    _fake_env(tmp_path, "NoLens", lens=False)
+    _fake_env(tmp_path, "NoContracts", contracts=False)
+    rep = m.Report()
+    assert m.reader_entry(rep, _reader_part("NoLens"), tmp_path, "PASS")["status"] == "FAIL"
+    assert m.reader_entry(rep, _reader_part("NoContracts"), tmp_path, "PASS")["status"] == "FAIL"
+    assert m.reader_entry(rep, _reader_part("Missing"), tmp_path, "PASS")["status"] == "FAIL"
+    wrong = dict(_reader_part("NoLens"), python="2.7")
+    assert m.reader_entry(rep, wrong, tmp_path, "PASS")["status"] == "FAIL"
+    out = capsys.readouterr().out
+    for s in ("no reader is registered", "conclave-contracts is not installed", "its Python is missing", "the build declares 2.7"):
+        assert s in out
+    assert rep.fails >= 4
+
+
+def test_reader_record_file_replaces_rebuilt_parts_only(tmp_path, monkeypatch) -> None:
+    m = _mod()
+    monkeypatch.setattr(m, "LOCKS", tmp_path / "locks")
+    m.write_reader_envs(tmp_path, [{"part": "A", "status": "PASS"}, {"part": "B", "status": "PASS"}])
+    out = m.write_reader_envs(tmp_path, [{"part": "B", "status": "FAIL"}])  # a failed rebuild never keeps its last good entry
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    assert doc["schema"] == 1 and {e["part"]: e["status"] for e in doc["readers"]} == {"A": "PASS", "B": "FAIL"}
+    assert not out.with_suffix(".tmp").exists()

@@ -1,4 +1,5 @@
 annotated-types==0.8.0
+packaging==26.3
 pydantic==2.14.4
 pydantic-core==2.50.5
 pypdf==6.21.4
