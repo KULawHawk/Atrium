@@ -401,6 +401,40 @@ def test_engine_file_linux_markers_must_be_dropped_on_windows(tmp_path, monkeypa
     assert rep.fails == 1 and "drops ['six']" in out
 
 
+def test_engine_file_markers_are_honoured_per_platform(tmp_path, monkeypatch, capsys) -> None:
+    m = _mod()
+    body = ('six==1.17.0 \\\n    --hash=sha256:aa\n'
+            'triton==3.9.0 ; sys_platform == "linux" \\\n    --hash=sha256:bb\n'
+            'colorama==0.4.6 ; sys_platform == "win32" \\\n    --hash=sha256:cc\n')
+    f = tmp_path / "e.txt"
+    f.write_text(body)
+    assert m.engine_markers(f) == {"triton": "linux", "colorama": "win32"}
+    f.write_text(body + 'odd==1 ; python_version < "3.10" \\\n    --hash=sha256:dd\n')
+    assert m.engine_markers(f)["odd"].startswith("?")
+    lists = tmp_path / "locks" / "lists"
+    lists.mkdir(parents=True)
+    (lists / "_marker_cli_py3.13.txt").write_text("six==1.17.0\ntriton==3.9.0\ncolorama==0.4.6\n")
+    monkeypatch.setattr(m, "LOCKS", tmp_path / "locks")
+    m.CFG_LOCK.update({"linux_only": "^(nvidia-.*|cuda-.*|triton)$"})
+    (tmp_path / "src" / "Conclave" / "s").mkdir(parents=True)
+    (tmp_path / "src" / "Conclave" / "s" / "engine_requirements.txt").write_text(body)
+    part = {"name": "MarkerPdf", "repo": "Conclave", "side_env": {"name": "marker", "python": "3.13", "packages": [],
+            "check": ["marker_single", "--help"], "engine_file": "s/engine_requirements.txt"}}
+    seen = {}
+    monkeypatch.setattr(m, "lock_reqs", lambda pins, *a: (seen.setdefault(m.WIN, dict(pins)), ([], ["stop"]))[1])
+    monkeypatch.setattr(m, "load_sums", lambda win: {})
+    for win in (True, False):
+        monkeypatch.setattr(m, "WIN", win)
+        m.side_envs(m.Report(), part, tmp_path / "src", tmp_path / "envs", tmp_path / "l", Path("py"))
+    assert seen[True] == {"six": "1.17.0", "colorama": "0.4.6"}  # Windows: linux lines out
+    assert seen[False] == {"six": "1.17.0", "triton": "3.9.0"}  # Linux: win32 lines out
+    (tmp_path / "src" / "Conclave" / "s" / "engine_requirements.txt").write_text(f.read_text())
+    (lists / "_marker_cli_py3.13.txt").write_text("six==1.17.0\ntriton==3.9.0\ncolorama==0.4.6\nodd==1\n")
+    rep = m.Report()
+    m.side_envs(rep, part, tmp_path / "src", tmp_path / "envs", tmp_path / "l", Path("py"))
+    assert rep.fails == 1 and "does not understand" in capsys.readouterr().out
+
+
 def test_locutus_rulings_plugin_is_in_every_part_that_loads_it() -> None:
     # entry-point plugin: ReviewConsole wraps every Console with it, the Bridge refuses repeats without it
     parts = {p["name"]: p for p in json.loads((NESTEGG / "parts.json").read_text(encoding="utf-8"))["parts"]}

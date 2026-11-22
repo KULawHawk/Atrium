@@ -200,16 +200,23 @@ def read_engine_file(path: Path) -> dict[str, str] | None:
     return out
 
 
-def engine_linux_only(path: Path) -> set[str]:
-    """Names an engine file marks `; sys_platform == "linux"` (no Windows wheel; the Windows build leaves them out)."""
-    out = set()
+def engine_markers(path: Path) -> dict[str, str]:
+    """{name: platform} for lines an engine file marks `; sys_platform == "linux"` or `"win32"`.
+    Any other marker is returned as "?<marker>" so the caller can refuse it (never guessed)."""
+    out = {}
     for ln in path.read_text(encoding="utf-8").splitlines():
         ln = ln.strip()
         if ln.startswith("#") or "==" not in ln or ";" not in ln:
             continue
-        if re.search(r"""sys_platform\s*==\s*["']linux["']""", ln.split(";", 1)[1]):
-            out.add(_norm(ln.split("==", 1)[0].split("[")[0]))
+        mk = ln.split(";", 1)[1].rstrip("\\").strip()
+        m = re.fullmatch(r"""sys_platform\s*==\s*["'](linux|win32)["']""", mk)
+        out[_norm(ln.split("==", 1)[0].split("[")[0])] = m.group(1) if m else f"?{mk}"
     return out
+
+
+def engine_linux_only(path: Path) -> set[str]:
+    """Names an engine file marks `; sys_platform == "linux"` (no Windows wheel; the Windows build leaves them out)."""
+    return {n for n, p in engine_markers(path).items() if p == "linux"}
 
 
 def lock_reqs(pins: dict[str, str], cfg: dict, win: bool, sums: dict) -> tuple[list[str], list[str]]:
@@ -511,8 +518,17 @@ def side_envs(rep: Report, part: dict, src: Path, envs: Path, log: Path, py: Pat
                 rep.row("FAIL", f"{label} not locked", f"the installer's linux_only rule drops {extra} on Windows, but "
                         f"{se['engine_file']} does not mark them Linux-only")
                 return
+            elif odd := sorted(f"{n} ({p[1:]})" for n, p in engine_markers(ef).items() if p.startswith("?")):
+                rep.row("FAIL", f"{label} not locked", f"{se['engine_file']} has markers the installer does not "
+                        f"understand: {odd}; only sys_platform == \"linux\" / \"win32\" are honoured")
+                return
             else:
-                rep.row("INFO", label, f"built from {se['engine_file']} (equals the saved list {lst}; files hash-checked)")
+                # honour the file's own markers: a Windows build skips "linux" lines, a Linux build skips "win32" lines
+                skip = "linux" if WIN else "win32"
+                gone = sorted(n for n, p in engine_markers(ef).items() if p == skip)
+                pins = {n: v for n, v in pins.items() if n not in gone}
+                rep.row("INFO", label, f"built from {se['engine_file']} (equals the saved list {lst}; files hash-checked; "
+                        f"{len(gone)} lines marked {skip} left out on this platform)")
         missing = [p for p in se["packages"] if pins.get(_req_name(p)) != p.split("==")[1]]
         lines, probs = lock_reqs(pins, CFG_LOCK, WIN, load_sums(WIN))
         probs += [f"the engine needs {p}, the known-good list has {pins.get(_req_name(p), 'nothing')}" for p in missing]
