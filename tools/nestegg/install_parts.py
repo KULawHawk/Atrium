@@ -39,6 +39,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 LOCKS = HERE / "locks"
 CFG_LOCK: dict = {}  # parts.json, filled by main() (side_envs reads the lock settings from it)
+PROBE_CFG: dict = {}  # parts.json "probe": modules no shipped code reaches, and outside names never imported on our Pythons
 WIN = os.name == "nt"
 STD = set(sys.stdlib_module_names)
 
@@ -281,7 +282,17 @@ def locked_install(py: Path, lines: list[str], lockfile: Path, log: Path) -> int
 
 
 # ---------------------------------------------------------------- what the code imports (for the probe)
-def scan_imports(dirs: list[Path], local: set[str], skip: tuple[str, ...] = ()) -> tuple[list[str], list[str]]:
+def _modname(f: Path, base: Path, d: Path) -> str:
+    rel = f.relative_to(base if f.is_relative_to(base) else d).with_suffix("").parts
+    return ".".join(rel[:-1] if rel[-1] == "__init__" else rel)
+
+
+def _not_reached(mod: str, skip_mods: tuple[str, ...]) -> bool:
+    return any(mod == k or mod.startswith(k + ".") for k in skip_mods)
+
+
+def scan_imports(dirs: list[Path], local: set[str], skip: tuple[str, ...] = (),
+                 skip_mods: tuple[str, ...] = ()) -> tuple[list[str], list[str]]:
     """Packages of the part, and every outside top-level module its non-test code imports."""
     pkgs, mods = [], set()
     for d in dirs:
@@ -293,7 +304,8 @@ def scan_imports(dirs: list[Path], local: set[str], skip: tuple[str, ...] = ()) 
             local.add(f.stem)  # a flat-script part imports its sibling files by name
             if any(p in ("tests", "test", "docs", "scripts") or p.startswith(".") for p in rel) or f.name.startswith("test_") \
                     or f.name in ("conftest.py",) or "test_support" in f.name \
-                    or any(f.relative_to(d).as_posix().startswith(k) for k in skip):
+                    or any(f.relative_to(d).as_posix().startswith(k) for k in skip) \
+                    or _not_reached(_modname(f, base, d), skip_mods):
                 continue
             try:
                 tree = ast.parse(f.read_text(encoding="utf-8", errors="replace"))
@@ -311,6 +323,7 @@ def scan_imports(dirs: list[Path], local: set[str], skip: tuple[str, ...] = ()) 
 PROBE = r'''
 import importlib, json, pkgutil, sys
 pkgs, third = sys.argv[1].split(","), sys.argv[2].split(",")
+skip = tuple(filter(None, sys.argv[3].split(","))) if len(sys.argv) > 3 else ()
 bad = {}
 for p in filter(None, pkgs):
     try:
@@ -318,7 +331,7 @@ for p in filter(None, pkgs):
     except BaseException as e:
         bad[p] = f"{type(e).__name__}: {e}"[:200]; continue
     for mi in pkgutil.walk_packages(getattr(m, "__path__", []), p + "."):
-        if ".tests" in mi.name or mi.name.endswith("__main__"):
+        if ".tests" in mi.name or mi.name.endswith("__main__") or any(mi.name == k or mi.name.startswith(k + ".") for k in skip):
             continue
         try:
             importlib.import_module(mi.name)
@@ -448,16 +461,23 @@ def probe(rep: Report, part: dict, repo: Path, py: Path, local: set[str], log: P
     if isinstance(skip, dict):  # {folder prefix: why}; every skipped folder is printed with its reason
         for k, why in sorted(skip.items()):
             rep.row("INFO", f"{part['name']} not probed", f"{k}: {why}")
-    pkgs, third = scan_imports(dirs, set(local), tuple(skip))
-    ignore = part.get("probe_ignore", {})
-    third = [t for t in third if t not in ignore]
+    not_reached = {**PROBE_CFG.get("not_reached", {}), **part.get("not_reached", {})}
+    for mod, why in sorted(not_reached.items()):
+        if any((d / "src" / mod.split(".")[0]).is_dir() or (d / mod.split(".")[0]).is_dir() for d in dirs):
+            rep.row("INFO", f"{part['name']} not probed", f"{mod}: {why}")
+    pkgs, third = scan_imports(dirs, set(local), tuple(skip), tuple(not_reached))
+    ignore = {**PROBE_CFG.get("ignore", {}), **part.get("probe_ignore", {})}
+    glob_ign = PROBE_CFG.get("ignore", {})
     for mod, why in sorted(ignore.items()):
-        rep.row("INFO", f"{part['name']} not probed", f"{mod}: {why}")
+        if mod in third or mod not in glob_ign:  # a project-wide entry is printed only where the part imports it
+            rep.row("INFO", f"{part['name']} not probed", f"{mod}: {why}")
+    third = [t for t in third if t not in ignore]
     hold = part.get("hold", {})
     third = [t for t in third if t not in hold]
     for mod, why in sorted(hold.items()):
         rep.row("HOLD", f"{part['name']} {mod}", why)
-    r = subprocess.run([py, "-I", "-c", PROBE, ",".join(pkgs), ",".join(third)], capture_output=True, text=True)
+    r = subprocess.run([py, "-I", "-c", PROBE, ",".join(pkgs), ",".join(third), ",".join(sorted(not_reached))],
+                       capture_output=True, text=True)
     try:
         bad = json.loads(r.stdout.strip().splitlines()[-1])
     except (IndexError, json.JSONDecodeError):
@@ -535,6 +555,7 @@ def main(argv: list[str] | None = None) -> int:
     # obsidian or another conclave_* distribution must have it installed, or the probe names it as a FAIL.
     sums = load_sums(WIN)
     CFG_LOCK.update(cfg)
+    PROBE_CFG.update(cfg.get("probe", {}))
     for p in parts:
         build_part(rep, p, cfg, a.src, a.envs, a.dry_run, gpu, set(), sums)
     counts = f"HOLD {rep.holds}, PASS {rep.passes}"

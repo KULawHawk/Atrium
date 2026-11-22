@@ -240,7 +240,7 @@ def test_skipped_folders_and_uncalled_adapters_are_printed(tmp_path, monkeypatch
     import subprocess
     m = _mod()
     seen = {}
-    monkeypatch.setattr(m, "scan_imports", lambda d, l, skip=(): (seen.setdefault("skip", skip), ([], []))[1])
+    monkeypatch.setattr(m, "scan_imports", lambda d, l, skip=(), mods=(): (seen.setdefault("skip", skip), ([], []))[1])
     monkeypatch.setattr(m.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, "{}\n", ""))
     rep = m.Report()
     part = {"name": "P", "roots": ["."], "probe_skip": {"tools/": "runs elsewhere"}, "no_caller": ["conclave_x"]}
@@ -256,10 +256,24 @@ def test_probe_covers_every_in_repo_distribution_the_part_installs(tmp_path, mon
     m = _mod()
     seen = {}
     monkeypatch.setattr(m, "closure", lambda repo, roots: ["-e", str(repo / "root_spoke"), "-e", str(repo / "pulled_in")])
-    monkeypatch.setattr(m, "scan_imports", lambda d, l, skip=(): (seen.setdefault("dirs", d), ([], []))[1])
+    monkeypatch.setattr(m, "scan_imports", lambda d, l, skip=(), mods=(): (seen.setdefault("dirs", d), ([], []))[1])
     monkeypatch.setattr(m.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, "{}\n", ""))
     m.probe(m.Report(), {"name": "P", "roots": ["root_spoke"]}, tmp_path, Path("py"), set(), tmp_path / "l")
     assert seen["dirs"] == [tmp_path / "root_spoke", tmp_path / "pulled_in"]
+
+
+def test_not_reached_vendored_modules_are_skipped_and_printed(tmp_path, capsys) -> None:
+    m = _mod()
+    d = tmp_path / "conclave_vendor_obsidian"
+    (d / "src" / "obsidian").mkdir(parents=True)
+    (d / "src" / "obsidian" / "__init__.py").write_text("")
+    (d / "src" / "obsidian" / "kdf.py").write_text("import argon2\n")
+    (d / "src" / "obsidian" / "egress.py").write_text("import jsonschema\n")
+    _, third = m.scan_imports([d], set(), (), ("obsidian.kdf",))
+    assert "argon2" not in third and "jsonschema" in third  # the skipped module's imports are not demanded
+    _, third = m.scan_imports([d], set())
+    assert "argon2" in third  # and without the entry they are
+    assert 'or any(mi.name == k or mi.name.startswith(k + ".") for k in skip)' in m.PROBE  # submodule walk skips it too
 
 
 def test_locutus_rulings_plugin_is_in_every_part_that_loads_it() -> None:

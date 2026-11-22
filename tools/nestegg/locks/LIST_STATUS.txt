@@ -54,3 +54,17 @@ Numpy: every list resolved today now carries numpy 2.5.4 (was 2.5.5), the versio
 Proof run 20261122-shard3 (11/22 1:51-3:04 AM CT): readers that passed but whose list is NOT promoted, because the list follows the calibration kit (with torchvision / gate-3 pins / six) and the proof run installed declared-only: Docling, TableSurgeon, MarkerPdf, MinerU, NougatScience, HtrLens, FormFieldLens. Not passed: ColPaliVerify (test limit: no candidates), GotOcrUnified and FormulaLens (degraded on the synthetic page), VisionLocal (torchvision not declared; fix PR pending).
 
 11/22 3:45 AM CT: apexbridge, launcher, reviewconsole rebuilt with conclave_integration_locutus_rulings as a root (plus observatory_triage and stage1_triage in apexbridge and launcher), per the installer finding. Added: tabulate 0.10.0 (apexbridge, launcher); attrs, jsonschema 4.26.0, jsonschema-specifications, referencing, rpds-py (reviewconsole). harness_adapters, workbench, sequoia_bridge unchanged (their closure already held these). All six: uv pip check clean. Labels unchanged (resolved today, not measured). Old copies in lists/superseded_2026-11-22/before_rulings/. Every added wheel was already in the Linux and Windows SHA256SUMS.
+
+11/22 ~4:30 AM CT: whole-closure probe rulings (installer FINDING_whole_closure_probe_2026-11-22.md). Conclave source /home/user/Conclave at main bb0a712 + #2899.
+ADDED (real runtime use):
+- conclave_integration_observatory_sink -> apexbridge, launcher (Curator plugin imports it when an Observatory DB is set).
+- conclave_integration_locutus_pack -> apexbridge, launcher (votingengine atlas_flag/shape_veto import it lazily on the pack path).
+- conclave_infra_observatory -> workbench (Observatory page). Brings scikit-learn, scipy and friends.
+- anthropic 2.12.0 -> workbench (DocumentProfiler vlm.py live Layer-4 path, guarded import, used when a key is set).
+- torch 2.6.0 -> apexbridge, launcher, lens_roster. LensRunner._is_lens_runnable (lensrunner api.py:1359) imports torch in the HOST env to decide whether a requires_gpu lens may run. Without torch every GPU lens fails warmup in that env, even on a GPU machine. apexbridge's Curator plugin (plugin.py:220) and lens_roster (roster.py) construct a LensRunner. On Windows this is the PyPI CPU build (no NVIDIA on Jake's PC, so the answer there is the same).
+NOT PROBED, with reason:
+- Vendored locutus forge/coupling/observatory.coupling_corpus (numpy, pytesseract, reportlab, pikepdf) and obsidian kdf/store/unlock/sealed_runs (argon2): no shipped Conclave code imports them. An import of 28 shipped entry modules (rulings, Bridge, Console, Workbench, Observatory, profiler, locutus tags/atlas/packs/planner/firewall, obsidian.egress) in the built env: all OK. Vault, which does use obsidian's store, already carries argon2 and probes clean.
+- tomli: claimclassifier patterns.py:22, behind sys.version_info < (3,11); unreachable on 3.13.
+- betacal: stays HOLD (PA-3 class).
+- lens_roster test-only needs (reportlab in tests/conftest.py, conclave_bridge in 3 tests) belong in the test tools, not the runtime list.
+All four rebuilt lists pass uv pip check. Every added wheel was already saved (triton and nccl have no Windows build, as before). Old copies are in lists/superseded_2026-11-22/before_closure_probe/.
