@@ -633,3 +633,17 @@ def test_reader_host_selftest_pass_fail_and_not_run(tmp_path, monkeypatch, capsy
             assert e["status"] == "FAIL" and "ImportError: boom" in out and rep.fails == 1
         else:
             assert e["status"] == "PASS" and e["host_selftest"].startswith("NOT_RUN") and "0.1.0a2" in out
+
+
+def test_one_command_install_runs_both_phases_in_order_and_never_assumes_yes() -> None:
+    """Jake 11/22: one command for all the parts. Static check (no PowerShell on CI's Linux runner)."""
+    cmd = (NESTEGG / "Install AdAstra.cmd").read_text(encoding="utf-8")
+    ps = (NESTEGG / "Install-AdAstra.ps1").read_text(encoding="utf-8")
+    assert "Install-AdAstra.ps1" in cmd
+    assert ps.index("Install-Prereqs.ps1") < ps.index("install_parts.py")
+    assert "AssumeYes" not in ps.split("param(", 1)[1]  # winget agreements and security boxes stay the person's
+    assert "NESTEGG-PREREQS: PASS" in ps and "phase 2 not started" in ps
+    for line in ("NESTEGG-INSTALL: PASS", "NESTEGG-INSTALL: HOLD", "NESTEGG-INSTALL: FAIL"):
+        assert line in ps
+    for verb in ("Remove-Item", "Set-ItemProperty", "setx", "keyring"):
+        assert verb not in ps

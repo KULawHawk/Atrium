@@ -9,6 +9,7 @@ Plan: project share `installer/PLAN_installer_2026-11-20.md`.
 
 | File | Phase | What it does |
 |---|---|---|
+| **`Install AdAstra.cmd` / `Install-AdAstra.ps1`** | **1 + 2, the one command** | Jake 11/22: "Anytime you can run one command that will take care of all the parts at once, that's the way it should be done." Runs phase 1, then phase 2 only if phase 1 ends `PASS`. Sources from `<InstallRoot>\src` (all five repos, or FAIL before anything installs). `-DryRun` installs nothing. Ends `NESTEGG-INSTALL: PASS`, `HOLD` or `FAIL`. |
 | `Check AdAstra.cmd` / `Check-AdAstra.ps1` | 0, read-only | Checks Windows, disk, install folder, winget, Python 3.13 and 3.12, Git, Tesseract, Poppler, MuPDF mutool, VC++ runtime, GPU and TPM (report only), network, GitHub sign-in. Ends `NESTEGG-CHECK: PASS` or `GAPS n`. Installs nothing. |
 | `Install-Prereqs.ps1` | 1, programs | See below. Ends `NESTEGG-PREREQS: PASS` or `FAIL n`. |
 | `install_parts.py` + `parts.json` + `locks/` | 2, parts | Builds every one of the 38 parts in its own environment from exact versions with hashes, then proves it is complete. Ends `NESTEGG-PARTS: PASS`, `HOLD n` or `FAIL n`. |
