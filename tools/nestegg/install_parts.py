@@ -439,7 +439,9 @@ def side_envs(rep: Report, part: dict, src: Path, envs: Path, log: Path, py: Pat
 
 
 def probe(rep: Report, part: dict, repo: Path, py: Path, local: set[str], log: Path) -> None:
-    dirs = [repo] if part["roots"][0].startswith(".") else [repo / r.split("[")[0] for r in part["roots"]]
+    # every in-repo distribution the part installs is probed, not only its roots: code a root pulls in
+    # (e.g. the Bridge inside the launcher) runs in this environment too
+    dirs = [repo] if part["roots"][0].startswith(".") else [Path(a.split("[")[0]) for a in closure(repo, part["roots"]) if a != "-e"]
     for dist in part.get("no_caller", []):  # SET-9: shipped because it is production code, though nothing calls it yet
         rep.row("INFO", f"{part['name']} {dist}", "installed, no shipped caller yet")
     skip = part.get("probe_skip", [])

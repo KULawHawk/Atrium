@@ -221,6 +221,7 @@ def _probe(tmp_path, monkeypatch, stdout):
     import subprocess
     m = _mod()
     monkeypatch.setattr(m, "scan_imports", lambda *a: (["pkg"], ["requests", "paddle"]))
+    monkeypatch.setattr(m, "closure", lambda repo, roots: ["-e", str(repo / "spoke")])
     monkeypatch.setattr(m.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout, ""))
     rep = m.Report()
     m.probe(rep, {"name": "P", "roots": ["spoke"], "probe_ignore": {"paddle": "why"}}, tmp_path, Path("py"), set(), tmp_path / "l")
@@ -248,6 +249,17 @@ def test_skipped_folders_and_uncalled_adapters_are_printed(tmp_path, monkeypatch
     assert seen["skip"] == ("tools/",)  # the folder really is skipped
     assert "INFO  P not probed" in out and "tools/: runs elsewhere" in out  # and never silently
     assert "INFO  P conclave_x" in out and "no shipped caller yet" in out and rep.fails == 0
+
+
+def test_probe_covers_every_in_repo_distribution_the_part_installs(tmp_path, monkeypatch) -> None:
+    import subprocess
+    m = _mod()
+    seen = {}
+    monkeypatch.setattr(m, "closure", lambda repo, roots: ["-e", str(repo / "root_spoke"), "-e", str(repo / "pulled_in")])
+    monkeypatch.setattr(m, "scan_imports", lambda d, l, skip=(): (seen.setdefault("dirs", d), ([], []))[1])
+    monkeypatch.setattr(m.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, "{}\n", ""))
+    m.probe(m.Report(), {"name": "P", "roots": ["root_spoke"]}, tmp_path, Path("py"), set(), tmp_path / "l")
+    assert seen["dirs"] == [tmp_path / "root_spoke", tmp_path / "pulled_in"]
 
 
 def test_locutus_rulings_plugin_is_in_every_part_that_loads_it() -> None:
