@@ -37,7 +37,7 @@ playa-pdf==1.1.0
 pydantic==2.14.4
 pydantic-core==2.50.5
 pypdfium2==5.11.0
-pytesseract==0.3.13
+pytesseract==0.3.10
 python-dateutil==4.0.0
 pyyaml==6.0.4
 regex==2026.11.19
