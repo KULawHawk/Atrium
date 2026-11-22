@@ -19,7 +19,7 @@ jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 langdetect==1.0.9
 narwhals==2.29.0
-numpy==2.5.5
+numpy==2.5.4
 opentelemetry-api==1.45.2
 pdf2image==1.17.0
 pdfminer-six==20260107

@@ -49,3 +49,4 @@ _test_tools_py3.13.txt: RESOLVED TODAY, NOT MEASURED. Test tools only (pytest, p
 Superseded lists (kept, not used): lists/superseded_2026-11-22/.
 
 Still kit recipe, not matched: TableSurgeon, MarkerPdf, NougatScience, FormulaLens, _marker_cli, _mineru_cli (proof run will give a fresh-resolve freeze only; it installs PyPI torch).
+Numpy: every list resolved today now carries numpy 2.5.4 (was 2.5.5), the version every measured pod freeze used and one of locutus's pinned golden sets (installer test run 11/22 2:23 AM CT). Each changed list passed an offline install + pip check from the saved files. Engine environments left as resolved.
