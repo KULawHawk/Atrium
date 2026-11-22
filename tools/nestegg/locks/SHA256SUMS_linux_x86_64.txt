@@ -43,6 +43,7 @@ abcd7f54bcbb2fbb79c0e96b79241f08866760aee6276586882b3558672d571b  cloudpathlib-0
 c80be81ef595a1a821ec69dc16099550ed22197615f4320b57cc9ce2a672cb30  construct-2.10.70-py3-none-any.whl
 4d00e655fcef08aba35ec9610536bfe90267d7ab5ba944f7032549c55a146da1  contourpy-1.3.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
 36ee21f1ab35bd45500ce006b366d45f4210a86882283d6cf2e603faeaaf791c  coremltools-8.3.0-cp312-none-manylinux1_x86_64.whl
+434e8a7a91fa2bb2819ac4da53697d4805bb1b25d00a9046403651e59c2cc857  coverage-7.17.4-cp313-cp313-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl
 9dab55f57c74c3cad24c323bacbbd04be4705ba6eb0d92e920b1fc4837ed5079  cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl
 d47b6f6d0398f97c82e2525eefb02e7252848e48c902824f6a6b6467a5902894  cuda_bindings-13.5.0-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl
 b743c132f90ad2d1e71d43fd28f31ebcde518f943e50fd44aca62b2a80d5230d  cuda_pathfinder-1.9.1-py3-none-any.whl
@@ -100,6 +101,7 @@ f05c13aade4c45dbf1c9060647a1058f0acad62398fad96e741269edb33d46f5  httpx2-2.16.2-
 d1e52a8f68a5df42de75ab89049d5020b2d0ab2f5f8bceacda008d12aa1257a3  httpx_retries-0.6.0-py3-none-any.whl
 48f0c8eac16145dfce371e9d2d7772854a4f591bcb56c9cf548accf531d54270  huggingface_hub-0.36.2-py3-none-any.whl
 42ecfd93ede47bdd333daebbf66a32d7bfe2e18752754fe4d2d4f98a0179d801  huggingface_hub-2.4.0-py3-none-any.whl
+475bd1ed6971a237540f68a5b2004a415b738a6c7a68bdc3efaa85f8e385d942  hypothesis-6.170.17-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
 6a16b69b93187244e0548cbfd25b3e4a6f9a7a2ad784625c3bec2b8d27b81aaa  identify-2.6.20-py2.py3-none-any.whl
 ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c  idna-3.20-py3-none-any.whl
 d71174e7af8369a4f73525c5b1c0d2621eb2827ed3cfd7327560be02ac1b4084  imageio-2.38.2-py3-none-any.whl
@@ -262,6 +264,7 @@ b82e9771b161dbed924086facbcd91fe19bc36da20dfcfc835b9deabc5dced87  preshed-3.0.15
 89f23aa53c24553a2416fd4fd1ec06f74fa42b14b546d8883128813f775bbfd2  protobuf-7.36.2-cp310-abi3-manylinux2014_x86_64.whl
 076a2d2f923fd4821644f5ba89f059523da90dc9014e85f8e45a5774ca5bc6f9  psutil-7.2.2-cp36-abi3-manylinux2010_x86_64.manylinux_2_12_x86_64.manylinux_2_28_x86_64.whl
 f6f868a457a6bd485b78d26e619045718bcd0b7720a6bf97d5fe86a1523423e8  py7zr-1.1.4-py3-none-any.whl
+adc53396bfb206e6498d078ec2ab407f85799ecd819584ac36a8f80a2d4d762d  py_cpuinfo2-10.1.1-py3-none-any.whl
 cfa382780c43ae660669b87d394d550a41856ef175f5749f51f753e12d7077ac  pyaml-26.7.0-py3-none-any.whl
 c718bf97a92a6dea97fd1062c3b9f9e2e83cb9cc926e752289fa4ffff41738f9  pyarrow-26.0.1-cp312-cp312-manylinux_2_28_x86_64.whl
 4017b0fce125096b8573b39c989fdb1a4b19cf761e683398184550fea0e66587  pyasn1-0.6.5-py3-none-any.whl
@@ -302,8 +305,11 @@ c041c9921d7c91c9e51a2c027f434d05c3c59baa2c8f17b71dc8194e77791f06  pyside6_webeng
 8f22cc98f765bf13517ead0c70effedb46c153540d25783e04014f28b55a5fc6  pytesseract-0.3.10-py3-none-any.whl
 7a99c6c2ac598360693d83a416e36e0b33a67638bb9d77fdcac094a3589d4b34  pytesseract-0.3.13-py3-none-any.whl
 07acdcf88ec174f907dc01af70bf52d49b014bbab03faeeade31c96b18c2e588  pytest-9.2.0-py3-none-any.whl
+d7732a9952b1c4a4a32277adc693739126eab37afc3a711847f53805ccadc020  pytest_benchmark-5.3.1-py3-none-any.whl
+a0461110b7865f9a271aa1b51e516c9a95de9d696734a2f71e3e78f46e1d4678  pytest_cov-7.1.0-py3-none-any.whl
 9897b68c910b12a2e48dd849f9a284b2c79a732a8a9cb398452ddd23d3c8c325  pytest_json_report-1.5.0-py3-none-any.whl
 c8e0844db684ee1c798cfa38908d20d67d0463ecb6137c72e91f418558dd5f4b  pytest_metadata-3.1.1-py3-none-any.whl
+ed21ea9b861247f7d18090a26bfbda8fb51d7a8a7b6f776157426ff2ccf26eff  pytest_qt-4.5.0-py3-none-any.whl
 37dc0384605729d1556cfe47aa84900ae67963f17d6a19c930449d1493a01f96  python_bidi-0.6.12-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
 a5e246f79eb80475e691bf93862cead98decd8a498cf53ba0516fcdc0f50dc1c  python_dateutil-4.0.0-py3-none-any.whl
 93b10b90363d4151964cdeee2ec6601f3041b17fc2b253a1c3da7d6e7ddd8337  python_discovery-1.9.6-py3-none-any.whl
@@ -354,6 +360,7 @@ ec7e92323c820935475bc9ec84938eecc9d9bc625055ff057a6d0dcfffb7eb2a  simsimd-6.5.16
 4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274  six-1.17.0-py2.py3-none-any.whl
 be6bcc7b7fe6e0c108a7b8c764ee31c01eae568a128355355120b051efff6dd7  smart_open-10.0.0-py3-none-any.whl
 2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2  sniffio-1.3.1-py3-none-any.whl
+a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0  sortedcontainers-2.4.0-py2.py3-none-any.whl
 96b4115212a3abee1f572d62da706cca090b088cb5effa278db5702122e63a2c  soupsieve-4.1.2-py3-none-any.whl
 7a390d1a57d1ab7bb228531e9b8a750a5ebf87db774e0ef6faeeac057d22a5bf  soupsieve-4.1.3-py3-none-any.whl
 feba1ee7f17019724f521353c2b98e4c506b368eaf5ef26709904ebb9cdf306e  spacy-3.8.18-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl

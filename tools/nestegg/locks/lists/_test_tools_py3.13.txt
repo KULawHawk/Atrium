@@ -1,0 +1,15 @@
+coverage==7.17.4
+hypothesis==6.170.17
+iniconfig==2.3.1
+packaging==26.3
+pluggy==1.7.0
+py-cpuinfo2==10.1.1
+pygments==2.21.0
+pytest==9.2.0
+pytest-benchmark==5.3.1
+pytest-cov==7.1.0
+pytest-json-report==1.5.0
+pytest-metadata==3.1.1
+pytest-qt==4.5.0
+sortedcontainers==2.4.0
+typing-extensions==4.16.0

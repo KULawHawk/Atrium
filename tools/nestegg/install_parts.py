@@ -247,7 +247,11 @@ def own_tests(rep: Report, part: dict, repo: Path, py: Path, envs: Path, log: Pa
     if not dirs:
         rep.row("HOLD", name, f"{done}; {status}; it has no tests folder to measure it by")
         return
-    rc = run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", *dirs], log)
+    own = read_list(LOCKS / "lists" / f"{name}_py{part['python']}.txt") or {}
+    noqt = [] if {"pyside6", "pyqt5", "pyqt6"} & set(own) else ["-p", "no:pytest-qt"]  # pytest-qt aborts without a Qt binding
+    rc = 0
+    for d in dirs:  # from the project folder, as its own CI runs them (its pytest settings and import paths apply)
+        rc = rc or run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", *noqt, "tests"], log, cwd=d.parent)
     if rc == 0:
         rep.row("PASS", name, f"{done}; {status}; its own tests pass under this exact set")
     else:

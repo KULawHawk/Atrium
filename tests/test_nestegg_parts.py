@@ -118,7 +118,7 @@ def test_lock_copy_is_byte_identical_to_its_recorded_source() -> None:
 
 
 def test_every_list_belongs_to_a_part() -> None:
-    names = {f"{p['name']}_py{p['python']}.txt" for p in PARTS["parts"]} | {"votingengine_beta_py3.13.txt"}  # betacal hold (PA-3)
+    names = {f"{p['name']}_py{p['python']}.txt" for p in PARTS["parts"]} | {"votingengine_beta_py3.13.txt", "_test_tools_py3.13.txt"}  # betacal hold (PA-3); test tools for non-readers
     names |= {f"_{p['side_env']['name']}_cli_py{p['side_env']['python']}.txt" for p in PARTS["parts"] if p.get("side_env")}
     names |= {f"{p['name']}_side_py{p['spoke_side_env']['python']}.txt" for p in PARTS["parts"] if p.get("spoke_side_env")}
     for f in (LOCKS / "lists").iterdir():
