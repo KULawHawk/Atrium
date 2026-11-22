@@ -566,7 +566,7 @@ def test_reader_record_measures_the_readers_own_python(tmp_path, monkeypatch) ->
     e = m.reader_entry(rep, _reader_part("Fake"), tmp_path, "PASS")
     assert rep.fails == 0 and e["status"] == "PASS"
     assert e["lens_ids"] == ["fake_lens"] and e["contracts_version"] == "1.2.3" and e["size_bytes"] > 0
-    assert e["host_selftest"].startswith("NOT_RUN")  # never claimed until LensRunner's reader host exists
+    assert e["host_selftest"].startswith("NOT_RUN")  # never claimed until the reader host has answered
 
 
 def test_reader_record_fails_loudly(tmp_path, monkeypatch, capsys) -> None:
@@ -594,3 +594,42 @@ def test_reader_record_file_replaces_rebuilt_parts_only(tmp_path, monkeypatch) -
     doc = json.loads(out.read_text(encoding="utf-8"))
     assert doc["schema"] == 1 and {e["part"]: e["status"] for e in doc["readers"]} == {"A": "PASS", "B": "FAIL"}
     assert not out.with_suffix(".tmp").exists()
+
+
+def _fake_run_env(envs: Path, host_body: str | None) -> None:
+    import sysconfig
+    _fake_env(envs, "harness_adapters", lens=False)
+    rel = Path(sysconfig.get_path("purelib")).relative_to(sysconfig.get_path("data"))
+    pkg = envs / "harness_adapters" / rel / "conclave_lensrunner"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    if host_body is not None:
+        (pkg / "reader_host.py").write_text(host_body, encoding="utf-8")
+
+
+_HOST = """import json, sys
+ids = [sys.argv[i + 1] for i, a in enumerate(sys.argv) if a == "--lens-id"]
+ok = {ok}
+print(json.dumps({{"reader_host_selftest": 1, "protocol": 1, "lens_ids": ids if ok else [], "ok": ok,
+                  "import_failures": {{}} if ok else {{i: "ImportError: boom" for i in ids}}}}))
+sys.exit(0 if ok else 1)
+"""
+
+
+def test_reader_host_selftest_pass_fail_and_not_run(tmp_path, monkeypatch, capsys) -> None:
+    m = _mod()
+    monkeypatch.setattr(m, "LOCKS", tmp_path / "locks")
+    for case, body in (("pass", _HOST.format(ok=True)), ("fail", _HOST.format(ok=False)), ("nohost", None)):
+        envs = tmp_path / case
+        _fake_env(envs, "Fake")
+        _fake_run_env(envs, body)
+        rep = m.Report()
+        e = m.reader_entry(rep, _reader_part("Fake"), envs, "PASS")
+        m.host_selftest(rep, [e], envs)
+        out = capsys.readouterr().out
+        if case == "pass":
+            assert e["status"] == "PASS" and e["host_selftest"]["ok"] is True and rep.fails == 0
+        elif case == "fail":
+            assert e["status"] == "FAIL" and "ImportError: boom" in out and rep.fails == 1
+        else:
+            assert e["status"] == "PASS" and e["host_selftest"].startswith("NOT_RUN") and "0.1.0a2" in out

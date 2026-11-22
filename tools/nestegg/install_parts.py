@@ -696,7 +696,7 @@ def reader_entry(rep: Report, part: dict, envs: Path, outcome: str) -> dict:
     entry = {"part": name, "env": str(env), "python": str(py), "list": lst,
              "list_sha256": hashlib.sha256(lp.read_bytes()).hexdigest() if lp.is_file() else None,
              "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "status": outcome,
-             "host_selftest": "NOT_RUN: LensRunner has no reader host yet (design section 8, item 1)"}
+             "host_selftest": "NOT_RUN: not yet hand-shaken"}
     if not py.exists():
         rep.row("FAIL", f"{name} reader record", f"its Python is missing: {py}")
         entry["status"] = "FAIL"
@@ -726,8 +726,51 @@ def reader_entry(rep: Report, part: dict, envs: Path, outcome: str) -> dict:
     else:
         rep.row("INFO", f"{name} reader record", f"{', '.join(facts['lens_ids'])} on Python {facts['python_version']}, "
                 f"{entry['size_bytes'] / 1e6:,.0f} MB on disk; recorded as {entry['status']}")
-    rep.row("INFO", f"{name} reader host", entry["host_selftest"])
     return entry
+
+
+_FIND_HOST = "import os,conclave_lensrunner as m;print(os.path.join(os.path.dirname(m.__file__),'reader_host.py'))"
+
+
+def host_selftest(rep: Report, entries: list[dict], envs: Path, run_env: str = "harness_adapters") -> None:
+    """Hand-shake each reader environment with LensRunner's reader host, run by that reader's own Python in isolated
+    mode (Conclave #2913, LensRunner 0.1.0a2; command and answer: reader-envs/HANDOFF_reader_host_2026-11-22.md).
+    The host file comes from the Run environment, the one the Workbench starts. A host that answers anything but ok
+    turns the entry to FAIL. A LensRunner without a reader host yet leaves NOT_RUN, said as such, never a pass."""
+    rpy = env_python(envs / run_env)
+    got = subprocess.run([str(rpy), "-I", "-c", _FIND_HOST], capture_output=True, text=True) if rpy.exists() else None
+    host = Path(got.stdout.strip()) if got is not None and got.returncode == 0 else None
+    if host is None or not host.is_file():
+        why = f"the Run environment ({run_env}) is not installed" if got is None else \
+            "the Run environment's LensRunner has no reader host (needs LensRunner 0.1.0a2, Conclave #2913)"
+        for e in entries:
+            e["host_selftest"] = f"NOT_RUN: {why}"
+        rep.row("INFO", "reader host self-test", f"not run: {why}; LensRunner still hand-shakes every reader live at each run")
+        return
+    for e in entries:
+        if e["status"] == "FAIL" or not e.get("lens_ids"):
+            continue
+        cmd = [e["python"], "-I", str(host), "--self-test"] + [x for i in e["lens_ids"] for x in ("--lens-id", i)]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        try:
+            ans = json.loads(r.stdout.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            ans = None
+        if not isinstance(ans, dict):
+            e["host_selftest"] = {"ok": False, "exit": r.returncode, "stderr_tail": r.stderr.strip()[-300:]}
+            rep.row("FAIL", f"{e['part']} reader host", f"no answer (exit {r.returncode}): {r.stderr.strip()[-300:]}")
+            e["status"] = "FAIL"
+            continue
+        e["host_selftest"] = ans
+        missing = sorted(set(e["lens_ids"]) - set(ans.get("lens_ids") or []))
+        if r.returncode == 0 and ans.get("ok") is True and not missing:
+            rep.row("PASS", f"{e['part']} reader host", f"{', '.join(e['lens_ids'])} import and pass the pre-run check in their own environment")
+        else:
+            bits = [f"{k}: {ans[k]}" for k in ("import_failures", "prerun_problems", "prerun_error") if ans.get(k)]
+            if missing:
+                bits.append(f"did not answer for {', '.join(missing)}")
+            rep.row("FAIL", f"{e['part']} reader host", "; ".join(bits) or f"answered not ok (exit {r.returncode})")
+            e["status"] = "FAIL"
 
 
 def write_reader_envs(envs: Path, entries: list[dict]) -> Path:
@@ -782,6 +825,7 @@ def main(argv: list[str] | None = None) -> int:
             outcome = "FAIL" if rep.fails > f0 else "HOLD" if rep.holds > h0 else "PASS"
             readers.append(reader_entry(rep, p, a.envs, outcome))
     if readers:
+        host_selftest(rep, readers, a.envs)
         rep.row("INFO", "reader record", f"{write_reader_envs(a.envs, readers)}: {len(readers)} reader environments")
     counts = f"HOLD {rep.holds}, PASS {rep.passes}"
     if rep.fails:
