@@ -105,7 +105,12 @@ jobs:
           Write-Host ("TIMING engines-install {0:N0} s, site-packages {1} MB" -f ((Get-Date) - $t0).TotalSeconds, $mb)
       - name: Measure the pinned files
         shell: powershell
+        env:
+          HF_HUB_DISABLE_PROGRESS_BARS: "1"
         run: |
+          # Python writes download notes to stderr; under the runner's ErrorActionPreference=Stop
+          # Windows PowerShell 5.1 turns that into a terminating NativeCommandError (run 1 of this job).
+          $ErrorActionPreference = 'Continue'
           $t0 = Get-Date
           python -I tools\nestegg\htrlens_models.py --measure *>&1 | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'htrlens_measure.txt')
           Write-Host ("TIMING measure-download {0:N0} s" -f ((Get-Date) - $t0).TotalSeconds)
@@ -115,7 +120,10 @@ jobs:
           exit 0
       - name: Fetch, verify and load offline (only once every pin is filled in)
         shell: powershell
+        env:
+          HF_HUB_DISABLE_PROGRESS_BARS: "1"
         run: |
+          $ErrorActionPreference = 'Continue'
           $m = Get-Content tools\nestegg\htrlens_models.json -Raw
           if ($m -match '"sha256": null') { Write-Host 'SKIPPED: pins not filled in yet; copy them from the measure step'; exit 0 }
           $t0 = Get-Date

@@ -115,7 +115,8 @@ def fetch_kraken(rep: Report, man: dict, dry: bool, measure: bool = False) -> No
                 rep.row("FAIL", "Kraken model", "downloaded file does not match the pinned sha256; not installed")
                 return
             shutil.copy2(got, target)
-    check_file(rep, "Kraken model", target, k["sha256"], None)
+    if check_file(rep, "Kraken model", target, k["sha256"], k.get("bytes")):
+        rep.row("INFO", "Kraken licence", k.get("attribution", k.get("license", "")))
 
 
 def fetch_trocr(rep: Report, man: dict, dry: bool, measure: bool) -> None:

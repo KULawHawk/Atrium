@@ -5,7 +5,11 @@
     "cache_name": "10.5281_zenodo.10592716",
     "sha256": "1ed39e732b26ccdd0f14b9abd3edc66c4b04a02e3d827d7f9e96a7fe7b585b64",
     "sha256_source": "the file HtrLens loaded and fingerprinted in the GPU acceptance runs of 2026-06-07 (Conclave runs/20260607T081441Z-*, T100836Z-*, T154903Z-*)",
-    "license_note": "Zenodo record licence is read and printed at install time"
+    "file_name": "catmus-print-fondue-large.mlmodel",
+    "bytes": 22874456,
+    "measured": "GitHub Windows runner 2026-11-22 (Atrium run 44991328111): name, size and sha256 match the pin",
+    "license": "cc-by-4.0",
+    "attribution": "Kraken model catmus-print-fondue-large, Zenodo 10.5281/zenodo.10592716, CC BY 4.0"
   },
   "trocr": {
     "repo_id": "microsoft/trocr-base-handwritten",

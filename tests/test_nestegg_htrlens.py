@@ -25,6 +25,7 @@ def test_manifest_pins_are_well_formed() -> None:
     man = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert re.fullmatch(r"[0-9a-f]{64}", man["kraken"]["sha256"])
     assert man["kraken"]["cache_name"] == man["kraken"]["doi"].replace("/", "_")
+    assert man["kraken"]["bytes"] == 22874456 and man["kraken"]["license"] == "cc-by-4.0"
     t = man["trocr"]
     assert re.fullmatch(r"[0-9a-f]{40}", t["revision"]), "TrOCR must be pinned to a commit, not a branch"
     assert t["license_expected"] == "mit"
