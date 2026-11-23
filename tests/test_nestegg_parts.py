@@ -32,7 +32,8 @@ def test_every_part_is_complete() -> None:
             if m["step"] == "pinned_models":  # every such reader has its files pinned in models_pinned.json
                 man = json.loads((NESTEGG / "models_pinned.json").read_text(encoding="utf-8"))["readers"][p["name"]]
                 assert all(meta.get("sha256") for mm in man["models"].values()
-                           if mm.get("source") in ("huggingface", "github_release") for meta in mm["files"].values()), p
+                           if mm.get("source") in ("huggingface", "github_release", "datalab_cdn")
+                           for meta in mm["files"].values()), p
 
 
 def test_report_items_are_carried() -> None:
@@ -1792,3 +1793,31 @@ def test_locutus_key_place_is_checked_again_after_the_folder_is_made(tmp_path: P
     m.locutus_capture(rep, root / "envs", root, dry=False)
     assert len(calls) == 2 and rep.fails == 1 and "inside OneDrive" in capsys.readouterr().out
     assert not list(od.rglob("partition_key_v1"))
+
+
+def test_pinned_models_places_surya_where_its_own_settings_say(tmp_path: Path, monkeypatch, capsys) -> None:
+    """surya: the folder comes from surya's own settings, read in its side env; manifest.json goes in with the files."""
+    import subprocess
+    cache = tmp_path / "datalab" / "models"
+    files = {"layout/2025_09_23/manifest.json": _file_pin(tmp_path, "manifest.json", b'{"files": ["model.safetensors"]}'),
+             "layout/2025_09_23/model.safetensors": _file_pin(tmp_path, "model.safetensors", b"w")}
+    model = {"source": "datalab_cdn", "pinned_in_code": True, "files": files,
+             "settings_dir": {"env": "_marker_cli", "code": f"print({str(cache)!r})"}}
+    m, envs, spoke, log = _pinned_setup(tmp_path, monkeypatch, {"s": model})
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(envs / "_marker_cli")], check=True)
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.passes == 1 and rep.fails == 0, capsys.readouterr().out
+    assert (cache / "layout" / "2025_09_23" / "manifest.json").is_file()
+    assert (cache / "layout" / "2025_09_23" / "model.safetensors").read_bytes() == b"w"
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs.parent / "nowhere", Path(sys.executable), log)
+    assert rep.fails == 1 and "could not read the model folder" in capsys.readouterr().out
+
+
+def test_surya_pins_cover_every_folder_with_its_manifest_and_match_the_proof_build() -> None:
+    man = json.loads((NESTEGG / "models_pinned.json").read_text(encoding="utf-8"))
+    files = man["readers"]["MarkerPdf"]["models"]["surya_checkpoints"]["files"]
+    assert sum(f["bytes"] for f in files.values()) == 3_447_389_424  # the proof build's datalab cache, to the byte
+    folders = {p.rsplit("/", 1)[0] for p in files}
+    assert len(folders) == 5 and all(f"{d}/manifest.json" in files for d in folders)
