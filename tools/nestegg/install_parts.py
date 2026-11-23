@@ -310,12 +310,15 @@ def own_tests(rep: Report, part: dict, repo: Path, py: Path, envs: Path, log: Pa
     for d in dirs:  # from the project folder, as its own CI runs them (its pytest settings and import paths apply)
         rc = rc or run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", *noqt, "tests"], log, cwd=d.parent)
     where = "its locked test environment" if part.get("test_env") else "this exact set"
-    if part.get("test_env"):
-        shutil.rmtree(envs / f"{name}-test", ignore_errors=True)  # used only for the proof; never left installed
+    if part.get("test_env") and (envs / f"{name}-test" / TEST_ENV_MARK).is_file():
+        shutil.rmtree(envs / f"{name}-test", ignore_errors=True)  # used only for the proof; never left installed (Decision 50 A)
     if rc == 0:
         rep.row("PASS", name, f"{done}; {status}; its own tests pass under {where}")
     else:
         rep.row("FAIL", name, f"{done}; its own tests fail under {where} (exit {rc}, see {log})")
+
+
+TEST_ENV_MARK = "adastra_scratch_test_env.json"  # Decision 50 A: names a scratch test folder this installer made
 
 
 def _test_env(rep: Report, part: dict, repo: Path, envs: Path, log: Path, done: str, status: str) -> Path | None:
@@ -328,10 +331,18 @@ def _test_env(rep: Report, part: dict, repo: Path, envs: Path, log: Path, done: 
         rep.row("HOLD", name, f"{done}; {status}; its test environment is not locked ({'; '.join(probs)})")
         return None
     env = envs / f"{name}-test"
-    shutil.rmtree(env, ignore_errors=True)
+    if env.exists() and not (env / TEST_ENV_MARK).is_file():  # Decision 50 A: only a folder this installer made is removed
+        rep.row("HOLD", name, f"{done}; {status}; {env} already exists and was not made by this installer; left untouched")
+        return None
+    shutil.rmtree(env, ignore_errors=True)  # an earlier run's own scratch test folder (it carries the marker)
     base = base_python(part["python"])
     if base is None or run(base + ["-m", "venv", env], log):
         rep.row("HOLD", name, f"{done}; {status}; could not create its test environment (see {log})")
+        return None
+    try:
+        (env / TEST_ENV_MARK).write_text(json.dumps({"part": name, "scratch_test_env": True}) + "\n", encoding="utf-8")
+    except OSError as exc:
+        rep.row("HOLD", name, f"{done}; {status}; could not mark its test environment ({exc})")
         return None
     py = env_python(env)
     if locked_install(py, lines, envs / "_logs" / f"{name}.testenv.txt", log) \
@@ -913,6 +924,25 @@ def _place_local_dir(sc, m: dict, cfg: dict, root: Path, say) -> bool:
     return True
 
 
+def saved_model_wheel(m: dict, envs: Path, log: Path) -> Path | None:
+    """A model wheel the installer pip-installs (parts.json "models": spaCy's en_core_web_sm), taken from the saved
+    copies first by its pinned sha256 (every saved copy is re-hashed before use). None means not in any saved copy: the original URL is used,
+    still pinned by #sha256= (and Obsidian's own content pin is checked after either way)."""
+    sc = _saved_copies()
+    cfg = sc.load_config()
+    locs = [loc for loc in cfg["locations"] if loc["kind"] != "origin"]
+    root = INSTALL_ROOT.get("root") or envs.parent
+    if not sc.usable(locs, root):
+        return None
+    fn = m["wheel"].rsplit("/", 1)[-1]
+    dest = envs / "_wheelhouse" / fn
+    with log.open("a", encoding="utf-8") as fh:
+        src = sc.fetch(m["wheel_sha256"], m.get("wheel_bytes"), fn, dest, {"locations": locs}, root,
+                       say=lambda msg: _saved_say(msg, fh))
+        fh.write(f"saved copy: {fn} <- {src or 'not in any saved copy (original URL, hash-pinned)'}\n")
+    return dest if src else None
+
+
 def saved_models(rep: Report, part: dict, envs: Path) -> None:
     """Decision 30 A: put each pinned Hugging Face snapshot of this reader in place from the saved copies first.
     A snapshot is placed only when every one of its files matches a pin; otherwise the reader's own step below
@@ -978,7 +1008,9 @@ def models(rep: Report, part: dict, src: Path, repo: Path, envs: Path, py: Path,
             rep.row("FAIL", label, "PDF-Extract-Kit fetched, but with no pinned revision or hash; not trusted until pinned"
                     if rc == 0 else f"PDF-Extract-Kit download failed (see {log})")
         elif step == "spacy_model":
-            rc = run([py, "-m", "pip", "install", "--no-deps", f"{m['wheel']}#sha256={m['wheel_sha256']}"], log)
+            local = saved_model_wheel(m, envs, log)  # Decision 30 A / HR 14: the saved copy first, so no internet is needed
+            rc = run([py, "-m", "pip", "install", "--no-deps", "--no-index", local], log) if local else \
+                run([py, "-m", "pip", "install", "--no-deps", f"{m['wheel']}#sha256={m['wheel_sha256']}"], log)
             chk = ("import sys, en_core_web_sm; from pathlib import Path; from obsidian.detect import PINNED_MODELS, model_sha256;"
                    "d = Path(en_core_web_sm.__file__).parent / sys.argv[1];"
                    "sys.exit(0 if model_sha256(d) == PINNED_MODELS[sys.argv[1]] else 3)")
