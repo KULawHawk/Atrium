@@ -1588,3 +1588,35 @@ def test_pinned_models_guards_reviewer_3_listed(tmp_path: Path, monkeypatch, cap
     rep = m.Report()
     m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
     assert rep.fails == 1 and "no model pinned" in capsys.readouterr().out
+
+
+def test_mineru_read_back_and_a_config_without_a_pipeline(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Reviewer 3 (#86 follow-up): MinerU's own run that writes another folder, or exits 1, is FAIL (the read-back
+    decides, not the exit code alone); a config that exists without a models-dir.pipeline entry is HOLD, untouched."""
+    cache = tmp_path / "hub"
+    monkeypatch.setenv("HF_HUB_CACHE", str(cache))
+    monkeypatch.delenv("CONCLAVE_MINERU_MODELS_DIR", raising=False)
+    cfg = tmp_path / "home" / "mineru.json"
+    cfg.parent.mkdir(parents=True)
+    monkeypatch.setenv("MINERU_TOOLS_CONFIG_JSON", str(cfg))
+    snap = cache / "models--org--pek" / "snapshots" / ("f" * 40)
+    m, envs, spoke, log = _pinned_setup(tmp_path, monkeypatch, {"p": _mineru_model(tmp_path)})
+    _fake_mineru_cli(envs, "import json, os\n"
+                     f"open(os.environ['MINERU_TOOLS_CONFIG_JSON'], 'w').write(json.dumps({{'models-dir': {{'pipeline': {str(tmp_path / 'elsewhere')!r}}}}}))\n")
+    rep = m.Report()  # exit 0 but the wrong folder: FAIL
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.fails == 1 and rep.passes == 0 and "was not written with the pinned snapshot" in capsys.readouterr().out
+    cfg.unlink()
+    import shutil
+    shutil.rmtree(envs / "_mineru_cli")
+    _fake_mineru_cli(envs, "import json, os, sys\n"
+                     f"open(os.environ['MINERU_TOOLS_CONFIG_JSON'], 'w').write(json.dumps({{'models-dir': {{'pipeline': {str(snap)!r}}}}}))\n"
+                     "sys.exit(1)\n")
+    rep = m.Report()  # the right folder but exit 1: FAIL too
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.fails == 1 and rep.passes == 0 and "exit 1" in capsys.readouterr().out
+    cfg.write_text(json.dumps({"other": 1}), encoding="utf-8")
+    rep = m.Report()  # a config without a pipeline entry: HOLD, its bytes unchanged
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.holds == 1 and rep.passes == 0 and "without a models-dir.pipeline entry" in capsys.readouterr().out
+    assert json.loads(cfg.read_text(encoding="utf-8")) == {"other": 1}
