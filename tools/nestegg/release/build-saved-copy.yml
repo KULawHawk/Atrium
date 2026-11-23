@@ -5,7 +5,8 @@
 # What is published is decided by a REVIEWED Atrium commit (reviewer 3 on Atrium #67): nestegg/SOURCE.txt names an
 # Atrium commit that must be on Atrium main, and every tool file here (this workflow included) must have the sha256
 # that file has at that commit. The checker is fetched from that commit, not taken from this repository. Any
-# mismatch stops the run before anything is uploaded.
+# mismatch stops the run before anything is uploaded. No compiled Python may be in the checkout, and the build runs
+# with -B and a pycache_prefix outside the checkout, so it never reads a __pycache__ .pyc in place of pinned source.
 name: build-saved-copy
 on:
   push:
@@ -42,7 +43,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Save every pinned package file
         env: {GH_TOKEN: "${{ github.token }}"}
-        run: python3 -I nestegg/build_saved_release.py --repo "${{ github.repository }}" --kind packages --source nestegg/SOURCE.txt
+        run: python3 -I -B -X pycache_prefix="$RUNNER_TEMP/no-pyc" nestegg/build_saved_release.py --repo "${{ github.repository }}" --kind packages --source nestegg/SOURCE.txt
   models:
     needs: [source-pin, packages]
     if: always() && needs.source-pin.result == 'success'
@@ -54,4 +55,4 @@ jobs:
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
       - name: Save every pinned model file
         env: {GH_TOKEN: "${{ github.token }}"}
-        run: python3 -I nestegg/build_saved_release.py --repo "${{ github.repository }}" --kind models --source nestegg/SOURCE.txt
+        run: python3 -I -B -X pycache_prefix="$RUNNER_TEMP/no-pyc" nestegg/build_saved_release.py --repo "${{ github.repository }}" --kind models --source nestegg/SOURCE.txt
