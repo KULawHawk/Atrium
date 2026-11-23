@@ -554,14 +554,16 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
             rep.row("INFO", f"{name} set aside", f"the previous environment was a build that did not finish; kept, "
                     f"never verified, at {aside}")
         return
-    if not aside and not list(envs.glob(f"{name}.kept-*")):
+    if not aside and not list(envs.glob(f"{name}.kept-*")) and not list(envs.glob(f"{name}.legacy-*")):
         return  # a first install that failed: its FAIL rows already say so; nothing to put back
     failed = env.with_name(f"{name}.failed-{stamp}")
-    # put back: the newest verified kept copy, else this run's pre-check (legacy) environment, else nothing
+    # put back: the newest verified kept copy, else the newest pre-check (.legacy-) environment from ANY run (a crash
+    # in an earlier rebuild must not strand the working legacy copy; reviewer 3 on #72), else nothing
     good = sorted(k for k in envs.glob(f"{name}.kept-*") if (k / VERIFIED).is_file())
-    legacy = not good and aside is not None and aside.name.startswith(f"{name}.legacy-")
+    olds = sorted(k for k in envs.glob(f"{name}.legacy-*") if k.is_dir())
+    legacy = not good and bool(olds)
     if legacy:
-        good = [aside]
+        good = [olds[-1]]
     try:
         if env.exists():
             env.rename(failed)
@@ -573,7 +575,7 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
                 "or run again")
         return
     if legacy:
-        rep.row("WARN", f"{name} restored", f"the new build did not pass, so the previous environment ({aside.name}) is "
+        rep.row("WARN", f"{name} restored", f"the new build did not pass, so the previous environment ({good[-1].name}) is "
                 f"put back, not verified (it was built before this check existed), at {env}; the failed build is kept "
                 f"at {failed}")
     elif good:

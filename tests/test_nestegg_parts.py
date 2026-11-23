@@ -1056,6 +1056,27 @@ def test_verified_kept_copy_outranks_a_legacy_env_on_failure(tmp_path: Path, mon
     assert "last verified working copy (atrium.kept-20261123-070000)" in capsys.readouterr().out
 
 
+def test_crash_in_an_earlier_rebuild_does_not_strand_the_legacy_copy(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Reviewer 3 on #72: run 1 set the pre-check env aside as .legacy- and crashed mid-build; run 2 fails too. The
+    newest .legacy- from the earlier run is put back ("not verified"); the half build goes to .unfinished-."""
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=False, verified=False, marker="building")
+    (env / "old.txt").write_text("half build")
+    older = env.with_name("atrium.legacy-20261123-060000")
+    older.mkdir()
+    (older / "old.txt").write_text("stale legacy")
+    leg = env.with_name("atrium.legacy-20261123-070000")
+    leg.mkdir()
+    (leg / "old.txt").write_text("legacy working copy")
+    (leg / "adastra.json").write_text("{}")
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    out = capsys.readouterr().out
+    assert (env / "old.txt").read_text() == "legacy working copy" and rep.fails == 0
+    assert "(atrium.legacy-20261123-070000) is put back, not verified" in out and "no verified working copy" not in out
+    unf = list(env.parent.glob("atrium.unfinished-*"))
+    assert len(unf) == 1 and (unf[0] / "old.txt").read_text() == "half build" and older.is_dir()
+
+
 def test_crash_interrupted_env_is_never_put_back_when_the_rebuild_fails(tmp_path: Path, monkeypatch, capsys) -> None:
     """A building marker with no verified marker is a build a crash cut off, even if adastra.json got written."""
     m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=False, verified=False, marker="building")
