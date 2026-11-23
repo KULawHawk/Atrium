@@ -1432,15 +1432,23 @@ def locutus_key_path() -> Path:
 
 
 def _key_place_problem(key: Path, install_root: Path) -> str | None:
-    """Why this folder must not hold the key, or None. Checked before anything is written."""
-    folder = key.parent.resolve() if key.parent.exists() else key.parent.absolute()
-    for var in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
-        od = os.environ.get(var, "").strip()
-        if od and (folder == Path(od).absolute() or Path(od).absolute() in folder.parents):
-            return f"{folder} is inside OneDrive ({var})"
-    if "onedrive" in str(folder).lower():
-        return f"{folder} looks like a OneDrive folder"
-    root = install_root.absolute()
+    """Why this folder must not hold the key, or None. Checked before the folder is made and again after.
+    The path is always resolved (non-strict resolve follows every junction or symlink in the part that exists),
+    so a link above a folder that does not exist yet (the first install) cannot point the key into OneDrive,
+    the install folder or a repo. Both the raw and the resolved path are checked."""
+    folders = [key.parent.resolve(), key.parent.absolute()]
+    for folder in folders:
+        for var in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
+            od = os.environ.get(var, "").strip()
+            if not od:
+                continue
+            for odp in {Path(od).absolute(), Path(od).resolve()}:
+                if folder == odp or odp in folder.parents:
+                    return f"{folder} is inside OneDrive ({var})"
+        if "onedrive" in str(folder).lower():
+            return f"{folder} looks like a OneDrive folder"
+    folder = folders[0]
+    root = install_root.resolve()
     if folder == root or root in folder.parents:
         return f"{folder} is inside the install folder {root}"
     for d in (folder, *folder.parents):
@@ -1452,7 +1460,8 @@ def _key_place_problem(key: Path, install_root: Path) -> str | None:
 def make_locutus_key(key: Path) -> bool:
     """Write a new random key (64 hex characters from the OS random source) only if no file is there. The create is
     exclusive (O_EXCL), so an existing key can never be overwritten, even by a race. The key is never printed or
-    logged. Returns False when a key already exists."""
+    logged. Returns False when a key already exists. The 0o600 mode applies on Linux/macOS only; Windows ignores it,
+    so there the file carries the ACL of the user profile folder (the user, SYSTEM and Administrators by default)."""
     import secrets
     key.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -1493,6 +1502,11 @@ def locutus_capture(rep: Report, envs: Path, install_root: Path, dry: bool) -> N
         rep.row("FAIL", label, f"key not made: {problem}; {off}")
         return
     try:
+        key.parent.mkdir(parents=True, exist_ok=True)
+        problem = _key_place_problem(key, install_root)  # again, now that the folder exists and resolves fully
+        if problem:
+            rep.row("FAIL", label, f"key not made: {problem}; {off}")
+            return
         made = make_locutus_key(key)
         if not key.is_file() or not key.read_bytes().strip():
             rep.row("FAIL", label, f"the key file at {key} is empty or not a file; {off}")
