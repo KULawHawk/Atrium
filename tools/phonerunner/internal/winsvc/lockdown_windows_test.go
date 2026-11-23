@@ -179,7 +179,6 @@ func setDefault(tok windows.Token, sddl string) error {
 	return windows.SetTokenInformation(tok, windows.TokenDefaultDacl, (*byte)(unsafe.Pointer(&tdd)), uint32(unsafe.Sizeof(tdd)))
 }
 
-
 // asLevel runs fn on a locked thread impersonating this test's own token with
 // every privilege removed (the runner is an administrator, and its privileges
 // would bypass the rights under test) and lowered to level.
