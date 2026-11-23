@@ -34,6 +34,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -650,7 +651,8 @@ def runtime_side_env(repo: Path, part: dict) -> tuple[Path, dict] | None:
 def build_runtime_side_env(rep: Report, part: dict, repo: Path, needs: tuple[Path, dict], log: Path) -> None:
     """Build the side environment exactly as the spoke declares: a fresh CPython venv at its default folder, the
     packaged list installed with --require-hashes --no-deps, then the spoke's warmup. Never reuses a folder this
-    installer did not build, and never deletes one: an old folder is named with what to do about it."""
+    installer did not build, and never deletes one: an old folder is named with what to do about it. A rebuild is
+    made beside the one in use and switched in only after its warmup passes; the previous one is kept, dated."""
     f, se = needs
     label = f"{part['name']} side env"
     req = f.parent / se["requirements"]
@@ -671,23 +673,42 @@ def build_runtime_side_env(rep: Report, part: dict, repo: Path, needs: tuple[Pat
     if base is None:
         rep.row("FAIL", label, f"Python {se['python']} not found (phase 1 installs it)")
         return
-    if target.exists():
-        shutil.rmtree(target)  # only a folder this installer built itself (it carries our adastra.json)
-    vpy = env_python(target)
-    if run(base + ["-m", "venv", target], log) or \
-            run([vpy, "-m", "pip", "install", "--require-hashes", "--no-deps", "-r", req], log):
-        rep.row("FAIL", label, f"could not build it from {se['requirements']} with --require-hashes (see {log})")
-        return
-    (target / "adastra.json").write_text(json.dumps({"built_by": "nestegg install_parts.py", "part": part["name"],
-                                                     "from": str(req)}, indent=1) + "\n", encoding="utf-8")
-    resp = target / "warmup_response.json"
+    # SET-11: the new environment is built BESIDE the one in use, warmed up, and switched in only on PASS; the
+    # previous one is kept under a dated name (SEC-8: nothing is deleted), and a failed build never replaces it.
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    new = target.with_name(f"{target.name}.new-{stamp}")
+    vpy = env_python(new)
     worker = f.parent / se["worker"]
-    if run([vpy, "-I", worker, "--op", "warmup", "--allow-network", "--response", resp], log):
-        rep.row("FAIL", label, f"built from {se['requirements']} (hash-checked) but the warmup failed (see {log})")
-        return
     pins = sum(1 for ln in req.read_text(encoding="utf-8").splitlines() if "==" in ln and not ln.lstrip().startswith("#"))
+    in_use = f"; the one already at {target} stays in use" if target.exists() else ""
+    if run(base + ["-m", "venv", new], log) or \
+            run([vpy, "-m", "pip", "install", "--require-hashes", "--no-deps", "-r", req], log):
+        rep.row("FAIL", label, f"could not build it from {se['requirements']} with --require-hashes (see {log}); "
+                f"the unfinished build is left at {new}{in_use}")
+        return
+    (new / "adastra.json").write_text(json.dumps({"built_by": "nestegg install_parts.py", "part": part["name"],
+                                                  "from": str(req), "built": stamp}, indent=1) + "\n", encoding="utf-8")
+    if run([vpy, "-I", worker, "--op", "warmup", "--allow-network", "--response", new / "warmup_response.json"], log):
+        rep.row("FAIL", label, f"built at {new} from {se['requirements']} (hash-checked) but its warmup failed (see {log}); "
+                f"not switched in{in_use}")
+        return
+    kept = target.with_name(f"{target.name}.kept-{stamp}") if target.exists() else None
+    if kept:
+        target.rename(kept)  # the last known working copy, kept (never deleted)
+    new.rename(target)
+    tpy = env_python(target)  # a venv moved to its final folder is checked again there before it counts
+    if run([tpy, "-I", worker, "--op", "warmup", "--response", target / "warmup_response.json"], log):
+        target.rename(new)
+        if kept:
+            kept.rename(target)
+        rep.row("FAIL", label, f"the new build passed its warmup but not after moving to {target}; switched back "
+                f"(new build left at {new}){in_use} (see {log})")
+        return
     rep.row("PASS", label, f"built at {target} from {se['requirements']} ({pins} exact pins, --require-hashes --no-deps); "
-            "warmup passed (paddle imports, run_check, engine built)")
+            "warmup passed before and after the switch (paddle imports, run_check, engine built)")
+    if kept:
+        rep.row("INFO", f"{label} kept", f"the previous side environment is kept at {kept} (last known working copy; "
+                "delete it yourself when you no longer want it)")
     if se.get("gpu_swap"):
         rep.row("INFO", f"{label} GPU", f"CPU build. The GPU swap to {se['gpu_swap']['add']} is not done here and has no "
                 "recorded hash yet")

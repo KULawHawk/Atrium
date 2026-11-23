@@ -868,6 +868,59 @@ def test_paddle_side_env_built_from_the_spokes_hashed_list(tmp_path: Path, monke
     assert "PASS  OcrPaddle side env" in out and "not locked" not in out
     assert "refuses it now" in out and (repo / "conclave_lens_ocrpaddle" / ".paddle-env").is_dir()  # named, not removed
     assert "GPU swap to paddlepaddle-gpu==2.6.2 is not done" in out
+    assert not list(target.parent.glob("ocrpaddle-side.*"))  # nothing left beside it on a first build
+
+
+def _fake_side_run(fail_warmup: bool = False):
+    calls = []
+
+    def fake_run(cmd, log, **k):
+        c = [str(x) for x in cmd]
+        calls.append(c)
+        if "venv" in c:
+            Path(c[-1]).mkdir(parents=True, exist_ok=True)
+        return 1 if (fail_warmup and "warmup" in c) else 0
+    return calls, fake_run
+
+
+def test_paddle_side_env_rebuild_keeps_the_working_one_and_switches_only_on_pass(tmp_path: Path, monkeypatch, capsys) -> None:
+    """SET-11 / SEC-8: the new build goes beside the old one; on PASS the old one is kept under a dated name."""
+    m = _mod()
+    repo, part = _paddle_spoke(tmp_path)
+    target = tmp_path / "home" / "ocrpaddle-side"
+    target.mkdir(parents=True)
+    (target / "adastra.json").write_text("{}")
+    (target / "old.txt").write_text("working copy")
+    calls, fake = _fake_side_run()
+    monkeypatch.setattr(m, "run", fake)
+    monkeypatch.setattr(m, "base_python", lambda v: ["python3.12"])
+    rep = m.Report()
+    m.side_envs(rep, part, tmp_path, tmp_path / "envs", tmp_path / "log.txt", Path("py"))
+    out = capsys.readouterr().out
+    kept = list(target.parent.glob("ocrpaddle-side.kept-*"))
+    assert rep.fails == 0 and len(kept) == 1 and (kept[0] / "old.txt").read_text() == "working copy"
+    assert not (target / "old.txt").exists() and (target / "adastra.json").is_file()
+    assert any(".new-" in c[-1] for c in calls if "venv" in c)  # built beside, not in place
+    assert sum("warmup" in c for c in calls) == 2  # before and after the switch
+    assert "warmup passed before and after the switch" in out and "previous side environment is kept" in out
+
+
+def test_paddle_side_env_failed_warmup_leaves_the_old_one_in_use(tmp_path: Path, monkeypatch, capsys) -> None:
+    m = _mod()
+    repo, part = _paddle_spoke(tmp_path)
+    target = tmp_path / "home" / "ocrpaddle-side"
+    target.mkdir(parents=True)
+    (target / "adastra.json").write_text("{}")
+    (target / "old.txt").write_text("working copy")
+    calls, fake = _fake_side_run(fail_warmup=True)
+    monkeypatch.setattr(m, "run", fake)
+    monkeypatch.setattr(m, "base_python", lambda v: ["python3.12"])
+    rep = m.Report()
+    m.side_envs(rep, part, tmp_path, tmp_path / "envs", tmp_path / "log.txt", Path("py"))
+    out = capsys.readouterr().out
+    assert rep.fails == 1 and (target / "old.txt").read_text() == "working copy"
+    assert "not switched in" in out and f"the one already at {target} stays in use" in out
+    assert not list(target.parent.glob("ocrpaddle-side.kept-*"))
 
 
 def test_paddle_side_env_never_reuses_or_removes_a_folder_it_did_not_build(tmp_path: Path, monkeypatch, capsys) -> None:
