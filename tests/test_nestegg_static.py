@@ -152,3 +152,11 @@ def test_tesseract_is_locked_to_the_proven_version_and_never_downloaded() -> Non
     assert "if ($TessSetupSha256 -notmatch '^[0-9a-f]{64}$')" in code and "not locked:" in code
     assert code.index("Get-FileHash -LiteralPath $kept") < code.index("Start-Process -FilePath $kept")
     assert "Check-TesseractData" in code and "--list-langs" in code and "'eng'" in code
+    # Jake 11/22 11:21 PM, Decision 17 A: fingerprint written in; the kept copy is refused until the tesseract.exe
+    # match with his working install is recorded; a mismatch after install is a FAIL.
+    assert "$TessSetupSha256 = 'c885fff6998e0608ba4bb8ab51436e1c6775c2bafc2559a19b423e18678b60c9'" in code
+    assert "$TessExeSha256 = 'babb405f4366b480d02cd8ff2bac8d497170f6c1711ce6f3d5d8bf0fb7fa6ed9'" in code
+    assert "$TessMatchShown = ''" in code
+    assert code.index("if ($TessMatchShown -eq '')") < code.index("Start-Process -FilePath $kept")
+    assert code.index("Start-Process -FilePath $kept") < code.index("if ($exe -ne $TessExeSha256)")
+    assert "Get-AuthenticodeSignature" not in code  # fingerprints, never the (expired) signature

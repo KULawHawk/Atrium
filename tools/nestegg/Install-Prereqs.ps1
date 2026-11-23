@@ -158,14 +158,24 @@ function Ensure([string]$Name, [scriptblock]$Find, [string]$WingetId, [string]$V
 
 # --- Tesseract: locked to the version proven working (Jake 11/22 10:45 PM: "getting a version that we know is
 # working ... always keep a copy of the last known working version, always."). Jake's PC: 5.4.0.20240606 from UB
-# Mannheim's own installer, which winget does not offer. A present Tesseract of any other version is FAIL and is
+# Mannheim's own installer. A present Tesseract of any other version is FAIL and is
 # left as it is (changing it is the person's step). A missing one is installed only from the installer file whose
 # sha256 was measured; until that hash is recorded below, it is FAIL "not locked", never installed unpinned.
 # The installer file ships with the install bundle at <InstallRoot>\.adastra\kept\tesseract\ and stays there as the
 # last known working copy. This script never downloads it.
 $TessVersion = '5.4.0.20240606'
 $TessSetupName = "tesseract-ocr-w64-setup-$TessVersion.exe"
-$TessSetupSha256 = ''  # 64 hex, measured on the PC from the kept installer; '' = not locked
+# Jake 11/22 11:21 PM, Decision 17 A: the fingerprint below is written in although the publisher signature is NOT
+# valid. Measured on Jake's PC 11/22: UB Mannheim's GitHub release file, 50,175,248 bytes; Microsoft's winget catalog
+# lists the same InstallerSha256. Signed "Universitaet Mannheim" (GEANT Code Signing CA 4) with a certificate valid
+# only 2022-12-08..2023-12-09, so expired before this 2024 build was signed (Windows: NotTimeValid, UnknownError) - a
+# publisher-side lapse, not a hash mismatch. Because the signature cannot vouch for it, the kept copy is refused until
+# it is shown to carry the same tesseract.exe as Jake's working install ($TessExeSha256): $TessMatchShown holds that
+# evidence and stays '' until the check passes. A mismatch is a FAIL back to Jake. This script checks fingerprints,
+# never the signature (a "signature must be Valid" rule would refuse this official file forever).
+$TessSetupSha256 = 'c885fff6998e0608ba4bb8ab51436e1c6775c2bafc2559a19b423e18678b60c9'
+$TessExeSha256 = 'babb405f4366b480d02cd8ff2bac8d497170f6c1711ce6f3d5d8bf0fb7fa6ed9'  # tesseract.exe on Jake's PC, 11/22
+$TessMatchShown = ''  # '' = the kept installer is not yet shown to carry $TessExeSha256; it is not run
 function Tesseract-Version([string]$Dir) {
     $line = Try-Cmd (Join-Path $Dir 'tesseract.exe') @('--version')
     if ($line -match 'v?(\d+\.\d+\.\d+(\.\d+)?)') { return $Matches[1] }
@@ -186,6 +196,7 @@ function Ensure-Tesseract {
         return
     }
     if ($TessSetupSha256 -notmatch '^[0-9a-f]{64}$') { Row 'FAIL' 'Tesseract OCR' "not locked: the sha256 of $TessSetupName is not measured yet, so it is not installed"; return }
+    if ($TessMatchShown -eq '') { Row 'FAIL' 'Tesseract OCR' "not yet shown that $TessSetupName carries the same tesseract.exe as the proven install (sha256 $TessExeSha256); its publisher signature expired in 2023, so it is not run until that match is recorded"; return }
     if ($DryRun) { Row 'TODO' 'Tesseract OCR' "would install $TessSetupName from $kept after checking sha256 $TessSetupSha256 (one Windows security box)"; return }
     if (-not (Test-Path -LiteralPath $kept)) { Row 'FAIL' 'Tesseract OCR' "the locked installer is not at $kept (it ships with the install bundle; this script never downloads by itself)"; return }
     $got = (Get-FileHash -LiteralPath $kept -Algorithm SHA256).Hash.ToLower()
@@ -195,7 +206,11 @@ function Ensure-Tesseract {
     Refresh-Path
     $have = Find-Tesseract
     $v = if ($have) { Tesseract-Version $have } else { $null }
-    if ($v -eq $TessVersion) { Row 'PASS' 'Tesseract OCR' "installed $v`: $have (installer kept at $kept)"; $script:found['tesseract_dir'] = $have; Check-TesseractData $have }
+    if ($v -eq $TessVersion) {
+        $exe = (Get-FileHash -LiteralPath (Join-Path $have 'tesseract.exe') -Algorithm SHA256).Hash.ToLower()
+        if ($exe -ne $TessExeSha256) { Row 'FAIL' 'Tesseract OCR' "installed, but tesseract.exe sha256 $exe is not the proven $TessExeSha256; left as it is, for Jake"; return }
+        Row 'PASS' 'Tesseract OCR' "installed $v`: $have (tesseract.exe matches the proven build; installer kept at $kept)"; $script:found['tesseract_dir'] = $have; Check-TesseractData $have
+    }
     else { Row 'FAIL' 'Tesseract OCR' ("not at {0} after the installer (exit code {1}, found {2}). If the Windows security box was declined, run this again and choose Yes." -f $TessVersion, $proc.ExitCode, $(if ($v) { $v } else { 'nothing' })) }
 }
 
