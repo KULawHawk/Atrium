@@ -41,7 +41,7 @@
      "models": [{"step": "pinned_models", "what": "table-transformer detection + structure (models_pinned.json)"}]},
     {"name": "MarkerPdf",      "repo": "Conclave", "roots": ["conclave_lens_markerpdf[gpu]"],        "python": "3.13", "torch": "default", "add": ["six==1.17.0"],
      "side_env": {"name": "marker", "python": "3.13", "packages": ["marker-pdf==1.10.2", "surya-ocr==0.17.1", "pdftext==0.6.3", "pypdfium2==4.30.0", "six==1.17.0"], "check": ["marker_single", "--help"], "engine_file": "conclave_lens_markerpdf/src/conclave_lens_markerpdf/engine_requirements.txt"},
-     "models": [{"step": "unpinned", "what": "surya models (downloaded by marker on first use)"}]},
+     "models": [{"step": "pinned_models", "what": "surya checkpoints + their manifests (models_pinned.json)"}]},
     {"name": "MinerU",         "repo": "Conclave", "roots": ["conclave_lens_mineru[gpu]"],           "python": "3.13", "torch": "default", "add": ["six==1.17.0"],
      "side_env": {"name": "mineru", "python": "3.12", "packages": ["mineru[core]==3.2.2", "pdftext==0.6.3", "pypdfium2==4.30.0", "six==1.17.0"], "check": ["mineru", "--help"], "engine_file": "conclave_lens_mineru/src/conclave_lens_mineru/engine_requirements.txt"},
      "models": [{"step": "pinned_models", "what": "PDF-Extract-Kit pipeline subset (models_pinned.json)"}]},
