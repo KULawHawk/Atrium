@@ -116,6 +116,13 @@ def test_failed_gh_call_says_why_and_masks_anything_secret(monkeypatch) -> None:
     assert "HTTP 502: Bad Gateway" in msg and "exit 1" in msg and tok not in msg and "[masked]" in msg
     assert "github_pat_" not in m._gh_error("github_pat_" + "b" * 40) and len(m._gh_error("x" * 900)) <= 303
     assert m._gh_error("") == "no error text from gh"
+    for line, secret in (("Authorization: Basic dXNlcjpwYXNzd29yZA==", "dXNlcjpwYXNzd29yZA=="),
+                         ("proxy-authorization: Bearer abc.def.ghi", "abc.def.ghi"),
+                         ("fatal: https://x-access-token:s3cr3tvalue@github.com/o/r", "s3cr3tvalue"),
+                         ("token=sometokenvalue more words", "sometokenvalue")):
+        out = m._gh_error(line)
+        assert secret not in out and "[masked]" in out, out
+    assert "HTTP 422" in m._gh_error("HTTP 422: Validation Failed")  # ordinary errors pass through untouched
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a[0], 1, "", "nope"))
     assert m.gh("release", "view", "t", check=False).returncode == 1  # check=False still returns, as before
 
