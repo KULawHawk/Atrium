@@ -28,7 +28,7 @@
 # skips steps 1-8, uses <folder> instead of C:\ProgramData\PhoneRunner, takes its answers from
 # <folder>\selftest\answers.txt instead of the keyboard, and marks every result SELFTEST.
 # Nothing is deleted. Test items stay in the inbox (you can remove them later if you decide to).
-param([switch]$DryRun, [switch]$Elevated, [string]$SelfTestRoot = '')
+param([switch]$DryRun, [switch]$Elevated, [string]$SelfTestRoot = '', [int]$SelfTestTlsPort = 0)
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Root = Join-Path $env:ProgramData 'PhoneRunner'
@@ -194,7 +194,10 @@ function Restart-PR {
         if (-not $e.url) { Fail "the service is up but has no page address (turn on HTTPS Certificates in the Tailscale admin DNS page)" }
         return $e
       }
-      if ($e.event -eq 'tailscale.not_up' -or $e.event -eq 'service.config_error') { Fail "the service did not start: $($e.event) $($e.error)" }
+      if ($e.event -eq 'tailscale.unreachable' -and $e.blocked -eq $true) { Fail "$($e.problem)" }
+      if ($e.event -eq 'service.config_error') { Fail "the service did not start: $($e.event) $($e.error)" }
+      # Windows restarts the service by itself after a failed start; keep waiting for it.
+      if ($e.event -eq 'tailscale.not_up' -and -not $script:NotUpSeen) { $script:NotUpSeen = $true; Say "WARN the service could not join Tailscale yet ($($e.error)); it restarts by itself, still waiting" }
       if (-not $shown -and $e.event -eq 'tailscale' -and "$($e.msg)" -match 'https://\S+') {
         $shown = $true
         Ask "Tailscale needs your sign-in for the PhoneRunner device. Open this link and sign in with YOUR account: $($Matches[0])   This window continues by itself (up to 10 minutes)."
@@ -206,6 +209,90 @@ function Restart-PR {
 }
 
 function Read-Config { Get-Content -Raw -LiteralPath (Join-Path $Root 'private\config.json') | ConvertFrom-Json }
+
+# Looks once at whether this network lets Tailscale through: one secure connection to
+# Tailscale's coordination server, checked against this PC's own trusted certificates, then
+# closed. Looks only: no other DNS, no other address, no certificate trusted that Windows does
+# not trust. Returns $null when Tailscale is reachable, otherwise the problem in plain words.
+function Get-TailscaleBlock([string]$h = 'controlplane.tailscale.com', [int]$port = 443) {
+  $script:TsIssuer = ''; $script:TsErrors = ''
+  try { $ips = (@([System.Net.Dns]::GetHostAddresses($h)) | ForEach-Object { $_.IPAddressToString }) -join ',' }
+  catch { return "cannot look up $h ($($_.Exception.Message)): no internet, or this network blocks Tailscale" }
+  $tcp = New-Object System.Net.Sockets.TcpClient
+  try {
+    $iar = $tcp.BeginConnect($h, $port, $null, $null)
+    if (-not $iar.AsyncWaitHandle.WaitOne(10000)) { return "cannot reach $h ($ips): no internet, or this network blocks Tailscale" }
+    $tcp.EndConnect($iar)
+    $check = [System.Net.Security.RemoteCertificateValidationCallback] {
+      param($sender, $cert, $chain, $errors)
+      $script:TsIssuer = "$($cert.Issuer)"; $script:TsErrors = "$errors"
+      return ($errors -eq [System.Net.Security.SslPolicyErrors]::None)
+    }
+    $ssl = New-Object System.Net.Security.SslStream($tcp.GetStream(), $false, $check)
+    try { $ssl.AuthenticateAsClient($h); return $null }
+    catch {
+      if ($script:TsIssuer -and $script:TsErrors -ne 'None') { return "this network blocks Tailscale: $h ($ips) was answered by a certificate from '$($script:TsIssuer)', not Tailscale's ($($script:TsErrors)). A Tailscale sign-in will not help. The network's filter has to allow *.tailscale.com, or the PC needs another network" }
+      return "the secure connection to $h ($ips) failed: $($_.Exception.Message)"
+    }
+    finally { $ssl.Dispose() }
+  } catch { return "cannot reach $h ($ips): $($_.Exception.Message)" }
+  finally { $tcp.Close() }
+}
+
+# $null when the service's latest start reached service.listening (its page address goes in
+# $script:UpURL); otherwise why not. A start is the event with seq 1 (each start counts from 1).
+$script:UpURL = ''
+function Get-ServiceUpProblem {
+  $ev = @(Get-Events ([datetime]::MinValue))
+  $last = -1
+  for ($i = 0; $i -lt $ev.Count; $i++) { if ("$($ev[$i].seq)" -eq '1') { $last = $i } }
+  if ($last -lt 0) { return "no service start in its log yet" }
+  $after = @($ev[$last..($ev.Count - 1)])
+  $up = @($after | Where-Object { $_.event -eq 'service.listening' })
+  if ($up.Count -gt 0) {
+    if (-not $up[-1].url) { return "the service is up but has no page address (turn on HTTPS Certificates in the Tailscale admin DNS page)" }
+    $script:UpURL = "$($up[-1].url)"; return $null
+  }
+  $bl = @($after | Where-Object { $_.event -eq 'tailscale.unreachable' })
+  if ($bl.Count -gt 0) { return "$($bl[-1].problem)" }
+  $no = @($after | Where-Object { $_.event -eq 'tailscale.not_up' -or $_.event -eq 'service.config_error' })
+  if ($no.Count -gt 0) { return "$($no[-1].event): $($no[-1].error)" }
+  return "it started at $($after[0].at) and has not joined Tailscale yet"
+}
+
+# Do the 4 programs in Program Files already match SHA256SUMS.txt?
+function Test-ProgramsMatch {
+  $sums = Read-Sums
+  foreach ($n in $Exes) {
+    $p = Join-Path $Dest $n
+    if (-not (Test-Path -LiteralPath $p) -or -not $sums.ContainsKey($n) -or (Get-Sha $p) -ne $sums[$n]) { return $false }
+  }
+  return $true
+}
+
+# Pre-flight: changes nothing and asks for nothing. Fails (before any admin box or tap) when
+# Tailscale is blocked here, or when the service is installed, up to date and still not up.
+# Returns $true when the service is healthy and already runs these exact programs.
+function Invoke-Preflight {
+  $b = Get-TailscaleBlock
+  if ($b) { Fail "PRE-FLIGHT: $b. Nothing was changed" }
+  Say "PASS pre-flight: this network reaches Tailscale (genuine certificate)"
+  $s = Get-Service -Name $Svc -ErrorAction SilentlyContinue
+  if (-not $s) { Say "INFO pre-flight: PhoneRunner is not installed yet; the run installs it"; return $false }
+  $match = Test-ProgramsMatch
+  if ($s.Status -ne 'Running') { Say "INFO pre-flight: the PhoneRunner service is $($s.Status); the run starts it"; return $false }
+  try { $p = Get-ServiceUpProblem } catch { Say "INFO pre-flight: cannot read the service log from this window ($($_.Exception.Message)); checked again after the admin box"; return $false }
+  if ($p) {
+    if (-not $match) { Say "INFO pre-flight: the service is not up ($p); the run updates its programs, which may fix it"; return $false }
+    Say "  the service is not up yet ($p); waiting up to 3 minutes for it to come up by itself"
+    $end = (Get-Date).AddMinutes(3)
+    while ($p -and (Get-Date) -lt $end) { Start-Sleep -Seconds 5; $p = Get-ServiceUpProblem }
+    if ($p) { Fail "PRE-FLIGHT: the PhoneRunner service is running these exact programs but is not up: $p. Nothing was changed" }
+  }
+  Say "PASS pre-flight: the PhoneRunner service is up. Page address: $script:UpURL"
+  if ($match) { Say "PASS pre-flight: the installed programs already match; the service will not be stopped or reinstalled" }
+  return $match
+}
 
 # Same shortening the service uses in its log: first letter, ***, then @domain.
 function Mask-Login([string]$l) {
@@ -248,7 +335,17 @@ if ($DryRun) {
 
 # ---------------------------------------------------------------- full run (Jake)
 $me = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
-if (-not $SelfTest -and -not $me.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+$isAdmin = $me.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+# Only one T-20 window at a time: a second one stopping the service would break the first.
+if (-not $SelfTest -and $isAdmin) {
+  $script:OneWindow = New-Object System.Threading.Mutex($false, 'Global\PhoneRunnerT20Desk')
+  if (-not $script:OneWindow.WaitOne(0)) { Write-Host "T20: another T-20 window is already running. Close this one; nothing was changed."; exit 1 }
+}
+# Pre-flight before the admin box: nothing is asked of Jake if Tailscale is blocked here or the
+# service is up to date and not up.
+$healthy = $false
+if (-not $SelfTest) { $healthy = Invoke-Preflight }
+if (-not $SelfTest -and -not $isAdmin) {
   if ($Elevated) { Write-Host "T20: FAIL (still not running as administrator)"; exit 1 }
   Write-Host "Windows will now ask you to allow PowerShell to make changes. That box is yours: click Yes."
   Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Verb RunAs -ArgumentList @('-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Elevated')
@@ -261,6 +358,17 @@ $stamp = (Get-Date -Format 'MMddHHmm')
 Say "PhoneRunner T-20 desk test $(Get-Date -Format 'yyyy-MM-dd HH:mm') (Chicago time on this PC)"
 if ($SelfTest) {
   Say "SELFTEST on the Windows test machine: steps 1-8 skipped, store $Root, taps simulated"
+  $p = Get-ServiceUpProblem
+  if ($p) { Fail "SELFTEST service-up check: $p" }
+  Say "PASS service-up check from the log: up at $script:UpURL"
+  $b = Get-TailscaleBlock
+  if ($b) { Fail "SELFTEST the real Tailscale server was not reachable from the test machine: $b" }
+  Say "PASS network check: the real controlplane.tailscale.com answered with a genuine certificate"
+  if ($SelfTestTlsPort -gt 0) {
+    $b = Get-TailscaleBlock '127.0.0.1' $SelfTestTlsPort
+    if ("$b" -notlike 'this network blocks Tailscale:*') { Fail "SELFTEST a filter-style certificate was not reported as a block: $b" }
+    Say "PASS network check: a stand-in filter certificate is reported as: $b"
+  }
   $exe = 'phonerunner-service.exe'
 } else {
 
@@ -269,9 +377,12 @@ $u = Test-AlwaysNotify
 if ($u) { Fail "T-01C: $u. Change it yourself in Windows (Control Panel > User Accounts > Change User Account Control settings > top notch), then run this again" }
 Say "PASS T-01C Always notify is on"
 
-# 2-3 programs
-$prep = Prepare-Programs (Join-Path $env:TEMP ('phonerunner-t20-' + (Get-Date -Format 'yyyyMMdd-HHmmss')))
+# 2-3 programs (skipped when the pre-flight found them installed, matching and up)
 $existing = Get-Service -Name $Svc -ErrorAction SilentlyContinue
+if ($healthy) {
+  Say "PASS programs already installed and matching; service left running (not stopped or reinstalled)"
+} else {
+$prep = Prepare-Programs (Join-Path $env:TEMP ('phonerunner-t20-' + (Get-Date -Format 'yyyyMMdd-HHmmss')))
 if ($existing -and $existing.Status -ne 'Stopped') {
   Stop-Service -Name $Svc
   $existing.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(60))
@@ -284,6 +395,7 @@ foreach ($n in $Exes) {
   if ((Get-Sha (Join-Path $Dest $n)) -ne $sums[$n]) { Fail "$n in $Dest does not match after copying" }
 }
 Say "PASS the 4 programs are in $Dest and match"
+}
 $exe = Join-Path $Dest 'phonerunner-service.exe'
 
 # 4 install + sign-in
@@ -291,7 +403,7 @@ if (-not $existing) {
   & $exe install --user $env:USERNAME | ForEach-Object { Say "  $_" }
   if ($LASTEXITCODE -ne 0) { Fail "install did not finish (see the lines above)" }
   Say "PASS installed"
-} else { Say "PASS already installed (programs updated)" }
+} elseif (-not $healthy) { Say "PASS already installed (programs updated)" }
 if (-not (Test-Path -LiteralPath (Join-Path $Root 'tsnet\tailscaled.state'))) {
   Ask "Tailscale sign-in: a link appears below. Open it (on this PC or your phone), sign in with YOUR Tailscale account (approve the new device 'phonerunner' if Tailscale asks). This window continues by itself."
   & $exe login | ForEach-Object { Say "  $_" }
@@ -299,8 +411,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $Root 'tsnet\tailscaled.state'))) {
 } else { Say "PASS already signed in to Tailscale" }
 
 # 5 start, phone visits, read its device ID
-$up = Restart-PR
-$url = $up.url
+if ($healthy) { $url = $script:UpURL } else { $up = Restart-PR; $url = $up.url }
 Say "PASS service running. Page address: $url"
 $cfg = Read-Config
 $paired = [bool](@($cfg.allowed_node_ids) | Where-Object { $_ })
@@ -341,11 +452,15 @@ if ("$(Read-Host)".Trim().ToUpper() -ne 'S') {
   Say "PASS passkey stored"
 } else { Say "SKIP passkey (you said one is already added)" }
 
-# 8 Run button
-& $exe run-button on | ForEach-Object { Say "  $_" }
-if ($LASTEXITCODE -ne 0) { Fail "the Run button did not turn on" }
-$up = Restart-PR
-Say "PASS Run button on, service restarted"
+# 8 Run button (no restart when it is already on)
+if ((Read-Config).run_button -eq $true) {
+  Say "PASS Run button already on (service not restarted)"
+} else {
+  & $exe run-button on | ForEach-Object { Say "  $_" }
+  if ($LASTEXITCODE -ne 0) { Fail "the Run button did not turn on" }
+  $up = Restart-PR
+  Say "PASS Run button on, service restarted"
+}
 
 }
 

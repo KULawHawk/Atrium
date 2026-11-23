@@ -27,8 +27,13 @@ import (
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/store"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/tslog"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/tsnetwho"
+	"github.com/kulawhawk/atrium/tools/phonerunner/internal/tsprobe"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/web"
 )
+
+// UpProbeAfter is how long joining the tailnet may take before the service looks
+// at whether the network blocks Tailscale.
+const UpProbeAfter = 30 * time.Second
 
 // Run is the whole service until ctx ends. root is the store folder, sessionExe the
 // session part next to the service exe.
@@ -50,8 +55,34 @@ func Run(ctx context.Context, root, sessionExe string) error {
 		UserLogf: tslog.Once(func(l string) { _ = st.Append("tailscale", map[string]any{"msg": l}) }),
 	}
 	defer ts.Close()
-	if _, err := ts.Up(ctx); err != nil {
-		_ = st.Append("tailscale.not_up", map[string]any{"error": err.Error(), "fix": "run 'phonerunner-service login' at the desk"})
+	// If joining takes more than UpProbeAfter, look once at whether this network
+	// lets Tailscale through, and log what answered (tsprobe: look only, no bypass).
+	upDone := make(chan struct{})
+	probed := make(chan tsprobe.Result, 1)
+	go func() {
+		select {
+		case <-upDone:
+			return
+		case <-time.After(UpProbeAfter):
+		}
+		r := tsprobe.Probe(ctx, "", nil, nil)
+		if !r.OK {
+			_ = st.Append("tailscale.unreachable", map[string]any{"blocked": r.Blocked, "issuer": r.Issuer, "resolved": r.Addrs, "problem": r.Problem})
+		}
+		probed <- r
+	}()
+	_, err = ts.Up(ctx)
+	close(upDone)
+	if err != nil {
+		fix := "run 'phonerunner-service login' at the desk"
+		select {
+		case r := <-probed:
+			if r.Blocked {
+				fix = r.Problem
+			}
+		default:
+		}
+		_ = st.Append("tailscale.not_up", map[string]any{"error": err.Error(), "fix": fix})
 		return err
 	}
 	lc, err := ts.LocalClient()
