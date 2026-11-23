@@ -25,7 +25,7 @@ addopts = "-q"
 
 [tool.coverage.run]
 branch = true
-source = ["atrium_check"]
+source = ["atrium_check", "atrium_learning"]
 
 [tool.coverage.report]
 fail_under = 100
