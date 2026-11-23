@@ -1866,3 +1866,66 @@ def test_locutus_key_place_refuses_the_install_folder_reached_through_a_linked_i
     link.symlink_to(real, target_is_directory=True)
     assert "install folder" in m._key_place_problem(real / "keys" / "key", link)
     assert "install folder" in m._key_place_problem(link / "keys" / "key", real)
+
+
+def test_pinned_models_checks_models_shipped_in_a_wheel_in_place_and_reports_an_unused_pin(tmp_path: Path, monkeypatch, capsys) -> None:
+    """RapidOCR in the installed Docling reader runs from the models inside the locked rapidocr wheel: each is
+    hash-checked where the package keeps it, nothing fetched or written. A pin traced as not loaded is INFO."""
+    import hashlib
+    import subprocess
+    import sysconfig
+    body = b"onnx-bytes"
+    bundled = {"source": "package_bundled", "package_dir": {"package": "fakeocr", "sub": "models"},
+               "files": {"det.onnx": {"bytes": len(body), "sha256": hashlib.sha256(body).hexdigest()}}}
+    unused = {"source": "modelscope", "unused_reason": "the reader never loads these", "files": {"x.onnx": {"sha256": "0" * 64}}}
+    m, envs, spoke, log = _pinned_setup(tmp_path, monkeypatch, {"b": bundled, "u": unused})
+    env = envs / "rdr"
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(env)], check=True)
+    site = env / Path(sysconfig.get_path("purelib")).relative_to(sysconfig.get_path("data"))
+    (site / "fakeocr" / "models").mkdir(parents=True)
+    (site / "fakeocr" / "__init__.py").write_text("", encoding="utf-8")
+    model = site / "fakeocr" / "models" / "det.onnx"
+    model.write_bytes(body)
+    py = m.env_python(env)
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, py, log)
+    out = capsys.readouterr().out
+    assert rep.passes == 1 and rep.fails == 0 and "hash-checked in place" in out and "the reader never loads these" in out, out
+    model.write_bytes(b"onnx-bytez")  # same size, other bytes: only the sha256 can tell
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, py, log)
+    assert rep.fails == 1 and rep.passes == 0 and "not the pinned bytes" in capsys.readouterr().out
+    assert model.read_bytes() == b"onnx-bytez"  # never replaced or fetched
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)  # no fakeocr in that python
+    assert rep.fails == 1 and "not found in the environment" in capsys.readouterr().out
+
+
+def test_docling_rapidocr_pins_match_the_wheel_it_runs_from() -> None:
+    """The three models the installed reader loads are pinned (rapidocr 3.10.0 defaults); the v3.8.0 set is kept
+    as an unused pin, never a FAIL."""
+    man = json.loads((NESTEGG / "models_pinned.json").read_text(encoding="utf-8"))
+    dm = man["readers"]["Docling"]["models"]
+    w = dm["rapidocr_wheel_models"]
+    assert w["source"] == "package_bundled" and w["package_dir"] == {"package": "rapidocr", "sub": "models"}
+    assert sorted(w["files"]) == ["PP-OCRv6_det_small.onnx", "PP-OCRv6_rec_small.onnx", "ch_ppocr_mobile_v2.0_cls_mobile.onnx"]
+    assert "unused_reason" in dm["rapidocr_models"] and "not_placed_reason" not in dm["rapidocr_models"]
+    locks = (NESTEGG / "locks" / "SHA256SUMS_win_amd64.txt").read_text(encoding="utf-8")
+    assert "2fc34e26cd0f48514804a94f8832283039c7334076bff60768b1fed9ad068050  rapidocr-3.10.0-py3-none-any.whl" in locks
+
+
+def test_pc_measured_pins_with_a_published_listing_are_not_called_trust_on_first_use(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Reviewer 3 on #91: ModelScope publishes its hashes, so its pins never get the trust-on-first-use note."""
+    import subprocess
+    cache = tmp_path / "ms"
+    pin = _file_pin(tmp_path, "r.onnx", b"r")
+    pin["sha256_source"] = ("measured 11/23/2026 on Jake's PC (measure_blocked_models.py), two downloads agree; checked a second way: "
+                            "ModelScope's own file listing for RapidAI/RapidOCR at v3.8.0 gives the same sha256")
+    model = {"source": "datalab_cdn", "pinned_in_code": True, "files": {"r.onnx": pin},
+             "settings_dir": {"env": "_side", "code": f"print({str(cache)!r})"}}
+    m, envs, spoke, log = _pinned_setup(tmp_path, monkeypatch, {"r": model})
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(envs / "_side")], check=True)
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    out = capsys.readouterr().out
+    assert rep.passes == 1 and "trust on first use" not in out, out

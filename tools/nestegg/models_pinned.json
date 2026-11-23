@@ -1073,7 +1073,35 @@
               "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py), two downloads agree; checked a second way: ModelScope's own file listing for RapidAI/RapidOCR at v3.8.0 gives the same sha256"
             }
           },
-          "not_placed_reason": "pinned and saved, but where docling 2.94 reads RapidOCR from when no artifacts folder is passed is not traced yet, so the installer does not place it"
+          "unused_reason": "not loaded by the installed Docling reader: it passes no artifacts_path (docling_runner.py builds RapidOcrOptions() with no model paths), so docling 2.94 hands RapidOCR empty paths and rapidocr 3.10.0 uses its own default models, shipped inside its wheel (see rapidocr_wheel_models). These v3.8.0 files are what docling's download_models / an artifacts folder would use; kept pinned and saved for that"
+        },
+        "rapidocr_wheel_models": {
+          "source": "package_bundled",
+          "pinned_in_code": true,
+          "revision_source": "shipped inside rapidocr 3.10.0 (rapidocr/models/); rapidocr config.yaml defaults: Det PP-OCRv6 small, Cls PP-OCRv4 mobile (ch_ppocr_mobile_v2.0), Rec PP-OCRv6 small, onnxruntime; model_root_dir defaults to the package's models folder (rapidocr/main.py:61-62)",
+          "where_loaded": "{env}/Lib/site-packages/rapidocr/models: rapidocr/inference_engine/onnxruntime/main.py:33-60 (model_path None -> model_root_dir / file name; DownloadFile skips a file whose sha256 matches). The rec onnx carries its own character list (ch_ppocr_rec/main.py:60-63). The font is only read when drawing a result image, which docling never does",
+          "license": "apache-2.0 (rapidocr wheel metadata; models from PaddleOCR)",
+          "package_dir": {
+            "package": "rapidocr",
+            "sub": "models"
+          },
+          "files": {
+            "PP-OCRv6_det_small.onnx": {
+              "bytes": 9929594,
+              "sha256": "090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+              "sha256_source": "read from the rapidocr-3.10.0 wheel (sha256 2fc34e26cd0f48514804a94f8832283039c7334076bff60768b1fed9ad068050, locked in locks/SHA256SUMS_*), and checked a second way: equals the SHA256 rapidocr's own default_models.yaml lists for this file at v3.10.0 (rapidocr re-checks it before use)"
+            },
+            "PP-OCRv6_rec_small.onnx": {
+              "bytes": 21234383,
+              "sha256": "6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884",
+              "sha256_source": "read from the rapidocr-3.10.0 wheel (sha256 2fc34e26cd0f48514804a94f8832283039c7334076bff60768b1fed9ad068050, locked in locks/SHA256SUMS_*), and checked a second way: equals the SHA256 rapidocr's own default_models.yaml lists for this file at v3.10.0 (rapidocr re-checks it before use)"
+            },
+            "ch_ppocr_mobile_v2.0_cls_mobile.onnx": {
+              "bytes": 585532,
+              "sha256": "e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+              "sha256_source": "read from the rapidocr-3.10.0 wheel (sha256 2fc34e26cd0f48514804a94f8832283039c7334076bff60768b1fed9ad068050, locked in locks/SHA256SUMS_*), and checked a second way: equals the SHA256 rapidocr's own default_models.yaml lists for this file at v3.10.0 (rapidocr re-checks it before use)"
+            }
+          }
         }
       }
     },
