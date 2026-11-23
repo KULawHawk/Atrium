@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -51,7 +52,7 @@ var t20EnvFixed = strings.ReplaceAll(strings.ReplaceAll(t20EnvScript, "function 
 // once WAITING FOR STOP has been seen, plus whether the item was still running
 // at that moment (output visible mid-run, not only at exit). The root sits
 // outside C:\Users so the path checks judge the same thing they judge on the PC.
-func runT20Env(t *testing.T, script string) (lines []string, midRun bool) {
+func runT20Env(t *testing.T, script string) (lines []string, midRun bool, childGone bool) {
 	t.Helper()
 	base, err := os.MkdirTemp(os.Getenv("SystemDrive")+`\`, "pr-t20-")
 	if err != nil {
@@ -82,9 +83,23 @@ func runT20Env(t *testing.T, script string) (lines []string, midRun bool) {
 		if err := c.Start(); err != nil {
 			return nil, err
 		}
+		// Same kill-on-close job the service puts every item in (newKillJob).
+		job, err := newKillJob()
+		if err != nil {
+			return nil, err
+		}
+		h, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(c.Process.Pid))
+		if err != nil {
+			return nil, err
+		}
+		err = windows.AssignProcessToJobObject(job, h)
+		windows.CloseHandle(h)
+		if err != nil {
+			return nil, err
+		}
 		done := make(chan int, 1)
 		go func() { c.Wait(); w.Close(); done <- c.ProcessState.ExitCode() }()
-		proc = &waitOnly{c: c, out: r, done: done}
+		proc = &waitOnly{c: c, out: r, done: done, job: job}
 		return proc, nil
 	}
 	rn := runner.New(start, func(string, map[string]any) {}, func(_ string, l string) { mu.Lock(); kept = append(kept, l); mu.Unlock() }, time.Now)
@@ -106,10 +121,26 @@ func runT20Env(t *testing.T, script string) (lines []string, midRun bool) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	midRun = seen() && rn.Current().Running()
+	pidText, _ := os.ReadFile(filepath.Join(workDir, "child.pid"))
 	_ = rn.Stop()
-	// The test starter has no job object, so end the ping child by its pid.
-	if b, err := os.ReadFile(filepath.Join(workDir, "child.pid")); err == nil {
-		exec.Command("taskkill", "/F", "/PID", strings.TrimSpace(string(b))).Run()
+	rn.Wait()
+	childGone = true
+	if pid, err := strconv.Atoi(strings.TrimSpace(string(pidText))); err == nil {
+		time.Sleep(3 * time.Second)
+		if h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid)); err == nil {
+			var code uint32
+			if windows.GetExitCodeProcess(h, &code) == nil && code == 259 { // STILL_ACTIVE
+				childGone = false
+				exec.Command("taskkill", "/F", "/PID", strconv.Itoa(pid)).Run()
+			}
+			windows.CloseHandle(h)
+		}
+	} else {
+		childGone = false
+		t.Logf("no child.pid written: %v", err)
+	}
+	if proc != nil {
+		windows.CloseHandle(proc.job)
 	}
 	mu.Lock()
 	lines = append([]string{}, kept...)
@@ -117,7 +148,7 @@ func runT20Env(t *testing.T, script string) (lines []string, midRun bool) {
 	for _, l := range lines {
 		t.Logf("LINE %q", l)
 	}
-	return lines, midRun
+	return lines, midRun, childGone
 }
 
 // deskCount applies the desk script's own matching ('CHECK *', 'CHECK * PASS*').
@@ -137,7 +168,7 @@ func deskCount(lines []string) (checks []string, pass int) {
 // run: it reaches WAITING FOR STOP yet prints no CHECK line, which is the
 // desk's "expected 6 CHECK PASS lines" failure.
 func TestT20EnvDeskFailureReproduced(t *testing.T) {
-	lines, _ := runT20Env(t, t20EnvScript)
+	lines, _, _ := runT20Env(t, t20EnvScript)
 	checks, _ := deskCount(lines)
 	if len(checks) != 0 {
 		t.Fatalf("expected the 11/23 script to print no CHECK line, got %d", len(checks))
@@ -159,9 +190,12 @@ func TestT20EnvDeskFailureReproduced(t *testing.T) {
 // this test does not set up, so it is reported, not judged; the other five must
 // PASS.
 func TestT20EnvItemFixed(t *testing.T) {
-	lines, midRun := runT20Env(t, t20EnvFixed)
+	lines, midRun, childGone := runT20Env(t, t20EnvFixed)
 	if !midRun {
 		t.Fatalf("WAITING FOR STOP was not visible while the item was still running")
+	}
+	if !childGone {
+		t.Errorf("Stop ended the item but its ping child was still running")
 	}
 	checks, _ := deskCount(lines)
 	if len(checks) != 6 {
@@ -183,9 +217,10 @@ type waitOnly struct {
 	c    *exec.Cmd
 	out  io.Reader
 	done chan int
+	job  windows.Handle
 }
 
 func (p *waitOnly) Output() io.Reader  { return p.out }
 func (p *waitOnly) Wait() (int, error) { return <-p.done, nil }
-func (p *waitOnly) Kill() error        { return p.c.Process.Kill() }
+func (p *waitOnly) Kill() error        { return windows.TerminateJobObject(p.job, 1) }
 func (p *waitOnly) Close()             {}
