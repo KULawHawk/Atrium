@@ -123,8 +123,9 @@ def package_url(fn: str) -> str | None:
 
 # anything shaped like a credential is masked before gh's own error text is printed (reporting only)
 _SECRET = re.compile(r"gh[opsur]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}")
-# a header-like word masks everything after it to the end of that line ("Authorization: Basic <base64>" included)
-_AFTER = re.compile(r"(?i)\b(proxy-authorization|authorization|bearer|basic|token|password|secret)\b[\s:=].*$")
+# a name holding token, key, secret, password or an auth word masks everything after it to the end of that line
+# matched inside a longer name too (GH_TOKEN=, ACCESS_TOKEN=, api_key=, x-api-key:); over-masking is the safe side
+_AFTER = re.compile(r"(?i)([A-Za-z0-9_-]*(?:authorization|bearer|basic|token|key|secret|passw(?:or)?d)[A-Za-z0-9_-]*)[\s:=].*$")
 _USERINFO = re.compile(r"(://)[^/\s@]+@")  # https://user:token@host
 
 
