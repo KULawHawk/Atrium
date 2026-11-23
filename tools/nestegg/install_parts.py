@@ -518,34 +518,50 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
     # its own verdict and import probe pass; otherwise the previous one is put back and the failed build is kept beside.
     leftover_copies(rep, name, env)
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    kept = env.with_name(f"{name}.kept-{stamp}") if env.exists() else None
-    if kept:
+    # An environment counts as a working copy only if it carries VERIFIED, written after its verdict and probe
+    # passed. One without it (a build a crash interrupted, or one made before this check existed) is set aside as
+    # .unfinished-, never called "kept" and never restored as the working copy (reviewer 3 on #72: no false OK).
+    aside = None
+    if env.exists():
+        kind = "kept" if (env / VERIFIED).is_file() else "unfinished"
+        aside = env.with_name(f"{name}.{kind}-{stamp}")
         try:
-            env.rename(kept)
+            env.rename(aside)
         except OSError as e:
-            rep.row("FAIL", name, f"could not set the working environment aside ({e}); close any program using {env}, "
+            rep.row("FAIL", name, f"could not set the existing environment aside ({e}); close any program using {env}, "
                     "then run again. Nothing was changed")
             return
     ok = _build_env(rep, part, src, envs, env, log, base, lines, repo, local)
-    if not kept:
-        return
     if ok:
-        rep.row("INFO", f"{name} kept", f"the previous environment is kept at {kept} (last known working copy; "
-                "delete it yourself when you no longer want it)")
+        (env / VERIFIED).write_text(json.dumps({"verified": stamp, "part": name}) + "\n", encoding="utf-8")
+        if aside and aside.name.startswith(f"{name}.kept-"):
+            rep.row("INFO", f"{name} kept", f"the previous environment is kept at {aside} (last known working copy; "
+                    "delete it yourself when you no longer want it)")
+        elif aside:
+            rep.row("INFO", f"{name} set aside", f"the previous environment was never verified (built before this check "
+                    f"existed, or a build that did not finish); kept, not verified, at {aside}")
         return
+    if not aside and not list(envs.glob(f"{name}.kept-*")):
+        return  # a first install that failed: its FAIL rows already say so; nothing to put back
     failed = env.with_name(f"{name}.failed-{stamp}")
+    good = sorted(k for k in envs.glob(f"{name}.kept-*") if (k / VERIFIED).is_file())
     try:
         if env.exists():
             env.rename(failed)
-        kept.rename(env)
+        if good:
+            good[-1].rename(env)
     except OSError as e:
-        rep.row("FAIL", f"{name} restore", f"the new build did not pass and putting the previous environment back failed "
-                f"({e}); it is at {kept}, the failed build at {env if env.exists() else failed}. Close any program using "
-                "them and move the kept copy back by hand, or run again")
+        rep.row("FAIL", f"{name} restore", f"the new build did not pass and putting the last working copy back failed "
+                f"({e}). Close any program using these folders and move {good[-1] if good else 'nothing'} back by hand, "
+                "or run again")
         return
-    rep.row("WARN", f"{name} restored", f"the new build did not pass, so the previous environment is back in use at {env}; "
-            f"the failed build is kept at {failed}")
-
+    if good:
+        rep.row("WARN", f"{name} restored", f"the new build did not pass, so the last verified working copy "
+                f"({good[-1].name}) is back in use at {env}; the failed build is kept at {failed}")
+    else:
+        rep.row("FAIL", f"{name} no working copy", f"the new build did not pass and there is no verified working copy to "
+                f"put back, so {name} is not installed now. The failed build is at {failed}"
+                + (f"; the earlier, never-verified environment is at {aside}" if aside else ""))
 
 def _build_env(rep: Report, part: dict, src: Path, envs: Path, env: Path, log: Path, base: list[str], lines: list[str],
                repo: Path, local: set[str]) -> bool:
@@ -681,13 +697,16 @@ def side_envs(rep: Report, part: dict, src: Path, envs: Path, log: Path, py: Pat
             build_runtime_side_env(rep, part, src / part["repo"], needs, log)
 
 
+VERIFIED = "adastra_verified.json"  # written into a part's environment only after its own verdict and probe passed
+
+
 def leftover_copies(rep: Report, label: str, folder: Path) -> None:
     """Every kept, unfinished or failed copy beside `folder` is named on EVERY run, not only the run that made it
     (reviewer 3 on #70): they use disk, and nothing here deletes them (that is Jake's call)."""
     for old in sorted(folder.parent.glob(f"{folder.name}.*")):
         kind = old.name[len(folder.name) + 1:].split("-")[0]
         what = {"kept": "previous working copy, kept", "new": "unfinished build, left in place",
-                "failed": "failed build, kept beside"}.get(kind)
+                "failed": "failed build, kept beside", "unfinished": "set aside, never verified"}.get(kind)
         if what and old.is_dir():
             rep.row("INFO", f"{label} copy", f"{old} ({what}; delete it yourself when you no longer want it)")
 

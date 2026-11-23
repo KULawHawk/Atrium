@@ -946,13 +946,15 @@ def test_paddle_side_env_without_the_spokes_table_still_fails_as_not_locked(tmp_
     assert rep.fails == 1 and "side env not locked" in capsys.readouterr().out
 
 
-def _swap_setup(tmp_path: Path, monkeypatch, ok: bool):
+def _swap_setup(tmp_path: Path, monkeypatch, ok: bool, verified: bool = True):
     m = _mod()
     src = tmp_path / "src"
     (src / "atrium").mkdir(parents=True)
     env = tmp_path / "envs" / "atrium"
     env.mkdir(parents=True)
     (env / "old.txt").write_text("working copy")
+    if verified:
+        (env / m.VERIFIED).write_text("{}")
     monkeypatch.setattr(m, "base_python", lambda v: ["py"])
 
     def fake_build(rep, part, src_, envs, env_, log, base, lines, repo, local):
@@ -985,7 +987,44 @@ def test_main_env_failed_rebuild_puts_the_working_copy_back(tmp_path: Path, monk
     failed = list(env.parent.glob("atrium.failed-*"))
     assert (env / "old.txt").read_text() == "working copy" and not (env / "new.txt").exists()
     assert len(failed) == 1 and (failed[0] / "new.txt").is_file() and not list(env.parent.glob("atrium.kept-*"))
-    assert "previous environment is back in use" in capsys.readouterr().out
+    assert "last verified working copy" in capsys.readouterr().out
+
+
+def test_crash_then_failed_rerun_restores_the_true_working_copy(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Reviewer 3 on #72: a crash leaves a half-built env at the real path with no VERIFIED marker. A re-run whose
+    build fails must not call that half env 'the previous environment'; it restores the newest VERIFIED .kept- copy."""
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=False, verified=False)  # env = half build after a crash
+    (env / "old.txt").write_text("half build")
+    good = env.with_name("atrium.kept-20261123-070000")
+    good.mkdir()
+    (good / "old.txt").write_text("true working copy")
+    (good / m.VERIFIED).write_text("{}")
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    out = capsys.readouterr().out
+    assert (env / "old.txt").read_text() == "true working copy"
+    unfinished = list(env.parent.glob("atrium.unfinished-*"))
+    assert len(unfinished) == 1 and (unfinished[0] / "old.txt").read_text() == "half build"
+    assert "last verified working copy (atrium.kept-20261123-070000) is back in use" in out
+    assert "previous environment is back in use" not in out
+
+
+def test_failed_rerun_with_no_verified_copy_says_so_plainly(tmp_path: Path, monkeypatch, capsys) -> None:
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=False, verified=False)
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    out = capsys.readouterr().out
+    assert rep.fails == 1 and "there is no verified working copy to put back" in out and not env.exists()
+    assert "back in use" not in out and list(env.parent.glob("atrium.unfinished-*"))
+
+
+def test_env_from_before_the_check_is_kept_but_not_called_verified(tmp_path: Path, monkeypatch, capsys) -> None:
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=True, verified=False)
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    out = capsys.readouterr().out
+    assert "kept, not verified, at" in out and "last known working copy" not in out
+    assert (env / m.VERIFIED).is_file() and not list(env.parent.glob("atrium.kept-*"))
 
 
 def test_main_env_held_open_is_a_fail_row_not_a_crash(tmp_path: Path, monkeypatch, capsys) -> None:
@@ -995,7 +1034,7 @@ def test_main_env_held_open_is_a_fail_row_not_a_crash(tmp_path: Path, monkeypatc
     monkeypatch.setattr(Path, "rename", lambda self, t: (_ for _ in ()).throw(PermissionError(32, "in use")) if self == env else real(self, t))
     rep = m.Report()
     m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
-    assert rep.fails == 1 and "could not set the working environment aside" in capsys.readouterr().out
+    assert rep.fails == 1 and "could not set the existing environment aside" in capsys.readouterr().out
     assert (env / "old.txt").is_file() and not (env / "new.txt").exists()
 
 
