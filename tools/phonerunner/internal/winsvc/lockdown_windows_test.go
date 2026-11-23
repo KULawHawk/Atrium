@@ -287,16 +287,17 @@ func TestLockdownBlocksLowerLevel(t *testing.T) {
 				bad = append(bad, "process: query-limited was refused (Jake must keep it)")
 			}
 		})
+		ids := threadIDs(pid)
+		threads, sameTotal = len(ids), len(ids)
 		for _, d := range pccheck.DangerousThread {
-			var opened, total int
-			asLevel(t, lowIL, func() { opened, total = threadMaskNoImp(pid, d.Mask) })
-			threads = total
+			var opened int
+			asLevel(t, lowIL, func() { opened = openCount(ids, d.Mask) })
 			if opened > 0 {
-				bad = append(bad, fmt.Sprintf("thread: %s on %d of %d threads", d.Name, opened, total))
+				bad = append(bad, fmt.Sprintf("thread: %s on %d of %d threads", d.Name, opened, len(ids)))
 			}
 		}
 		asLevel(t, testChildLevel, func() {
-			sameOpened, sameTotal = threadMaskNoImp(pid, windows.THREAD_SUSPEND_RESUME|windows.THREAD_SET_CONTEXT)
+			sameOpened = openCount(ids, windows.THREAD_SUSPEND_RESUME|windows.THREAD_SET_CONTEXT)
 		})
 	}})
 	if code != 0 {
@@ -315,26 +316,34 @@ func TestLockdownBlocksLowerLevel(t *testing.T) {
 	fmt.Println("PASS a lower-level program is refused every dangerous right on the child")
 }
 
-// threadMaskNoImp opens every thread of pid with mask as the calling thread is.
-func threadMaskNoImp(pid, mask uint32) (opened, total int) {
+// threadIDs lists pid's threads (as this test itself: a lowered token may not
+// take the snapshot).
+func threadIDs(pid uint32) []uint32 {
 	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
 	if err != nil {
-		return 0, 0
+		return nil
 	}
 	defer windows.CloseHandle(snap)
+	var ids []uint32
 	var te windows.ThreadEntry32
 	te.Size = uint32(unsafe.Sizeof(te))
 	for err := windows.Thread32First(snap, &te); err == nil; err = windows.Thread32Next(snap, &te) {
-		if te.OwnerProcessID != pid {
-			continue
+		if te.OwnerProcessID == pid {
+			ids = append(ids, te.ThreadID)
 		}
-		total++
-		if h, err := windows.OpenThread(mask, false, te.ThreadID); err == nil {
+	}
+	return ids
+}
+
+// openCount opens each thread with mask as the calling thread is.
+func openCount(ids []uint32, mask uint32) (opened int) {
+	for _, id := range ids {
+		if h, err := windows.OpenThread(mask, false, id); err == nil {
 			opened++
 			windows.CloseHandle(h)
 		}
 	}
-	return opened, total
+	return opened
 }
 
 // TestSetLevelRaisesOnly: setLevel never lowers a token.
