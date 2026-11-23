@@ -5,7 +5,9 @@ package winsvc
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -172,6 +174,8 @@ func supervise(ctx context.Context, svc *service.Service, st *store.Store, exe, 
 			_ = st.Append("session.launch_failed", map[string]any{"error": err.Error()})
 		} else {
 			_ = st.Append("session.started", map[string]any{"pid": child.PID})
+			errTail := make(chan string, 1)
+			go func() { errTail <- readTail(child.Err, SessionErrBytes) }()
 			done := make(chan error, 1)
 			go func() { done <- capture.Read(child.Out, func(f capture.Frame) { svc.Ingest(ctx, f) }) }()
 			select {
@@ -182,8 +186,19 @@ func supervise(ctx context.Context, svc *service.Service, st *store.Store, exe, 
 				if err != nil {
 					msg = err.Error()
 				}
-				_ = st.Append("session.ended", map[string]any{"pid": child.PID, "reason": msg})
+				fields := map[string]any{"pid": child.PID, "reason": msg}
+				if code, ok := exitCode(child.Process, 5*time.Second); ok {
+					fields["exit_code"] = code
+				}
 				child.Stop()
+				select {
+				case t := <-errTail:
+					if t != "" {
+						fields["errors"] = t // passes the key filter in Append like every logged string
+					}
+				case <-time.After(5 * time.Second):
+				}
+				_ = st.Append("session.ended", fields)
 				wait = 5 * time.Second
 			}
 			child.Close()
@@ -197,4 +212,31 @@ func supervise(ctx context.Context, svc *service.Service, st *store.Store, exe, 
 			wait *= 2
 		}
 	}
+}
+
+// SessionErrBytes is how much of the session part's error output is kept for the
+// log: the first lines say why it stopped (a Go crash dump that follows is cut).
+const SessionErrBytes = 1500
+
+// readTail returns up to max bytes from the start of r, then reads r to its end so
+// the child never blocks on a full pipe.
+func readTail(r *os.File, max int) string {
+	if r == nil {
+		return ""
+	}
+	b, _ := io.ReadAll(io.LimitReader(r, int64(max)))
+	_, _ = io.Copy(io.Discard, r)
+	return strings.TrimSpace(string(b))
+}
+
+// exitCode waits up to d for the process to end and returns its exit code.
+func exitCode(p windows.Handle, d time.Duration) (uint32, bool) {
+	if ev, err := windows.WaitForSingleObject(p, uint32(d/time.Millisecond)); err != nil || ev != windows.WAIT_OBJECT_0 {
+		return 0, false
+	}
+	var code uint32
+	if err := windows.GetExitCodeProcess(p, &code); err != nil {
+		return 0, false
+	}
+	return code, true
 }

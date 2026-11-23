@@ -16,6 +16,7 @@ type Child struct {
 	Process windows.Handle
 	PID     uint32
 	Out     *os.File       // read end of the pipe; only the child holds the write end
+	Err     *os.File       // read end of the child's own error pipe (ErrPipe only), else nil
 	Job     windows.Handle // 0 unless launched with Job: the whole process tree
 }
 
@@ -23,6 +24,9 @@ type Child struct {
 // (kill-on-close), so an item never outlives the service.
 func (c *Child) Close() {
 	c.Out.Close()
+	if c.Err != nil {
+		c.Err.Close()
+	}
 	windows.CloseHandle(c.Process)
 	if c.Job != 0 {
 		windows.CloseHandle(c.Job)
@@ -37,12 +41,13 @@ func (c *Child) Stop() error {
 	return windows.TerminateProcess(c.Process, 1)
 }
 
-// Opts adjusts a launch. The zero value is the session part's launch.
+// Opts adjusts a launch.
 type Opts struct {
 	Dir         string   // working folder ("" = inherit)
 	Env         []string // the whole environment ("" = the user's own block)
 	StderrToOut bool     // send stderr down the same pipe as stdout
 	Job         bool     // put the child in a kill-on-close job object
+	ErrPipe     bool     // give stderr its own pipe (Child.Err), so a startup failure can be logged
 }
 
 // envBlock builds a Windows environment block.
@@ -99,7 +104,10 @@ func defaultDACL(userSID string) string {
 type tokenDefaultDACL struct{ DefaultDacl *windows.ACL }
 
 // LaunchSession starts exe in the active console session as the signed-in user.
-func LaunchSession(exe string, args []string) (*Child, error) { return Launch(exe, args, Opts{}) }
+// Its error output gets its own pipe, so the service can log why it stopped.
+func LaunchSession(exe string, args []string) (*Child, error) {
+	return Launch(exe, args, Opts{ErrPipe: true})
+}
 
 // Launch is LaunchSession with options (used for approved items).
 func Launch(exe string, args []string, o Opts) (*Child, error) {
@@ -151,6 +159,21 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 	if err := windows.SetHandleInformation(r, windows.HANDLE_FLAG_INHERIT, 0); err != nil {
 		return nil, fmt.Errorf("launch: pipe: %w", err)
 	}
+	var er, ew windows.Handle
+	if o.ErrPipe {
+		if err := windows.CreatePipe(&er, &ew, inherit, 0); err != nil {
+			return nil, fmt.Errorf("launch: error pipe: %w", err)
+		}
+		defer func() {
+			windows.CloseHandle(ew)
+			if !ok {
+				windows.CloseHandle(er)
+			}
+		}()
+		if err := windows.SetHandleInformation(er, windows.HANDLE_FLAG_INHERIT, 0); err != nil {
+			return nil, fmt.Errorf("launch: error pipe: %w", err)
+		}
+	}
 	nulName, _ := windows.UTF16PtrFromString("NUL")
 	nul, err := windows.CreateFile(nulName, windows.GENERIC_READ|windows.GENERIC_WRITE, 0, inherit, windows.OPEN_EXISTING, 0, 0)
 	if err != nil {
@@ -176,12 +199,18 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 	}
 	defer attrs.Delete()
 	handles := []windows.Handle{w, nul}
+	if o.ErrPipe {
+		handles = append(handles, ew)
+	}
 	if err := attrs.Update(windows.PROC_THREAD_ATTRIBUTE_HANDLE_LIST, unsafe.Pointer(&handles[0]), uintptr(len(handles))*unsafe.Sizeof(handles[0])); err != nil {
 		return nil, fmt.Errorf("launch: attributes: %w", err)
 	}
 
 	errOut := nul
-	if o.StderrToOut {
+	switch {
+	case o.ErrPipe:
+		errOut = ew
+	case o.StderrToOut:
 		errOut = w
 	}
 	desktop, _ := windows.UTF16PtrFromString(`winsta0\default`)
@@ -255,5 +284,9 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 	}
 	windows.CloseHandle(pi.Thread)
 	ok = true
-	return &Child{Process: pi.Process, PID: pi.ProcessId, Out: os.NewFile(uintptr(r), "session-pipe"), Job: job}, nil
+	c := &Child{Process: pi.Process, PID: pi.ProcessId, Out: os.NewFile(uintptr(r), "session-pipe"), Job: job}
+	if o.ErrPipe {
+		c.Err = os.NewFile(uintptr(er), "session-errors")
+	}
+	return c, nil
 }
