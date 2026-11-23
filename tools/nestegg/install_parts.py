@@ -41,6 +41,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 LOCKS = HERE / "locks"
 CFG_LOCK: dict = {}  # parts.json, filled by main() (side_envs reads the lock settings from it)
+INSTALL_ROOT: dict = {}  # {"root": Path}, filled by main() from --root
 PROBE_CFG: dict = {}  # parts.json "probe": modules no shipped code reaches, and outside names never imported on our Pythons
 WIN = os.name == "nt"
 STD = set(sys.stdlib_module_names)
@@ -472,6 +473,13 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
         for ln in (chk.stdout or chk.stderr).strip().splitlines():
             rep.row("FAIL", f"{name} pip check", ln)
         return
+    try:  # how an installed program finds the install root (learning folders etc.): <env>/adastra.json, read-only for it
+        env.mkdir(parents=True, exist_ok=True)
+        (env / "adastra.json").write_text(json.dumps({"install_root": str(INSTALL_ROOT.get("root") or envs.parent),
+                                                      "envs": str(envs), "part": name}, indent=1) + "\n", encoding="utf-8")
+    except OSError as e:
+        rep.row("FAIL", f"{name} root marker", f"could not write {env / 'adastra.json'}: {e}")
+        return
     status = list_status(f"{name}_py{part['python']}.txt")
     done = f"installed {len(lines)} locked packages (hash-checked) + its own source; pip check clean"
     if status.startswith("MATCHED") or status.startswith("empty on purpose"):
@@ -856,6 +864,7 @@ def main(argv: list[str] | None = None) -> int:
     # obsidian or another conclave_* distribution must have it installed, or the probe names it as a FAIL.
     sums = load_sums(WIN)
     CFG_LOCK.update(cfg)
+    INSTALL_ROOT["root"] = a.root or a.envs.parent
     PROBE_CFG.update(cfg.get("probe", {}))
     readers = []
     for p in parts:

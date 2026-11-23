@@ -671,3 +671,11 @@ def test_learning_folders_create_only_and_never_touch_existing(tmp_path, capsys)
 
 
 PARTS_LEARNING = json.loads((NESTEGG / "parts.json").read_text(encoding="utf-8"))["learning"]
+
+
+def test_every_env_gets_a_root_marker_before_any_verdict() -> None:
+    """Installed programs (e.g. Obsidian's learning-folder button) find the install root from <env>/adastra.json."""
+    src = (NESTEGG / "install_parts.py").read_text(encoding="utf-8")
+    body = src[src.index("def build_part("):src.index("def side_envs(")]
+    assert body.index('"adastra.json"') < body.index('rep.row("PASS", name')
+    assert '"install_root"' in body and 'INSTALL_ROOT["root"] = a.root or a.envs.parent' in src
