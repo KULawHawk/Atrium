@@ -50,10 +50,19 @@ var procCreateRestrictedToken = windows.NewLazySystemDLL("advapi32.dll").NewProc
 // thread rights and token default rights that Launch gives the session part and
 // items, using a copy of the test's own token (no SYSTEM needed). It returns the
 // exit code and the first part of the child's error output.
-func startLocked(t *testing.T) (uint32, string) { return startWith(t, true, true, true) }
+func startLocked(t *testing.T) (uint32, string) {
+	return startOpt(t, opt{procSD: true, threadSD: true, launchDefault: true})
+}
 
-// startWith turns each part of the lock-down on or off (the diagnostic below).
-func startWith(t *testing.T, procSD, threadSD, defRights bool) (uint32, string) {
+// opt turns each part of the lock-down on or off (the diagnostics below).
+type opt struct {
+	procSD, threadSD bool
+	launchDefault    bool         // the token default rights exactly as Launch sets them
+	defMask          uint32       // else, if non-zero: default rights giving Jake this mask
+	probe            func(uint32) // called with the child's process id while it runs
+}
+
+func startOpt(t *testing.T, o opt) (uint32, string) {
 	t.Helper()
 	var self windows.Token
 	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_DUPLICATE|windows.TOKEN_QUERY|windows.TOKEN_ASSIGN_PRIMARY|windows.TOKEN_ADJUST_DEFAULT, &self); err != nil {
@@ -70,8 +79,13 @@ func startWith(t *testing.T, procSD, threadSD, defRights bool) (uint32, string) 
 		t.Fatal(err)
 	}
 	user := tu.User.Sid.String()
-	if defRights {
+	switch {
+	case o.launchDefault:
 		if err := applyLockdown(tok, user); err != nil {
+			t.Fatal(err)
+		}
+	case o.defMask != 0:
+		if err := setDefault(tok, fmt.Sprintf("D:P(A;;GA;;;SY)(A;;0x%X;;;%s)(A;;0x%X;;;OW)", o.defMask, user, o.defMask)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -79,10 +93,10 @@ func startWith(t *testing.T, procSD, threadSD, defRights bool) (uint32, string) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !procSD {
+	if !o.procSD {
 		saP = nil
 	}
-	if !threadSD {
+	if !o.threadSD {
 		saT = nil
 	}
 	inherit := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), InheritHandle: 1}
@@ -113,6 +127,10 @@ func startWith(t *testing.T, procSD, threadSD, defRights bool) (uint32, string) 
 		io.Copy(io.Discard, f)
 		done <- strings.TrimSpace(string(b))
 	}()
+	if o.probe != nil {
+		time.Sleep(700 * time.Millisecond)
+		o.probe(pi.ProcessId)
+	}
 	if ev, _ := windows.WaitForSingleObject(pi.Process, 60000); ev != windows.WAIT_OBJECT_0 {
 		windows.TerminateProcess(pi.Process, 1)
 		t.Fatal("child still running after 60 s")
@@ -121,6 +139,71 @@ func startWith(t *testing.T, procSD, threadSD, defRights bool) (uint32, string) 
 	windows.GetExitCodeProcess(pi.Process, &code)
 	return code, <-done
 }
+
+func setDefault(tok windows.Token, sddl string) error {
+	sd, err := windows.SecurityDescriptorFromString(sddl)
+	if err != nil {
+		return err
+	}
+	dacl, _, err := sd.DACL()
+	if err != nil {
+		return err
+	}
+	tdd := tokenDefaultDACL{DefaultDacl: dacl}
+	return windows.SetTokenInformation(tok, windows.TokenDefaultDacl, (*byte)(unsafe.Pointer(&tdd)), uint32(unsafe.Sizeof(tdd)))
+}
+
+// threadAccess tries to open every thread of pid for suspend + set-context (what
+// code injection needs), as this test's own token at the given integrity level
+// ("" = unchanged). It returns how many threads opened out of how many exist.
+func threadAccess(t *testing.T, pid uint32, level string) (opened, total int) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	if level != "" {
+		var self, imp windows.Token
+		if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_DUPLICATE|windows.TOKEN_QUERY, &self); err != nil {
+			t.Fatal(err)
+		}
+		defer self.Close()
+		if err := windows.DuplicateTokenEx(self, windows.TOKEN_ALL_ACCESS, nil, windows.SecurityImpersonation, windows.TokenImpersonation, &imp); err != nil {
+			t.Fatal(err)
+		}
+		defer imp.Close()
+		sid, err := windows.StringToSid(level)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tml := windows.Tokenmandatorylabel{Label: windows.SIDAndAttributes{Sid: sid, Attributes: windows.SE_GROUP_INTEGRITY}}
+		if err := windows.SetTokenInformation(imp, windows.TokenIntegrityLevel, (*byte)(unsafe.Pointer(&tml)), tml.Size()); err != nil {
+			t.Fatal(err)
+		}
+		if err := windows.SetThreadToken(nil, imp); err != nil {
+			t.Fatal(err)
+		}
+		defer windows.RevertToSelf()
+	}
+	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer windows.CloseHandle(snap)
+	var te windows.ThreadEntry32
+	te.Size = uint32(unsafe.Sizeof(te))
+	for err := windows.Thread32First(snap, &te); err == nil; err = windows.Thread32Next(snap, &te) {
+		if te.OwnerProcessID != pid {
+			continue
+		}
+		total++
+		h, err := windows.OpenThread(windows.THREAD_SUSPEND_RESUME|windows.THREAD_SET_CONTEXT, false, te.ThreadID)
+		if err == nil {
+			opened++
+			windows.CloseHandle(h)
+		}
+	}
+	return opened, total
+}
+
+const mediumIL = "S-1-16-8192"
 
 // TestGoChildUnderLockdown: a Go program (the session part is one) must run
 // normally under the rights Launch gives it. This is the T-20 desk failure
@@ -138,15 +221,46 @@ func TestGoChildUnderLockdown(t *testing.T) {
 // run is the control that shows the harness itself works.
 func TestLockdownParts(t *testing.T) {
 	for _, c := range []struct {
-		name     string
-		p, th, d bool
+		name string
+		o    opt
 	}{
-		{"plain", false, false, false},
-		{"process-rights-only", true, false, false},
-		{"first-thread-rights-only", false, true, false},
-		{"default-rights-only", false, false, true},
+		{"plain", opt{}},
+		{"process-rights-only", opt{procSD: true}},
+		{"first-thread-rights-only", opt{threadSD: true}},
+		{"default-rights-only", opt{launchDefault: true}},
+		// Which default rights for Jake are enough for a Go program to start:
+		{"default read+wait 0x120000 + read-attrs/query", opt{defMask: 0x00120000 | 0x0800 | 0x0040}},
+		{"default generic read+execute", opt{defMask: windows.GENERIC_READ | windows.GENERIC_EXECUTE}},
+		{"default generic read+write+execute", opt{defMask: windows.GENERIC_READ | windows.GENERIC_WRITE | windows.GENERIC_EXECUTE}},
+		{"default generic all", opt{defMask: windows.GENERIC_ALL}},
 	} {
-		code, errs := startWith(t, c.p, c.th, c.d)
+		code, errs := startOpt(t, c.o)
 		t.Logf("PART %s: exit %d (0x%X) %s", c.name, code, code, errs)
 	}
+}
+
+// TestInjectionProbe: with each candidate default rights plus the launch's
+// process and first-thread rights, can a program running as the same user open
+// the child's threads for suspend + set-context? Once at this test's own level
+// and once lowered to Medium (where Jake's ordinary programs and agents run).
+// Logged, not failed: it is the evidence for the fix decision.
+func TestInjectionProbe(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		mask uint32
+	}{
+		{"generic read+execute", windows.GENERIC_READ | windows.GENERIC_EXECUTE},
+		{"generic all", windows.GENERIC_ALL},
+	} {
+		var same, med [2]int
+		code, _ := startOpt(t, opt{procSD: true, threadSD: true, defMask: c.mask, probe: func(pid uint32) {
+			same[0], same[1] = threadAccess(t, pid, "")
+			med[0], med[1] = threadAccess(t, pid, mediumIL)
+		}})
+		t.Logf("PROBE %s: child exit %d; same level opened %d/%d threads; Medium opened %d/%d", c.name, code, same[0], same[1], med[0], med[1])
+	}
+	var tok windows.Token
+	windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &tok)
+	defer tok.Close()
+	t.Logf("PROBE test runs elevated: %v", tok.IsElevated())
 }
