@@ -1011,6 +1011,52 @@ def hf_url(repo_id: str, revision: str, path: str) -> str:
     return f"https://huggingface.co/{repo_id}/resolve/{revision}/{path}"
 
 
+MINERU_MODELS_ENV = "CONCLAVE_MINERU_MODELS_DIR"
+MINERU_CONFIG_ENV = "MINERU_TOOLS_CONFIG_JSON"
+
+
+def _mineru_pipeline_dir() -> tuple[str, Path | None, Path]:
+    """Where the MinerU reader looks, in its own order (bundle_inspector._read_mineru_models_pipeline_dir):
+    CONCLAVE_MINERU_MODELS_DIR, then MINERU_TOOLS_CONFIG_JSON, then ~/mineru.json. Returns (source, dir, config)."""
+    cfg = Path(os.environ.get(MINERU_CONFIG_ENV) or Path.home() / "mineru.json")
+    if os.environ.get(MINERU_MODELS_ENV):
+        return MINERU_MODELS_ENV, Path(os.environ[MINERU_MODELS_ENV]), cfg
+    if not cfg.is_file():
+        return str(cfg), None, cfg
+    try:
+        pipeline = (json.loads(cfg.read_text(encoding="utf-8")).get("models-dir") or {}).get("pipeline")
+    except (OSError, ValueError, AttributeError):
+        pipeline = None
+    return str(cfg), Path(pipeline) if pipeline else None, cfg
+
+
+def _same_dir(a: Path, b: Path) -> bool:
+    return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+
+
+def _mineru_config(snapshot: Path, envs: Path, log: Path) -> tuple[str, str]:
+    """The MinerU reader finds its models only through its config, so a placed snapshot is not enough (reviewer 3,
+    #86). A config naming another folder is never changed (HOLD). With no config, MinerU's own models_download
+    writes it, run with the Hugging Face cache offline so it can only resolve the pinned snapshot just placed;
+    the result is read back and must name that snapshot. Returns (PASS | HOLD | FAIL, reason)."""
+    src, pdir, cfg = _mineru_pipeline_dir()
+    if pdir is not None:
+        if _same_dir(pdir, snapshot):
+            return "PASS", f"the reader's models-dir.pipeline ({src}) names the pinned snapshot"
+        return "HOLD", (f"the reader's models-dir.pipeline ({src}) names {pdir}, not the pinned snapshot {snapshot}; "
+                        "left untouched (point it at the pinned snapshot, or move that config aside, to use the pin)")
+    if cfg.is_file():
+        return "HOLD", f"{cfg} exists without a models-dir.pipeline entry; left untouched"
+    cli = env_python(envs / "_mineru_cli")
+    e = dict(os.environ, MINERU_MODEL_SOURCE="huggingface", HF_HUB_OFFLINE="1")
+    rc = run([cli, "-m", "mineru.cli.models_download", "-s", "huggingface", "-m", "pipeline"], log, env=e)
+    src, pdir, cfg = _mineru_pipeline_dir()
+    if rc == 0 and pdir is not None and _same_dir(pdir, snapshot):
+        return "PASS", f"MinerU wrote {cfg} (offline) and its models-dir.pipeline names the pinned snapshot"
+    return "FAIL", (f"the reader's config {cfg} was not written with the pinned snapshot "
+                    f"(models_download exit {rc}; models-dir.pipeline = {pdir}); the MinerU reader would not find it (see {log})")
+
+
 def _package_dir(py: Path, pd: dict, log: Path) -> Path | None:
     """A folder inside an installed package of the reader's environment, found without importing the package."""
     code = "import importlib.util,sys;s=importlib.util.find_spec(sys.argv[1]);print(s.submodule_search_locations[0])"
@@ -1095,6 +1141,12 @@ def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, lo
                 continue
             rep.row("PASS", label, f"{what}: {len(files)} files hash-checked ({where}); the reader's own lock check passed")
         else:
+            if m.get("mineru_config"):
+                cfg_state, cfg_why = _mineru_config(target, envs, log)
+                if cfg_state != "PASS":
+                    rep.row(cfg_state, label, f"{what}: files match the pin, but {cfg_why}")
+                    continue
+                where += f"; {cfg_why}"
             note = "" if m.get("local_dir") or m.get("package_dir") or m.get("pinned_in_code") else \
                 "; the reader's code does not name this revision yet (Conclave follow-up), so this pin holds offline"
             rep.row("PASS", label, f"{what}: {len(files)} files hash-checked ({where}) at {target}{note}")

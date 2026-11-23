@@ -1262,7 +1262,8 @@
               "sha256": "9830b0c1532620851b6cdcd6bb2f4abed7d84ea70112497cc7d1e86a5885fdc6"
             }
           },
-          "license_note": "no license in the Hub card metadata; the repo README must be checked by hand"
+          "license_note": "no license in the Hub card metadata; the repo README must be checked by hand",
+          "mineru_config": true
         }
       }
     },
