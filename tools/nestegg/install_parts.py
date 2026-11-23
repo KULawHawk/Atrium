@@ -883,6 +883,9 @@ def probe(rep: Report, part: dict, repo: Path, py: Path, local: set[str], log: P
         rep.row("PASS", f"{part['name']} load check", f"{len(pkgs)} packages and {len(third)} outside modules import")
 
 
+RUN_BUTTON: dict[str, bool] = {}  # this run's Run-button result per Workbench part (the reader_envs switch needs a PASS)
+
+
 def harness(rep: Report, part: dict, envs: Path, py: Path, log: Path) -> None:
     """The Workbench's Run launches the harness with its harness.python setting; blank = the Workbench's own Python,
     which does not carry the harness. Point the setting at the harness part's environment and prove it starts."""
@@ -899,8 +902,10 @@ def harness(rep: Report, part: dict, envs: Path, py: Path, log: Path) -> None:
         fh.write(r.stdout + r.stderr)
     if r.returncode == 0 and out.startswith("WORKBENCH-HARNESS: OK"):
         rep.row("PASS", label, out.removeprefix("WORKBENCH-HARNESS: "))
+        RUN_BUTTON[part["name"]] = True
     else:
         rep.row("FAIL", label, out.removeprefix("WORKBENCH-HARNESS: "))
+        RUN_BUTTON[part["name"]] = False
 
 
 def hf_hub_cache() -> Path:
@@ -1158,31 +1163,43 @@ def write_reader_envs(envs: Path, entries: list[dict]) -> Path:
 def turn_on_reader_envs(rep: Report, record: Path, envs: Path, parts: list[dict], dry: bool) -> None:
     """Go-live: point the Workbench's harness.reader_envs setting at the record, so each reader runs from its own
     environment (otherwise the installed app runs only what the harness environment carries: the Fast preset).
-    Only after a run with no FAIL; on any failure it is left off, loudly. Undo: clear it in Settings > Harness."""
+    Gate (coordinator ruling 11/23, logged for Jake's audit): at least one reader PASS in the record and this run's
+    Workbench Run-button row PASS; the preset probe then proves the setting before it stays on, and LensRunner
+    itself refuses any reader that is not PASS in the record. Every reader is listed by name as usable or not, so a
+    partial install never reads as a full one. Undo: clear "Reader environments record" in Settings > Harness."""
     label = "workbench reader environments"
     wb = next((p for p in parts if p.get("harness_from")), None) or next(
         (p for p in json.loads((HERE / "parts.json").read_text(encoding="utf-8"))["parts"] if p.get("harness_from")), None)
     if dry or wb is None:
         return
-    wpy, hpy = env_python(envs / wb["name"]), env_python(envs / wb["harness_from"])
+    hpy = env_python(envs / wb["harness_from"])
     try:
-        passed = [e["part"] for e in json.loads(record.read_text(encoding="utf-8"))["readers"] if e.get("status") == "PASS"]
+        entries = json.loads(record.read_text(encoding="utf-8"))["readers"]
+        passed = sorted(e["part"] for e in entries if e.get("status") == "PASS")
+        notok = sorted(f"{e['part']} ({e.get('status', 'no status')})" for e in entries if e.get("status") != "PASS")
     except (OSError, ValueError, KeyError, TypeError) as exc:
         rep.row("FAIL", label, f"harness.reader_envs left off: the record {record} could not be read back ({exc})")
         return
-    why = (f"{rep.fails} FAIL row(s) in this run" if rep.fails else
-           "no reader environment passed" if not passed else
-           f"the {wb['name']} environment is not built" if not wpy.exists() else
+    rep.row("INFO", "readers usable", f"{len(passed)}: {', '.join(passed) or 'none'}")
+    if notok:
+        rep.row("WARN", "readers NOT usable", f"{len(notok)} (LensRunner refuses each; see its rows above): {', '.join(notok)}")
+    rb = RUN_BUTTON.get(wb["name"])
+    why = ("no reader environment passed" if not passed else
+           f"the {wb['name']} Run button was not checked in this run" if rb is None else
+           f"the {wb['name']} Run button row failed" if not rb else
            f"the {wb['harness_from']} environment is not built" if not hpy.exists() else "")
     if why:
         rep.row("WARN", label, f"harness.reader_envs LEFT OFF ({why}); the installed app runs only what the "
-                               f"{wb['harness_from']} environment carries until a run passes")
+                               f"{wb['harness_from']} environment carries")
         return
+    wpy = env_python(envs / wb["name"])
     r = subprocess.run([wpy, "-I", HERE / "workbench_harness.py", "--reader-envs", str(record), str(hpy)],
                        capture_output=True, text=True)
     out = (r.stdout.strip().splitlines() or [r.stderr.strip()[-200:]])[-1]
     if r.returncode == 0 and out.startswith("WORKBENCH-READER-ENVS: OK"):
-        rep.row("PASS", label, f"harness.reader_envs on ({len(passed)} readers PASS): " + out.removeprefix("WORKBENCH-READER-ENVS: OK "))
+        part_note = f" ({len(notok)} not usable, listed above)" if notok else ""
+        rep.row("PASS", label, f"harness.reader_envs on: {len(passed)} readers usable{part_note}; "
+                + out.removeprefix("WORKBENCH-READER-ENVS: OK "))
     else:
         rep.row("FAIL", label, out.removeprefix("WORKBENCH-READER-ENVS: "))
 

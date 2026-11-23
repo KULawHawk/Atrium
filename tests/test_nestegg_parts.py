@@ -1269,12 +1269,15 @@ def _wb_envs(tmp_path: Path, m) -> tuple[Path, list[dict]]:
     return envs, [{"name": "workbench", "harness_from": "harness_adapters"}]
 
 
-def test_reader_envs_turned_on_only_after_a_run_with_no_fail(tmp_path: Path, monkeypatch, capsys) -> None:
-    """Go-live: harness.reader_envs is written only when the run had no FAIL; otherwise LEFT OFF, loudly."""
+def test_reader_envs_turned_on_per_reader_gate_and_every_reader_named(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Go-live (coordinator ruling 11/23): on when >= 1 reader is PASS and this run's Run button passed; other
+    FAIL rows in the run do not block it; every reader is listed usable / not usable; otherwise LEFT OFF, loudly."""
     import subprocess
     m = _mod()
     envs, parts = _wb_envs(tmp_path, m)
-    rec = _reader_record(envs)
+    rec = envs / "reader_envs.json"
+    rec.write_text(json.dumps({"schema": 1, "provisional": False, "readers": [
+        {"part": "PdfText", "status": "PASS"}, {"part": "MinerU", "status": "FAIL"}]}))
     calls = []
 
     def fake(cmd, **k):
@@ -1282,18 +1285,27 @@ def test_reader_envs_turned_on_only_after_a_run_with_no_fail(tmp_path: Path, mon
         return subprocess.CompletedProcess(cmd, 0, f"WORKBENCH-READER-ENVS: OK {rec} (written to x)\n", "")
 
     monkeypatch.setattr(m.subprocess, "run", fake)
-    bad = m.Report()
-    bad.fails = 1
-    m.turn_on_reader_envs(bad, rec, envs, parts, False)
-    assert calls == [] and "harness.reader_envs LEFT OFF (1 FAIL row(s) in this run)" in capsys.readouterr().out
+    m.RUN_BUTTON.clear()
+    m.turn_on_reader_envs(m.Report(), rec, envs, parts, False)
+    out = capsys.readouterr().out
+    assert calls == [] and "LEFT OFF (the workbench Run button was not checked in this run)" in out
+    m.RUN_BUTTON["workbench"] = False
+    m.turn_on_reader_envs(m.Report(), rec, envs, parts, False)
+    assert calls == [] and "LEFT OFF (the workbench Run button row failed)" in capsys.readouterr().out
+    m.RUN_BUTTON["workbench"] = True
     _reader_record(envs, "HOLD")
     m.turn_on_reader_envs(m.Report(), rec, envs, parts, False)
     assert calls == [] and "LEFT OFF (no reader environment passed)" in capsys.readouterr().out
-    _reader_record(envs, "PASS")
+    rec.write_text(json.dumps({"schema": 1, "provisional": False, "readers": [
+        {"part": "PdfText", "status": "PASS"}, {"part": "MinerU", "status": "FAIL"}]}))
     good = m.Report()
+    good.fails = 9  # unpinned model steps elsewhere in the run do not block a reader that is PASS
     m.turn_on_reader_envs(good, rec, envs, parts, False)
+    out = capsys.readouterr().out
     assert calls and calls[0][-3:] == ["--reader-envs", str(rec), str(m.env_python(envs / "harness_adapters"))]
-    assert good.passes == 1 and "harness.reader_envs on (1 readers PASS)" in capsys.readouterr().out
+    assert "readers usable" in out and "1: PdfText" in out and "readers NOT usable" in out and "MinerU (FAIL)" in out
+    assert good.passes == 1 and "harness.reader_envs on: 1 readers usable (1 not usable, listed above)" in out
+    m.RUN_BUTTON.clear()
 
 
 def test_reader_envs_script_failure_is_a_fail_row(tmp_path: Path, monkeypatch, capsys) -> None:
@@ -1304,7 +1316,9 @@ def test_reader_envs_script_failure_is_a_fail_row(tmp_path: Path, monkeypatch, c
     monkeypatch.setattr(m.subprocess, "run", lambda cmd, **k: subprocess.CompletedProcess(
         cmd, 1, "WORKBENCH-READER-ENVS: FAIL harness.reader_envs is already set to C:/other.json\n", ""))
     rep = m.Report()
+    m.RUN_BUTTON["workbench"] = True
     m.turn_on_reader_envs(rep, rec, envs, parts, False)
+    m.RUN_BUTTON.clear()
     assert rep.fails == 1 and "already set to C:/other.json" in capsys.readouterr().out
 
 
