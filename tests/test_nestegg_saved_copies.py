@@ -135,3 +135,18 @@ def test_hf_snapshot_placed_from_saved_copy_only_when_every_file_matches(tmp_pat
     assert sc.place_hf_snapshot("org/m", "b" * 40, files, hub, cfg, tmp_path / "root", say=lambda *_: None) is None
     files["extra.bin"] = {"bytes": 1, "sha256": None}  # unpinned file is never taken from a saved copy
     assert sc.place_hf_snapshot("org/m", "c" * 40, files, hub, cfg, tmp_path / "root", say=lambda *_: None) is None
+
+
+def test_replaced_single_piece_file_is_refused(tmp_path: Path) -> None:
+    """Reviewer 3 on #54: a whole (one-piece) file has no per-part hash, so only the joined-file check protects it.
+    Removing that check must fail this test."""
+    f = tmp_path / "model.bin"
+    f.write_bytes(b"real weights")
+    store = tmp_path / "store"
+    e = sc.split(f, store, 1000)
+    (store / e["sha256"]).write_bytes(b"fake weights")  # same size, different bytes
+    rows: list[str] = []
+    dest = tmp_path / "out.bin"
+    cfg = _cfg({"name": "home", "kind": "folder", "path": str(store)})
+    assert sc.fetch(e["sha256"], len(b"real weights"), "model.bin", dest, cfg, tmp_path, say=rows.append) is None
+    assert not dest.exists() and "not the pinned" in rows[0]
