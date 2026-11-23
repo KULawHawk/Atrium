@@ -1150,6 +1150,8 @@ def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, lo
             (repo_dir / "refs").mkdir(parents=True, exist_ok=True)  # (main, or a tag such as v2.3.0) names the pin
             (repo_dir / "refs" / hf_ref(m)).write_text(m["revision"], encoding="utf-8")
         where = ", ".join(f"{n} from {k}" for k, n in sorted(came.items()))
+        if any("on Jake's PC" in str(meta.get("sha256_source", "")) for meta in files.values()):
+            where += "; hashes measured on the PC, the site publishes none (trust on first use)"
         if m.get("reader_lock"):
             lock = target / m["reader_lock"]
             if not lock.is_file():

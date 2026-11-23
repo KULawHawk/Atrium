@@ -1821,3 +1821,48 @@ def test_surya_pins_cover_every_folder_with_its_manifest_and_match_the_proof_bui
     assert sum(f["bytes"] for f in files.values()) == 3_447_389_424  # the proof build's datalab cache, to the byte
     folders = {p.rsplit("/", 1)[0] for p in files}
     assert len(folders) == 5 and all(f"{d}/manifest.json" in files for d in folders)
+
+
+def test_pinned_models_pc_measured_hashes_say_so_and_a_not_placed_reason_is_never_placed(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Reviewer 3 on #89: a PASS on hashes the site never published says they are PC-measured (trust on first use);
+    a placeable source carrying not_placed_reason is a named FAIL and nothing is fetched or placed."""
+    import subprocess
+    cache = tmp_path / "datalab"
+    pin = _file_pin(tmp_path, "w.bin", b"w")
+    pin["sha256_source"] = "measured 11/23/2026 on Jake's PC (measure_blocked_models.py), two downloads agree"
+    model = {"source": "datalab_cdn", "pinned_in_code": True, "files": {"f/w.bin": pin},
+             "settings_dir": {"env": "_marker_cli", "code": f"print({str(cache)!r})"}}
+    held = {"source": "huggingface", "repo_id": "o/held", "revision": "a" * 40, "not_placed_reason": "reader loads it elsewhere",
+            "files": {"h.bin": _file_pin(tmp_path, "h.bin", b"h")}}
+    m, envs, spoke, log = _pinned_setup(tmp_path, monkeypatch, {"s": model, "h": held})
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hf"))
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(envs / "_marker_cli")], check=True)
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    out = capsys.readouterr().out
+    assert rep.passes == 1 and rep.fails == 1, out
+    assert "hashes measured on the PC, the site publishes none (trust on first use)" in out
+    assert "reader loads it elsewhere; not installed" in out
+    assert not (m.hf_hub_cache() / "models--o--held").exists()
+
+
+def test_settings_dir_ignores_output_from_a_failed_run(tmp_path: Path) -> None:
+    """A non-zero exit is never a folder, even if something was printed first."""
+    import subprocess
+    m = _mod()
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(tmp_path / "envs" / "_marker_cli")], check=True)
+    log = tmp_path / "log.txt"
+    sd = {"env": "_marker_cli", "code": "print('/looks/like/a/folder');raise SystemExit(2)"}
+    assert m._settings_dir(tmp_path / "envs", sd, log) is None
+    assert m._settings_dir(tmp_path / "envs", dict(sd, code="print('/ok')"), log) == Path("/ok")
+
+
+def test_locutus_key_place_refuses_the_install_folder_reached_through_a_linked_install_root(tmp_path: Path) -> None:
+    """Reviewer 3 on #87: when the install root itself is a link, a key under its real folder is still refused."""
+    m = _mod()
+    real = tmp_path / "real_install"
+    real.mkdir()
+    link = tmp_path / "AdAstra"
+    link.symlink_to(real, target_is_directory=True)
+    assert "install folder" in m._key_place_problem(real / "keys" / "key", link)
+    assert "install folder" in m._key_place_problem(link / "keys" / "key", real)
