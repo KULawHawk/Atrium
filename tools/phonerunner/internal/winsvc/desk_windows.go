@@ -21,6 +21,7 @@ import (
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/config"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/control"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/pccheck"
+	"github.com/kulawhawk/atrium/tools/phonerunner/internal/tslog"
 )
 
 // ServiceName is the Windows service name (also what the PC guard should protect).
@@ -145,7 +146,7 @@ func Login() error {
 		Hostname: cfg.Hostname,
 		Dir:      filepath.Join(DefaultRoot(), "tsnet"),
 		Logf:     func(string, ...any) {},
-		UserLogf: func(f string, a ...any) { fmt.Printf(f+"\n", a...) },
+		UserLogf: tslog.Once(func(l string) { fmt.Println(l) }),
 	}
 	defer ts.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)

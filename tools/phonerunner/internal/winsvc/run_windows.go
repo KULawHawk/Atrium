@@ -5,7 +5,6 @@ package winsvc
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -24,6 +23,7 @@ import (
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/runner"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/service"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/store"
+	"github.com/kulawhawk/atrium/tools/phonerunner/internal/tslog"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/tsnetwho"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/web"
 )
@@ -45,7 +45,7 @@ func Run(ctx context.Context, root, sessionExe string) error {
 		Hostname: cfg.Hostname,
 		Dir:      filepath.Join(root, "tsnet"),
 		Logf:     func(string, ...any) {}, // Tailscale's own chatter is not logged (may name peers)
-		UserLogf: func(f string, a ...any) { _ = st.Append("tailscale", map[string]any{"msg": fmt.Sprintf(f, a...)}) },
+		UserLogf: tslog.Once(func(l string) { _ = st.Append("tailscale", map[string]any{"msg": l}) }),
 	}
 	defer ts.Close()
 	if _, err := ts.Up(ctx); err != nil {
