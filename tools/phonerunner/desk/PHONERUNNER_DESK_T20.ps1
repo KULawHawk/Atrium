@@ -4,6 +4,8 @@
 #   powershell -NoExit -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jmlee\Desktop\AL\PC_ITEMS\phonerunner_t20\PHONERUNNER_DESK_T20.ps1"
 # PC lane first (no admin, changes nothing):
 #   powershell -NoProfile -ExecutionPolicy Bypass -File "...\PHONERUNNER_DESK_T20.ps1" -DryRun
+#   Last line T20-DRYRUN: PASS - READY FOR JAKE only when the programs check out, this network
+#   reaches Tailscale and (if installed) the service is up; otherwise NOT READY FOR JAKE (why).
 #
 # What the full run does, stopping on the first failure:
 #   1  checks "Always notify" (T-01C), read only; Windows settings are never changed
@@ -329,8 +331,18 @@ if ($DryRun) {
   if ($u) { Say "WARN T-01C: $u (the full run will stop here; Jake changes this himself)" } else { Say "PASS T-01C Always notify is on" }
   $s = Get-Service -Name $Svc -ErrorAction SilentlyContinue
   if ($s) { Say "INFO the PhoneRunner service already exists ($($s.Status)); the full run will update it" } else { Say "INFO no PhoneRunner service yet; the full run installs it" }
+  # Ready for Jake? The same looks the full run's pre-flight takes, reported only (no waiting).
+  $notReady = @()
+  $b = Get-TailscaleBlock
+  if ($b) { Say "NOT READY: $b"; $notReady += 'network blocks Tailscale' } else { Say "PASS this network reaches Tailscale (genuine certificate)" }
+  if ($s -and $s.Status -eq 'Running') {
+    try { $p = Get-ServiceUpProblem } catch { $p = "cannot read the service log from this window ($($_.Exception.Message))" }
+    if ($p) { Say "NOT READY: the PhoneRunner service is not up: $p"; $notReady += 'service not up' } else { Say "PASS the PhoneRunner service is up at $script:UpURL" }
+    if (Test-ProgramsMatch) { Say "INFO installed programs match; the full run will leave the service alone" } else { Say "INFO installed programs differ; the full run updates them (one admin box)" }
+  } elseif ($s) { Say "INFO the service is $($s.Status); the full run starts it" }
   Say "INFO test copies left in $tmp (nothing deleted)"
-  Finish "T20-DRYRUN: PASS"
+  if ($notReady.Count -gt 0) { Finish "T20-DRYRUN: NOT READY FOR JAKE ($($notReady -join '; ')); the programs themselves PASS" }
+  Finish "T20-DRYRUN: PASS - READY FOR JAKE"
 }
 
 # ---------------------------------------------------------------- full run (Jake)
