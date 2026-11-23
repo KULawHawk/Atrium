@@ -598,6 +598,10 @@
               "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
               "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
+          },
+          "local_dir": {
+            "default": "{models}/qwen2_vl_7b",
+            "where": "the folder the reader's own setup (scripts/download_model.py {models}/qwen2_vl_7b) fills; the lens loads it with from_pretrained(model_snapshot_dir), so the files placed there are the pinned revision whatever the code's default_revision says"
           }
         }
       }
@@ -1073,7 +1077,7 @@
               "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py), two downloads agree; checked a second way: ModelScope's own file listing for RapidAI/RapidOCR at v3.8.0 gives the same sha256"
             }
           },
-          "unused_reason": "not loaded by the installed Docling reader: it passes no artifacts_path (docling_runner.py builds RapidOcrOptions() with no model paths), so docling 2.94 hands RapidOCR empty paths and rapidocr 3.10.0 uses its own default models, shipped inside its wheel (see rapidocr_wheel_models). These v3.8.0 files are what docling's download_models / an artifacts folder would use; kept pinned and saved for that"
+          "unused_reason": "not loaded by the installed Docling reader while DOCLING_ARTIFACTS_PATH is unset (checked): it passes no artifacts_path (docling_runner.py builds RapidOcrOptions() with no model paths), so docling 2.94 hands RapidOCR empty paths and rapidocr 3.10.0 uses its own default models, shipped inside its wheel (see rapidocr_wheel_models). These v3.8.0 files are what docling's download_models / an artifacts folder would use; kept pinned and saved for that"
         },
         "rapidocr_wheel_models": {
           "source": "package_bundled",
@@ -1101,7 +1105,10 @@
               "sha256": "e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
               "sha256_source": "read from the rapidocr-3.10.0 wheel (sha256 2fc34e26cd0f48514804a94f8832283039c7334076bff60768b1fed9ad068050, locked in locks/SHA256SUMS_*), and checked a second way: equals the SHA256 rapidocr's own default_models.yaml lists for this file at v3.10.0 (rapidocr re-checks it before use)"
             }
-          }
+          },
+          "requires_unset_env": [
+            "DOCLING_ARTIFACTS_PATH"
+          ]
         }
       }
     },

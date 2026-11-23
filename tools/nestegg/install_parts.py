@@ -916,10 +916,18 @@ def hf_hub_cache() -> Path:
     return home / "hub"
 
 
-def _local_target(m: dict) -> Path:
-    """The folder a reader loads this model from: its env-variable override, else its own default."""
+def _local_target(m: dict, envs: Path | None = None) -> Path:
+    """The folder a reader loads this model from: its env-variable override, else its own default. A default under
+    "{models}" is the installer's own models folder (envs/_models), where the reader's setup script put it."""
     ld = m["local_dir"]
-    return Path(os.environ.get(ld["env"]) or Path(ld["default"]).expanduser())
+    if ld.get("env") and os.environ.get(ld["env"]):
+        return Path(os.environ[ld["env"]])
+    default = ld["default"]
+    if "{models}" in default:
+        if envs is None:
+            raise ValueError("a {models} folder needs the environments folder")
+        return Path(default.replace("{models}", str(envs / "_models")))
+    return Path(default).expanduser()
 
 
 def _lock_conflict(m: dict, target: Path) -> str | None:
@@ -937,10 +945,10 @@ def _lock_conflict(m: dict, target: Path) -> str | None:
     return None
 
 
-def _place_local_dir(sc, m: dict, cfg: dict, root: Path, say) -> bool:
+def _place_local_dir(sc, m: dict, cfg: dict, root: Path, say, envs: Path | None = None) -> bool:
     """A reader that loads from its own folder (its env-variable override, else its default): every file must be
     pinned and match, or nothing is claimed; the reader's own fetch script then downloads and checks as before."""
-    target = _local_target(m)
+    target = _local_target(m, envs)
     if _lock_conflict(m, target):  # never overwrite a model that carries a different lock (the model step says so)
         return False
     locs = {"locations": [loc for loc in cfg["locations"] if loc["kind"] != "origin"]}
@@ -996,7 +1004,7 @@ def saved_models(rep: Report, part: dict, envs: Path) -> None:
                                       ref=hf_ref(m))]
     for m in every:  # readers that load from their own folder (im2latex): each pinned file straight into that folder
         if m.get("local_dir"):
-            placed += [m["repo_id"]] if _place_local_dir(sc, m, cfg, root, say) else []
+            placed += [m["repo_id"]] if _place_local_dir(sc, m, cfg, root, say, envs) else []
     rep.row("INFO", f"{part['name']} saved models", f"{len(placed)} of {len(every)} Hugging Face models placed from a saved copy"
             + (f": {', '.join(placed)}" if placed else " (the rest download from the original site, hash-pinned where pinned)"))
 
@@ -1099,6 +1107,11 @@ def _bundled_check(rep: Report, label: str, m: dict, py: Path, log: Path) -> Non
     the reader will load is hash-checked where the installed package keeps it."""
     pd = m["package_dir"]
     what = f"{pd['package']} built-in models"
+    set_vars = [v for v in m.get("requires_unset_env", []) if os.environ.get(v, "").strip()]
+    if set_vars:  # the reader would load its models from that folder instead of the ones checked here
+        rep.row("FAIL", label, f"{what}: {', '.join(set_vars)} is set, so the reader would not use the checked models "
+                "(clear it, or pin what that folder holds)")
+        return
     target = _package_dir(py, pd, log)
     if target is None:
         rep.row("FAIL", label, f"{what}: package {pd['package']} not found in the environment (see {log})")
@@ -1150,7 +1163,7 @@ def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, lo
             rep.row("FAIL", label, f"{what}: {len(unpinned) or 'no'} file(s) without a pinned sha256; not installed")
             continue
         if m.get("local_dir"):
-            target = _local_target(m)
+            target = _local_target(m, envs)
             clash = _lock_conflict(m, target)
             if clash:
                 rep.row("HOLD", label, f"{what}: {clash} at {target}; left untouched (move it aside to install the pinned one)")

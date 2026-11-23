@@ -1899,6 +1899,17 @@ def test_pinned_models_checks_models_shipped_in_a_wheel_in_place_and_reports_an_
     rep = m.Report()
     m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)  # no fakeocr in that python
     assert rep.fails == 1 and "not found in the environment" in capsys.readouterr().out
+    model.write_bytes(body)
+    bundled["requires_unset_env"] = ["DOCLING_ARTIFACTS_PATH"]
+    (tmp_path / "nestegg" / "models_pinned.json").write_text(json.dumps({"readers": {"Rdr": {"models": {"b": bundled}}}}), encoding="utf-8")
+    monkeypatch.setenv("DOCLING_ARTIFACTS_PATH", str(tmp_path / "elsewhere"))
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, py, log)
+    assert rep.fails == 1 and rep.passes == 0 and "DOCLING_ARTIFACTS_PATH is set" in capsys.readouterr().out
+    monkeypatch.delenv("DOCLING_ARTIFACTS_PATH")
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, py, log)
+    assert rep.passes == 1 and rep.fails == 0
 
 
 def test_docling_rapidocr_pins_match_the_wheel_it_runs_from() -> None:
@@ -1910,6 +1921,7 @@ def test_docling_rapidocr_pins_match_the_wheel_it_runs_from() -> None:
     assert w["source"] == "package_bundled" and w["package_dir"] == {"package": "rapidocr", "sub": "models"}
     assert sorted(w["files"]) == ["PP-OCRv6_det_small.onnx", "PP-OCRv6_rec_small.onnx", "ch_ppocr_mobile_v2.0_cls_mobile.onnx"]
     assert "unused_reason" in dm["rapidocr_models"] and "not_placed_reason" not in dm["rapidocr_models"]
+    assert w["requires_unset_env"] == ["DOCLING_ARTIFACTS_PATH"] and "DOCLING_ARTIFACTS_PATH is unset" in dm["rapidocr_models"]["unused_reason"]
     locks = (NESTEGG / "locks" / "SHA256SUMS_win_amd64.txt").read_text(encoding="utf-8")
     assert "2fc34e26cd0f48514804a94f8832283039c7334076bff60768b1fed9ad068050  rapidocr-3.10.0-py3-none-any.whl" in locks
 
@@ -1929,3 +1941,26 @@ def test_pc_measured_pins_with_a_published_listing_are_not_called_trust_on_first
     m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
     out = capsys.readouterr().out
     assert rep.passes == 1 and "trust on first use" not in out, out
+
+
+def test_pinned_models_places_a_models_folder_model_and_visionlocal_uses_it(tmp_path: Path, monkeypatch, capsys) -> None:
+    """VisionLocal: the pinned Qwen2-VL snapshot goes into {models}/qwen2_vl_7b (envs/_models), where the reader's
+    setup script used to put revision "main"; its files are the pinned revision, hash-checked."""
+    pin = _file_pin(tmp_path, "config.json", b"{}")
+    model = {"source": "huggingface", "repo_id": "o/vl", "revision": "b" * 40, "files": {"config.json": pin},
+             "local_dir": {"default": "{models}/vl"}}
+    m, envs, spoke, log = _pinned_setup(tmp_path, monkeypatch, {"v": model})
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.passes == 1 and rep.fails == 0, capsys.readouterr().out
+    assert (envs / "_models" / "vl" / "config.json").read_bytes() == b"{}"
+    assert "does not name this revision" not in capsys.readouterr().out
+    try:
+        m._local_target(model)  # a {models} folder is never guessed without the environments folder
+        raise AssertionError("no ValueError")
+    except ValueError:
+        pass
+    man = json.loads((NESTEGG / "models_pinned.json").read_text(encoding="utf-8"))
+    assert man["readers"]["VisionLocal"]["models"]["qwen2_vl_7b_instruct"]["local_dir"]["default"] == "{models}/qwen2_vl_7b"
+    parts = {p["name"]: p for p in json.loads((NESTEGG / "parts.json").read_text(encoding="utf-8"))["parts"]}
+    assert parts["VisionLocal"]["models"] == [{"step": "pinned_models", "what": parts["VisionLocal"]["models"][0]["what"]}]
