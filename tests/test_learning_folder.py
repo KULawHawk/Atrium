@@ -371,3 +371,158 @@ def test_bad_manifest_line_refuses(root, line):
     (root / "learning" / "obsidian" / "manifest.jsonl").write_text("\n" + line + "\n")
     with pytest.raises(LearningFolderError):
         LearningFolder(root, "obsidian").state()
+
+
+# ---- Decision 53: Jake may put back what he removed, for 30 days ------------------------------------------
+
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
+from atrium_learning import ADD_BACK_DAYS, add_back_warning  # noqa: E402
+
+
+def removed(root, tmp_path, reason="removed_by_jake"):
+    f = LearningFolder(root, "obsidian")
+    sha = f.add(item(tmp_path), "P", "obsidian copy", "jake", gate=checked)
+    f.hold_aside(sha, reason, "jake")
+    return f, sha
+
+
+def removal_time(root, sha):
+    row = [r for r in lines(root, "obsidian") if r["sha256"] == sha][-1]
+    return datetime.fromisoformat(row["added_at"])
+
+
+def test_window_is_thirty_days():
+    assert ADD_BACK_DAYS == 30
+
+
+def test_days_left_counts_down_and_closes(root, tmp_path):
+    f, sha = removed(root, tmp_path)
+    t = removal_time(root, sha)
+    assert f.add_back_days_left(sha, t) == 30
+    assert f.add_back_days_left(sha, t + timedelta(days=29, hours=1)) == 1
+    assert f.add_back_days_left(sha, t + timedelta(days=30)) == 0
+    assert f.add_back_days_left(sha, t + timedelta(days=400)) == 0
+
+
+def test_days_left_none_unless_jake_removed_it(root, tmp_path):
+    f, sha = removed(root, tmp_path, reason="identifier_found")
+    assert f.add_back_days_left(sha) is None
+    assert f.add_back_days_left("0" * 64) is None
+    g = LearningFolder(root, "readers-print")
+    s2 = g.add(item(tmp_path, body="s"), "S", "synthetic", "jake")
+    assert g.add_back_days_left(s2) is None
+
+
+@pytest.mark.parametrize("stamp", ["not a time", "2026-11-23T10:00:00", "2099-01-01T00:00:00+00:00"])
+def test_unreadable_zoneless_or_future_removal_time_counts_as_closed(root, tmp_path, stamp):
+    f, sha = removed(root, tmp_path)
+    m = root / "learning" / "obsidian" / "manifest.jsonl"
+    rows = [json.loads(x) for x in m.read_text().splitlines()]
+    rows[-1]["added_at"] = stamp
+    m.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    assert f.add_back_days_left(sha) == 0
+    with pytest.raises(LearningFolderError, match="no longer"):
+        f.add_back(sha, "jake", gate=checked)
+
+
+def test_plain_add_of_a_removed_item_is_refused_with_days_left(root, tmp_path):
+    f, sha = removed(root, tmp_path)
+    with pytest.raises(LearningFolderError, match="30 more days"):
+        f.add(item(tmp_path), "P", "obsidian copy", "jake", gate=checked)
+    assert f.approved() == []
+
+
+def test_add_back_within_window_moves_the_same_copy_back(root, tmp_path):
+    f, sha = removed(root, tmp_path)
+    d = root / "learning" / "obsidian"
+    words = f.add_back(sha, "jake", gate=checked)
+    assert words == add_back_warning(30)
+    assert f.approved() == [sha]
+    assert (d / "approved" / f"{sha}.txt").is_file() and not list((d / "held-aside").iterdir())
+    row = lines(root, "obsidian")[-1]
+    assert row["event"] == "added" and row["added_by"] == "jake" and row["gate"] == "obsidian_checked_copy"
+    audit = [json.loads(x) for x in (d / "audit.jsonl").read_text().splitlines()]
+    assert audit[-1]["event"] == "added_back" and audit[-1]["days_left"] == 30 and audit[-1]["sha256"] == sha
+    # it can be removed again, which starts a fresh 30 days
+    f.hold_aside(sha, "removed_by_jake", "jake")
+    assert f.add_back_days_left(sha) == 30
+
+
+def test_add_back_after_window_is_permanent(root, tmp_path):
+    f, sha = removed(root, tmp_path)
+    late = removal_time(root, sha) + timedelta(days=30, seconds=1)
+    with pytest.raises(LearningFolderError, match="more than 30 days"):
+        f.add_back(sha, "jake", gate=checked, now=late)
+    assert f.approved() == []
+
+
+def test_plain_add_after_window_is_refused(root, tmp_path, monkeypatch):
+    f, sha = removed(root, tmp_path)
+    late = removal_time(root, sha) + timedelta(days=31)
+    real = f.add_back_days_left
+    monkeypatch.setattr(f, "add_back_days_left", lambda s, now=None: real(s, late))
+    with pytest.raises(LearningFolderError, match="can no longer be added back"):
+        f.add(item(tmp_path), "P", "obsidian copy", "jake", gate=checked)
+
+
+def test_add_back_never_by_auto(root, tmp_path):
+    f, sha = removed(root, tmp_path)
+    with pytest.raises(LearningFolderError, match="automatic"):
+        f.add_back(sha, "auto", gate=checked)
+    assert f.approved() == []
+
+
+def test_add_back_only_for_jakes_removals(root, tmp_path):
+    f, sha = removed(root, tmp_path, reason="identifier_found")
+    with pytest.raises(LearningFolderError, match="not removed by Jake"):
+        f.add_back(sha, "jake", gate=checked)
+
+
+def test_add_back_runs_the_fresh_check(root, tmp_path):
+    f, sha = removed(root, tmp_path)
+    with pytest.raises(LearningFolderError, match="Decision 38"):
+        f.add_back(sha, "jake", gate=unchecked)
+    with pytest.raises(LearningFolderError, match="refused"):
+        f.add_back(sha, "jake", gate=refuses)
+    with pytest.raises(LearningFolderError, match="its aim's own gate"):
+        f.add_back(sha, "jake")
+    assert f.approved() == [] and f.add_back_days_left(sha) == 30
+
+
+def test_add_back_refuses_a_changed_copy(root, tmp_path):
+    f, sha = removed(root, tmp_path)
+    (root / "learning" / "obsidian" / "held-aside" / f"{sha}.txt").write_text("changed")
+    with pytest.raises(LearningFolderError, match="changed on disk"):
+        f.add_back(sha, "jake", gate=checked)
+
+
+def test_add_back_refuses_when_approved_already_has_the_file(root, tmp_path):
+    f, sha = removed(root, tmp_path)
+    (root / "learning" / "obsidian" / "approved" / f"{sha}.txt").write_text("stray")
+    with pytest.raises(LearningFolderError, match="already holds"):
+        f.add_back(sha, "jake", gate=checked)
+    assert (root / "learning" / "obsidian" / "held-aside" / f"{sha}.txt").is_file()
+
+
+def test_automatic_adding_never_puts_back_a_held_aside_item(root, tmp_path):
+    for reason in ("removed_by_jake", "identifier_found"):
+        r = tmp_path / reason
+        make_aim(r, "obsidian")
+        f, sha = removed(r, tmp_path, reason)
+        f.set_auto_add(True, "jake")
+        with pytest.raises(LearningFolderError, match="automatic adding never"):
+            f.offer(item(tmp_path), "P", "obsidian copy", gate=checked)
+        assert f.approved() == []
+
+
+def test_warning_words():
+    assert "1 more day;" in add_back_warning(1)
+    assert "12 more days;" in add_back_warning(12)
+
+
+def test_days_left_never_exceeds_thirty(root, tmp_path):
+    f, sha = removed(root, tmp_path)
+    t = removal_time(root, sha)
+    assert f.add_back_days_left(sha, t - timedelta(seconds=1)) == 0  # removal one second "in the future"
+    assert all(0 <= f.add_back_days_left(sha, t + timedelta(hours=h)) <= 30 for h in range(0, 800, 7))

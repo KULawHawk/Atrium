@@ -9,6 +9,10 @@ Rules carried here (design §2, §3, §7, §8):
 * Classes: ``S`` synthetic/public, ``M`` from a licensed manual (needs Jake's OK for that manual on record),
   ``P`` derived from a real report (needs the aim's own gate AND a human check: Decision 38 = A).
 * Nothing is deleted (SEC-8): taking an item out moves it to ``held-aside``.
+* Decision 53 ("A but give it a 30 day window"): an item Jake removed himself (``removed_by_jake``) stays out,
+  except that for 30 days after his removal he may put that same item back by his own click
+  (:meth:`LearningFolder.add_back`: a warning naming the days left, then the usual fresh check). After 30 days the
+  refusal is permanent. The automatic path never re-adds anything that was held aside.
 * An aim may keep its own side files in other subfolders (Obsidian keeps signed labels in ``labels\\``,
   named ``<sha256>.obsidian.json``). Only ``approved\\`` items and their manifest rows are ever copied out;
   other subfolders are never read by copy-out and never copied.
@@ -27,7 +31,7 @@ import re
 import shutil
 import sys
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -51,6 +55,7 @@ HOLD_REASONS = (
     "manual_ok_withdrawn",
     "licence_problem",
 )
+ADD_BACK_DAYS = 30  # Decision 53 (Jake 11/23/2026): "A but give it a 30 day window"
 MANIFEST = "manifest.jsonl"
 SETTINGS = "settings.json"
 AUDIT = "audit.jsonl"
@@ -98,6 +103,13 @@ def _verdict(result: object) -> GateResult:
             "the aim's gate did not return a GateResult (passed and human_checked must be bool, gate a string)"
         )
     return GateResult(passed=passed, gate=_text(gate, "gate"), human_checked=human)
+
+
+def add_back_warning(days_left: int) -> str:
+    """The words shown before Jake puts back an item he removed (Decision 53)."""
+    day = "day" if days_left == 1 else "days"
+    return (f"You took this out of the learning folder yourself. You can put it back by your own click for "
+            f"{days_left} more {day}; after that it stays out for good.")
 
 
 def _now() -> str:
@@ -304,6 +316,13 @@ class LearningFolder:
         sha = _sha256(item)
         if self.state().get(sha, {}).get("event") == "added":
             raise LearningFolderError(f"item {sha[:12]} is already in approved\\")
+        left = self.add_back_days_left(sha)
+        if left == 0:
+            raise LearningFolderError(
+                f"Jake removed item {sha[:12]} more than {ADD_BACK_DAYS} days ago; it can no longer be added back"
+            )
+        if left is not None:
+            raise LearningFolderError(f"Jake removed item {sha[:12]} earlier. {add_back_warning(left)}")
         suffix = item.suffix.lower() if _SUFFIX.match(item.suffix.lower()) else ""
         target = self.dir / "approved" / f"{sha}{suffix}"
         tmp = target.with_name(target.name + ".tmp")
@@ -317,10 +336,65 @@ class LearningFolder:
         return sha
 
     def offer(self, item: str | os.PathLike, cls: str, source: str, gate: Gate | None = None) -> str | None:
-        """Automatic path. Switch off (default): adds nothing, returns None; the item waits for Jake's click."""
+        """Automatic path. Switch off (default): adds nothing, returns None; the item waits for Jake's click.
+        Never re-adds an item that was held aside, for any reason (Decision 53: only his own click can)."""
         if not self.auto_add:
             return None
+        if Path(item).is_file() and self.state().get(_sha256(Path(item)), {}).get("event") == "held_aside":
+            raise LearningFolderError("this item was taken out of the learning folder; automatic adding never puts it back")
         return self.add(item, cls, source, "auto", gate)
+
+    # ---- Decision 53: putting back an item Jake removed ----------------------------------------------
+
+    def add_back_days_left(self, sha: str, now: datetime | None = None) -> int | None:
+        """Whole days left (rounded up) in which Jake may put ``sha`` back; 0 once the 30 days have passed.
+        ``None`` when the item's latest event is not his own removal (``removed_by_jake``)."""
+        row = self.state().get(sha)
+        if row is None or row["event"] != "held_aside" or row.get("reason") != "removed_by_jake":
+            return None
+        try:
+            removed = datetime.fromisoformat(str(row.get("added_at")))
+        except ValueError:
+            return 0  # an unreadable removal time proves nothing: the window counts as closed
+        now = now or datetime.now(timezone.utc)
+        if removed.tzinfo is None or removed > now:
+            return 0  # no time zone, or a removal "in the future" (clock ahead, edited manifest): closed
+        left = removed + timedelta(days=ADD_BACK_DAYS) - now
+        if left <= timedelta(0):
+            return 0
+        return -(-int(left.total_seconds()) // 86400)
+
+    def add_back(self, sha: str, by: str, gate: Gate | None = None, now: datetime | None = None) -> str:
+        """Put an item Jake removed back into ``approved\\`` by his own click, within 30 days of his removal.
+
+        The held-aside copy itself moves back (no second copy is made), after its sha256 and its class's gate are
+        checked afresh. ``by`` may not be ``auto``. Returns the warning text shown with the result.
+        """
+        by = _text(by, "by")
+        if by == "auto":
+            raise LearningFolderError("automatic adding can never put back an item Jake removed (Decision 53)")
+        left = self.add_back_days_left(sha, now)
+        if left is None:
+            raise LearningFolderError(f"item {str(sha)[:12]} was not removed by Jake, so it cannot be put back this way")
+        if left == 0:
+            raise LearningFolderError(
+                f"item {sha[:12]} was removed more than {ADD_BACK_DAYS} days ago; it can no longer be added back"
+            )
+        row = self.state()[sha]
+        src = self._file("held-aside", sha)
+        if _sha256(src) != sha:
+            raise LearningFolderError(f"item {sha[:12]} changed on disk since it was taken out")
+        gate_name = self._check(src, str(row.get("class")), str(row.get("source")), gate)
+        if any(p.name.split(".")[0] == sha for p in (self.dir / "approved").iterdir()):
+            raise LearningFolderError(f"approved\\ already holds a file for item {sha[:12]}")
+        os.replace(src, self.dir / "approved" / src.name)
+        _append(
+            self.dir / MANIFEST,
+            {"sha256": sha, "class": row.get("class"), "source": row.get("source"), "added_at": _now(),
+             "added_by": by, "gate": gate_name, "event": "added"},
+        )
+        _append(self.dir / AUDIT, {"at": _now(), "by": by, "event": "added_back", "sha256": sha, "days_left": left})
+        return add_back_warning(left)
 
     def hold_aside(self, sha: str, reason: str, by: str) -> None:
         """Move one approved item to ``held-aside\\`` (never deleted, SEC-8) and log why."""
