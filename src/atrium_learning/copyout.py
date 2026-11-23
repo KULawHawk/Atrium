@@ -3,9 +3,14 @@
 Runs on the PC. For each aim:
 
 1. every approved item is re-checked (sha256 + its class's gate; class P needs the aim's gate, Decision 38 = A);
-2. the passing items are staged in ``<root>\\learning\\_outbox\\<run>\\<aim>\\`` with the aim's manifest;
+2. the passing items are staged in ``<root>\\learning\\_outbox\\<run>\\<aim>\\`` with their manifest rows only;
 3. the patient-run guard runs on that staging folder, and only on ``PATIENT-RUN-GUARD: PASS`` is it copied
    to ``<dest>\\<aim>\\`` (the project share's ``learning/<aim>/``).
+
+The guard checks for patient-run folders, links and protected patient paths; it does NOT read content or screen
+for identifiers. For real-report (class P) items the identifier screen is the aim's own gate plus Jake's human
+check (Decision 38 = A); the gate, which confirms his checked mark, is re-run in step 1. The staged manifest holds only the rows of items actually
+copied, and an aim FAILs if the connector's folder holds any file this run would not send (nothing is deleted).
 
 Class M (manual-derived) items are NOT copied unless ``--include-manual`` is given: LF-3 is not decided, so the
 copy carries synthetic, public and approved de-identified items only (LF-3 option D, coordinator 11/23).
@@ -61,6 +66,29 @@ def load_gate(spec: str) -> Gate:
     return gate
 
 
+def _refuse_stale(target: Path, names: set[str]) -> None:
+    """FAIL the aim if the connector's folder holds anything this run would not send (design review, #64 item 1).
+
+    A file held aside on the PC after an earlier copy-out would otherwise stay where the connector reads it.
+    Nothing is deleted here: taking a stale file off the share is a named step for a person.
+    """
+    if not target.exists():
+        return
+    stale = sorted(p.name for p in target.iterdir() if p.name != MANIFEST and (p.is_dir() or p.name not in names))
+    if stale:
+        shown = ", ".join(n[:24] for n in stale[:10]) + (f" and {len(stale) - 10} more" if len(stale) > 10 else "")
+        raise LearningFolderError(
+            f"{target} holds {len(stale)} entr{'y' if len(stale) == 1 else 'ies'} this run would not send "
+            f"({shown}); a person must move them off the share first"
+        )
+
+
+def _write_copied_manifest(folder: LearningFolder, shas: set[str], out: Path) -> None:
+    """Only the latest row of each item actually copied goes out (#64 item 2): no held-back or held-aside rows."""
+    rows = [row for sha, row in sorted(folder.state().items()) if sha in shas]
+    out.write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in rows), encoding="utf-8")
+
+
 def copy_out(
     root: Path,
     dest: Path,
@@ -82,15 +110,16 @@ def copy_out(
         try:
             folder = LearningFolder(root, aim)
             items = folder.items_for_copy(gates.get(aim), ("S", "M", "P") if include_manual else ("S", "P"))
+            target = Path(dest) / aim
+            _refuse_stale(target, {p.name for p in items})
             stage = learning / "_outbox" / run_id / aim
             stage.mkdir(parents=True, exist_ok=False)
             for path in items:
                 shutil.copyfile(path, stage / path.name)
-            shutil.copyfile(folder.dir / MANIFEST, stage / MANIFEST)
+            _write_copied_manifest(folder, {p.name.split(".")[0] for p in items}, stage / MANIFEST)
             ok, line = guard(stage)
             if not ok:
                 raise LearningFolderError(f"patient-run guard did not pass: {line or 'no output'}")
-            target = Path(dest) / aim
             target.mkdir(parents=True, exist_ok=True)
             for path in sorted(stage.iterdir()):
                 shutil.copyfile(path, target / path.name)

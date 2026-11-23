@@ -135,3 +135,49 @@ def test_manual_items_stay_unless_included(root, tmp_path):
     assert copy_out(root, tmp_path / "b", ok_guard, {}, ["readers-print"], "r2", include_manual=True)[
         "readers-print"
     ] == "PASS n=2"
+
+
+def test_held_aside_item_left_on_share_fails_the_aim(root, tmp_path):
+    """Review #64 item 1: a P item held aside after a copy-out must not quietly stay where the connector reads."""
+    dest = tmp_path / "share"
+    assert copy_out(root, dest, ok_guard, {"obsidian": checked}, ["obsidian"], "r1")["obsidian"] == "PASS n=1"
+    f = LearningFolder(root, "obsidian")
+    sha = f.approved()[0]
+    f.hold_aside(sha, "identifier_found", "jake")
+    verdict = copy_out(root, dest, ok_guard, {"obsidian": checked}, ["obsidian"], "r2")["obsidian"]
+    assert verdict.startswith("FAIL") and "1 entry this run would not send" in verdict and sha[:24] in verdict
+    assert (dest / "obsidian" / f"{sha}.txt").exists()  # nothing deleted by the tool
+
+
+def test_stray_folder_and_many_stale_files_fail(root, tmp_path):
+    dest = tmp_path / "share"
+    (dest / "readers-print" / "approved").mkdir(parents=True)
+    for i in range(11):
+        (dest / "readers-print" / f"stale{i:02d}.txt").write_text("x")
+    verdict = copy_out(root, dest, ok_guard, {}, ["readers-print"], "r1")["readers-print"]
+    assert "12 entries" in verdict and "and 2 more" in verdict
+
+
+def test_only_copied_items_rows_go_out(root, tmp_path):
+    """Review #64 item 2: no held-back class M rows (manual names) and no held-aside rows in the outgoing manifest."""
+    from atrium_learning.folder import record_manual_ok
+
+    record_manual_ok(root, "SECRET MANUAL NAME", "jake")
+    f = LearningFolder(root, "readers-print")
+    f.add(item(tmp_path, body="m1"), "M", "SECRET MANUAL NAME", "jake")
+    gone = f.add(item(tmp_path, body="s2"), "S", "synthetic aside", "jake")
+    f.hold_aside(gone, "removed_by_jake", "jake")
+    dest = tmp_path / "share"
+    assert copy_out(root, dest, ok_guard, {}, ["readers-print"], "r1")["readers-print"] == "PASS n=1"
+    text = (dest / "readers-print" / "manifest.jsonl").read_text()
+    rows = [json.loads(x) for x in text.splitlines()]
+    assert len(rows) == 1 and rows[0]["class"] == "S" and rows[0]["event"] == "added"
+    assert "SECRET MANUAL NAME" not in text and "synthetic aside" not in text and gone not in text
+    staged = (root / "learning" / "_outbox" / "r1" / "readers-print" / "manifest.jsonl").read_text()
+    assert staged == text
+
+
+def test_rerun_with_nothing_changed_passes(root, tmp_path):
+    dest = tmp_path / "share"
+    for run in ("r1", "r2"):
+        assert copy_out(root, dest, ok_guard, {}, ["readers-print"], run)["readers-print"] == "PASS n=1"
