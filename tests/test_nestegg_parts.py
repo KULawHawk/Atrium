@@ -679,3 +679,33 @@ def test_every_env_gets_a_root_marker_before_any_verdict() -> None:
     body = src[src.index("def build_part("):src.index("def side_envs(")]
     assert body.index('"adastra.json"') < body.index('rep.row("PASS", name')
     assert '"install_root"' in body and 'INSTALL_ROOT["root"] = a.root or a.envs.parent' in src
+
+
+def test_locked_files_come_from_the_saved_copy_first(tmp_path: Path, monkeypatch) -> None:
+    """Decision 30 A: a wheel in the home copy is used (named for pip) and pip runs with --no-index when all are found."""
+    import hashlib
+    m = _mod()
+    sc = m._saved_copies()
+    whl = tmp_path / "demo-1.0-py3-none-any.whl"
+    whl.write_bytes(b"wheel bytes")
+    h = hashlib.sha256(b"wheel bytes").hexdigest()
+    sc.split(whl, tmp_path / "root" / "saved", 2_000_000_000)
+    m.INSTALL_ROOT["root"] = tmp_path / "root"
+    monkeypatch.setattr(m, "saved_file_names", lambda: {h: whl.name})
+    envs = tmp_path / "root" / "envs"
+    (envs / "_logs").mkdir(parents=True)
+    calls = []
+    monkeypatch.setattr(m, "run", lambda cmd, log, **k: calls.append([str(c) for c in cmd]) or 0)
+    rc = m.locked_install(Path("py"), [f"demo==1.0 --hash=sha256:{h}"], envs / "_logs" / "x.lock.txt", envs / "_logs" / "x.txt")
+    assert rc == 0 and (envs / "_wheelhouse" / whl.name).read_bytes() == b"wheel bytes"
+    assert "--no-index" in calls[0] and str(envs / "_wheelhouse") in calls[0]
+
+
+def test_no_saved_copy_means_plain_hash_checked_install(tmp_path: Path, monkeypatch) -> None:
+    m = _mod()
+    m.INSTALL_ROOT["root"] = tmp_path  # no saved\INDEX.json, release repo not chosen
+    calls = []
+    monkeypatch.setattr(m, "run", lambda cmd, log, **k: calls.append([str(c) for c in cmd]) or 0)
+    (tmp_path / "envs" / "_logs").mkdir(parents=True)
+    m.locked_install(Path("py"), ["demo==1.0 --hash=sha256:" + "0" * 64], tmp_path / "envs" / "_logs" / "l.txt", tmp_path / "envs" / "_logs" / "o.txt")
+    assert "--no-index" not in calls[0] and "--find-links" not in calls[0]

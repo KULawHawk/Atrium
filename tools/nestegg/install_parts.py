@@ -353,11 +353,60 @@ def list_status(name: str) -> str:
     return "no status recorded"
 
 
+def _saved_copies():
+    """saved_copies.py loaded by path (python -I does not put this folder on sys.path)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("nestegg_saved_copies", HERE / "saved_copies.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def saved_file_names() -> dict[str, str]:
+    """sha256 -> saved file name, from every SHA256SUMS file (the names pip needs in a wheelhouse)."""
+    out: dict[str, str] = {}
+    for f in sorted(LOCKS.glob("SHA256SUMS_*.txt")):
+        for ln in f.read_text(encoding="utf-8").splitlines():
+            if ln.strip():
+                h, fn = ln.split()
+                out[h] = fn
+    return out
+
+
+def saved_wheelhouse(lines: list[str], wheelhouse: Path, log: Path) -> tuple[Path | None, bool]:
+    """Decision 30 A: take each locked file from the saved copies first (home, then the private release), into a
+    wheelhouse with its real name. Returns (wheelhouse or None, every file found). Files not found come from the
+    original index inside pip, still under --require-hashes; nothing is ever taken without its measured hash."""
+    sc = _saved_copies()
+    cfg = sc.load_config()
+    locs = [loc for loc in cfg["locations"] if loc["kind"] != "origin"]
+    root = INSTALL_ROOT.get("root") or wheelhouse.parent
+    if not sc.usable(locs, root):
+        return None, False
+    names = saved_file_names()
+    want: dict[str, str] = {}
+    for ln in lines:
+        hs = re.findall(r"--hash=sha256:([0-9a-f]{64})", ln)
+        got = [h for h in hs if h in names]
+        if got:
+            want[got[0]] = names[got[0]]  # one platform file per requirement is enough for pip
+    found = 0
+    with log.open("a", encoding="utf-8") as fh:
+        for h, fn in sorted(want.items()):
+            src = sc.fetch(h, None, fn, wheelhouse / fn, {"locations": locs}, root, say=lambda m: fh.write(m + "\n"))
+            found += src is not None
+            fh.write(f"saved copy: {fn} <- {src or 'not in any saved copy (original index, hash-checked)'}\n")
+    req_lines = [ln for ln in lines if not ln.startswith("--")]
+    return wheelhouse, found == len(req_lines) and found == len(want)
+
+
 def locked_install(py: Path, lines: list[str], lockfile: Path, log: Path) -> int:
     if not lines:  # a part with no outside packages (an empty known-good list)
         return 0
     lockfile.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return run([py, "-m", "pip", "install", "--require-hashes", "--no-deps", "-r", lockfile], log)
+    wh, complete = saved_wheelhouse(lines, lockfile.parent.parent / "_wheelhouse", log)
+    extra = (["--no-index"] if complete else []) + (["--find-links", str(wh)] if wh else [])
+    return run([py, "-m", "pip", "install", "--require-hashes", "--no-deps", *extra, "-r", lockfile], log)
 
 
 # ---------------------------------------------------------------- what the code imports (for the probe)

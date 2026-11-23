@@ -150,10 +150,10 @@ def _release_get(repo: str, tag: str, scratch: Path):
     return get
 
 
-def fetch(sha: str, size: int, name: str, dest: Path, cfg: dict, install_root: Path,
+def fetch(sha: str, size: int | None, name: str, dest: Path, cfg: dict, install_root: Path,
           origin_url: str | None = None, say=print) -> str | None:
     """Put the file with this sha256 at `dest`. Returns the location name it came from, or None (with rows said)."""
-    if dest.is_file() and dest.stat().st_size == size and sha256_file(dest) == sha:
+    if dest.is_file() and (size is None or dest.stat().st_size == size) and sha256_file(dest) == sha:
         return "already present"
     for loc in cfg["locations"]:
         kind, label = loc["kind"], loc["name"]
@@ -192,7 +192,7 @@ def fetch(sha: str, size: int, name: str, dest: Path, cfg: dict, install_root: P
             try:
                 urllib.request.urlretrieve(origin_url, tmp)
                 got = sha256_file(tmp)
-                why = None if got == sha and tmp.stat().st_size == size else f"original site sent sha256 {got}"
+                why = None if got == sha and size in (None, tmp.stat().st_size) else f"original site sent sha256 {got}"
                 if why is None:
                     tmp.replace(dest)
             except OSError as exc:
@@ -207,6 +207,17 @@ def fetch(sha: str, size: int, name: str, dest: Path, cfg: dict, install_root: P
             return label
         say(f"SKIP  {name:<28} {label}: {why}")
     return None
+
+
+def usable(locations: list[dict], install_root: Path) -> list[str]:
+    """Names of the copy locations that can be read right now (a folder with an index, or a chosen, signed-in release)."""
+    out = []
+    for loc in locations:
+        if loc["kind"] == "folder" and (expand(loc["path"], install_root) / INDEX).is_file():
+            out.append(loc["name"])
+        elif loc["kind"] == "github_release" and loc.get("repo") and _gh_ok():
+            out.append(loc["name"])
+    return out
 
 
 # ---- commands -----------------------------------------------------------------------------------------------------
