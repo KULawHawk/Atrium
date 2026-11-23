@@ -916,11 +916,33 @@ def hf_hub_cache() -> Path:
     return home / "hub"
 
 
+def _local_target(m: dict) -> Path:
+    """The folder a reader loads this model from: its env-variable override, else its own default."""
+    ld = m["local_dir"]
+    return Path(os.environ.get(ld["env"]) or Path(ld["default"]).expanduser())
+
+
+def _lock_conflict(m: dict, target: Path) -> str | None:
+    """A reader that keeps its own lock file (HtrQwen, GlmOcr): an existing lock that is not exactly this pin
+    means a model someone already put there. Nothing is overwritten then; the reason is returned."""
+    if not m.get("reader_lock") or not (target / m["reader_lock"]).is_file():
+        return None
+    try:
+        lock = json.loads((target / m["reader_lock"]).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return f"its lock file cannot be read ({type(exc).__name__})"
+    want = {path: meta["sha256"] for path, meta in m["files"].items()}
+    if lock.get("revision") != m["revision"] or lock.get("files") != want:
+        return f"a model at revision {str(lock.get('revision'))[:12]} is already there with its own lock"
+    return None
+
+
 def _place_local_dir(sc, m: dict, cfg: dict, root: Path, say) -> bool:
     """A reader that loads from its own folder (its env-variable override, else its default): every file must be
     pinned and match, or nothing is claimed; the reader's own fetch script then downloads and checks as before."""
-    ld = m["local_dir"]
-    target = Path(os.environ.get(ld["env"]) or Path(ld["default"]).expanduser())
+    target = _local_target(m)
+    if _lock_conflict(m, target):  # never overwrite a model that carries a different lock (the model step says so)
+        return False
     locs = {"locations": [loc for loc in cfg["locations"] if loc["kind"] != "origin"]}
     for path, meta in sorted(m["files"].items()):
         if not meta.get("sha256") or sc.fetch(meta["sha256"], meta.get("bytes"), f"{m['repo_id']}/{path}", target / path,
@@ -970,12 +992,164 @@ def saved_models(rep: Report, part: dict, envs: Path) -> None:
             rep.row("WARN", f"{part['name']} saved copy changed", msg[6:].strip())
 
     placed = [m["repo_id"] for m in hf
-              if sc.place_hf_snapshot(m["repo_id"], m["revision"], m["files"], hf_hub_cache(), cfg, root, say=say)]
+              if sc.place_hf_snapshot(m["repo_id"], m["revision"], m["files"], hf_hub_cache(), cfg, root, say=say,
+                                      ref=hf_ref(m))]
     for m in every:  # readers that load from their own folder (im2latex): each pinned file straight into that folder
         if m.get("local_dir"):
             placed += [m["repo_id"]] if _place_local_dir(sc, m, cfg, root, say) else []
     rep.row("INFO", f"{part['name']} saved models", f"{len(placed)} of {len(every)} Hugging Face models placed from a saved copy"
             + (f": {', '.join(placed)}" if placed else " (the rest download from the original site, hash-pinned where pinned)"))
+
+
+def hf_ref(m: dict) -> str:
+    """The name the reader's code asks the cache for: a tag ("tag v2.3.0") by its name, else main."""
+    ref = str(m.get("revision_ref") or "")
+    return ref.split(None, 1)[1] if ref.startswith("tag ") else "main"
+
+
+def hf_url(repo_id: str, revision: str, path: str) -> str:
+    return f"https://huggingface.co/{repo_id}/resolve/{revision}/{path}"
+
+
+MINERU_MODELS_ENV = "CONCLAVE_MINERU_MODELS_DIR"
+MINERU_CONFIG_ENV = "MINERU_TOOLS_CONFIG_JSON"
+
+
+def _mineru_pipeline_dir() -> tuple[str, Path | None, Path]:
+    """Where the MinerU reader looks, in its own order (bundle_inspector._read_mineru_models_pipeline_dir):
+    CONCLAVE_MINERU_MODELS_DIR, then MINERU_TOOLS_CONFIG_JSON, then ~/mineru.json. Returns (source, dir, config)."""
+    cfg = Path(os.environ.get(MINERU_CONFIG_ENV) or Path.home() / "mineru.json")
+    if os.environ.get(MINERU_MODELS_ENV):
+        return MINERU_MODELS_ENV, Path(os.environ[MINERU_MODELS_ENV]), cfg
+    if not cfg.is_file():
+        return str(cfg), None, cfg
+    try:
+        pipeline = (json.loads(cfg.read_text(encoding="utf-8")).get("models-dir") or {}).get("pipeline")
+    except (OSError, ValueError, AttributeError):
+        pipeline = None
+    return str(cfg), Path(pipeline) if pipeline else None, cfg
+
+
+def _same_dir(a: Path, b: Path) -> bool:
+    return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+
+
+def _mineru_config(snapshot: Path, envs: Path, log: Path) -> tuple[str, str]:
+    """The MinerU reader finds its models only through its config, so a placed snapshot is not enough (reviewer 3,
+    #86). A config naming another folder is never changed (HOLD). With no config, MinerU's own models_download
+    writes it, run with the Hugging Face cache offline so it can only resolve the pinned snapshot just placed;
+    the result is read back and must name that snapshot. Returns (PASS | HOLD | FAIL, reason)."""
+    src, pdir, cfg = _mineru_pipeline_dir()
+    if pdir is not None:
+        if _same_dir(pdir, snapshot):
+            return "PASS", f"the reader's models-dir.pipeline ({src}) names the pinned snapshot"
+        return "HOLD", (f"the reader's models-dir.pipeline ({src}) names {pdir}, not the pinned snapshot {snapshot}; "
+                        "left untouched (point it at the pinned snapshot, or move that config aside, to use the pin)")
+    if cfg.is_file():
+        return "HOLD", f"{cfg} exists without a models-dir.pipeline entry; left untouched"
+    cli = env_python(envs / "_mineru_cli")
+    e = dict(os.environ, MINERU_MODEL_SOURCE="huggingface", HF_HUB_OFFLINE="1")
+    rc = run([cli, "-m", "mineru.cli.models_download", "-s", "huggingface", "-m", "pipeline"], log, env=e)
+    src, pdir, cfg = _mineru_pipeline_dir()
+    if rc == 0 and pdir is not None and _same_dir(pdir, snapshot):
+        return "PASS", f"MinerU wrote {cfg} (offline) and its models-dir.pipeline names the pinned snapshot"
+    return "FAIL", (f"the reader's config {cfg} was not written with the pinned snapshot "
+                    f"(models_download exit {rc}; models-dir.pipeline = {pdir}); the MinerU reader would not find it (see {log})")
+
+
+def _package_dir(py: Path, pd: dict, log: Path) -> Path | None:
+    """A folder inside an installed package of the reader's environment, found without importing the package."""
+    code = "import importlib.util,sys;s=importlib.util.find_spec(sys.argv[1]);print(s.submodule_search_locations[0])"
+    r = subprocess.run([str(py), "-I", "-c", code, pd["package"]], capture_output=True, text=True, check=False)
+    with log.open("a", encoding="utf-8") as fh:
+        fh.write(r.stdout + r.stderr)
+    if r.returncode != 0 or not r.stdout.strip():
+        return None
+    return Path(r.stdout.strip().splitlines()[-1]) / pd["sub"]
+
+
+def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, log: Path) -> None:
+    """HR 13/14: every Hugging Face model of this reader in models_pinned.json, at its pinned revision, each file
+    hash-checked. Saved copies first, then the original site at the pinned commit; a file whose bytes do not
+    match is never used. A reader with its own lock file gets that lock written in its own format, then its own
+    fetch script re-checks every file (offline: it only verifies a matching lock)."""
+    label = f"{part['name']} model"
+    reader = json.loads((HERE / "models_pinned.json").read_text(encoding="utf-8")).get("readers", {}).get(part["name"])
+    every = [m for m in (reader or {}).get("models", {}).values() if m.get("source") != "reference"]
+    for m in every:  # a model this step cannot fetch yet (modelscope, a CDN not measured) is a FAIL, never skipped
+        if m.get("source") not in ("huggingface", "github_release"):
+            rep.row("FAIL", label, f"{', '.join(sorted(m.get('files') or {})[:2]) or m.get('source')}...: from "
+                    f"{m.get('source')}, {m.get('not_placed_reason') or m.get('unmeasured_reason') or 'not measured yet'}; not installed")
+    hf = [m for m in every if m.get("source") in ("huggingface", "github_release")]
+    if not every:
+        rep.row("FAIL", label, f"no model pinned for {part['name']} in models_pinned.json")
+        return
+    sc = _saved_copies()
+    cfg = sc.load_config()  # every location, the original site last
+    root = INSTALL_ROOT.get("root") or envs.parent
+    for m in hf:
+        what = f"{m['repo_id']}@{m['revision'][:7]}" if m.get("repo_id") else ", ".join(sorted(m.get("files") or {}))
+        files = m.get("files") or {}
+        unpinned = [p for p, meta in files.items() if not meta.get("sha256")]
+        if not files or unpinned:
+            rep.row("FAIL", label, f"{what}: {len(unpinned) or 'no'} file(s) without a pinned sha256; not installed")
+            continue
+        if m.get("local_dir"):
+            target = _local_target(m)
+            clash = _lock_conflict(m, target)
+            if clash:
+                rep.row("HOLD", label, f"{what}: {clash} at {target}; left untouched (move it aside to install the pinned one)")
+                continue
+        elif m.get("package_dir"):  # inside the reader's own environment (pix2tex reads model/checkpoints there)
+            target = _package_dir(py, m["package_dir"], log)
+            if target is None:
+                rep.row("FAIL", label, f"{what}: package {m['package_dir']['package']} not found in the environment (see {log})")
+                continue
+        else:
+            repo_dir = hf_hub_cache() / ("models--" + m["repo_id"].replace("/", "--"))
+            target = repo_dir / "snapshots" / m["revision"]
+        came: dict[str, int] = {}
+        bad = []
+        with log.open("a", encoding="utf-8") as fh:
+            for path, meta in sorted(files.items()):
+                src = sc.fetch(meta["sha256"], meta.get("bytes"), f"{m.get('repo_id', part['name'])}/{path}", target / path,
+                               cfg, root, origin_url=meta.get("url") or hf_url(m["repo_id"], m["revision"], path),
+                               say=lambda msg: _saved_say(msg, fh))
+                if src is None:
+                    bad.append(path)
+                else:
+                    came[src] = came.get(src, 0) + 1
+        if bad:
+            rep.row("FAIL", label, f"{what}: {len(bad)} of {len(files)} files not found with the pinned sha256 "
+                    f"(first: {bad[0]}; see {log})")
+            continue
+        if not m.get("local_dir") and not m.get("package_dir"):  # the standard cache: the ref the reader asks for
+            (repo_dir / "refs").mkdir(parents=True, exist_ok=True)  # (main, or a tag such as v2.3.0) names the pin
+            (repo_dir / "refs" / hf_ref(m)).write_text(m["revision"], encoding="utf-8")
+        where = ", ".join(f"{n} from {k}" for k, n in sorted(came.items()))
+        if m.get("reader_lock"):
+            lock = target / m["reader_lock"]
+            if not lock.is_file():
+                lock.write_text(json.dumps({"repo": m["repo_id"], "revision": m["revision"],
+                                            "files": {p: meta["sha256"] for p, meta in sorted(files.items())}}, indent=2),
+                                encoding="utf-8")
+            script = spoke / m.get("reader_check", "scripts/fetch_model.py")
+            rc = run([py, script], log, cwd=spoke)
+            last = (log.read_text(encoding="utf-8", errors="replace").strip().splitlines() or [""])[-1].strip()
+            if rc != 0 or last != "PASS":
+                rep.row("FAIL", label, f"{what}: files match the pin, but the reader's own check did not pass (see {log})")
+                continue
+            rep.row("PASS", label, f"{what}: {len(files)} files hash-checked ({where}); the reader's own lock check passed")
+        else:
+            if m.get("mineru_config"):
+                cfg_state, cfg_why = _mineru_config(target, envs, log)
+                if cfg_state != "PASS":
+                    rep.row(cfg_state, label, f"{what}: files match the pin, but {cfg_why}")
+                    continue
+                where += f"; {cfg_why}"
+            note = "" if m.get("local_dir") or m.get("package_dir") or m.get("pinned_in_code") else \
+                "; the reader's code does not name this revision yet (Conclave follow-up), so this pin holds offline"
+            rep.row("PASS", label, f"{what}: {len(files)} files hash-checked ({where}) at {target}{note}")
 
 
 def models(rep: Report, part: dict, src: Path, repo: Path, envs: Path, py: Path, log: Path) -> None:
@@ -987,6 +1161,8 @@ def models(rep: Report, part: dict, src: Path, repo: Path, envs: Path, py: Path,
         spoke = repo / part["roots"][0].split("[")[0]
         if step == "unpinned":
             rep.row("FAIL", label, f"{m['what']}: no pinned revision and hash in the project yet, so it is not installed")
+        elif step == "pinned_models":
+            pinned_models(rep, part, spoke, envs, py, log)
         elif step == "htrlens_models":
             rc = run([py, "-I", HERE / "htrlens_models.py"], log)
             rep.row("PASS" if rc == 0 else "FAIL", label, "Kraken + TrOCR fetched, hash-checked, load offline" if rc == 0 else f"see {log}")

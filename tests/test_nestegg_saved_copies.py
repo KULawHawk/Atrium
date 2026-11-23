@@ -143,7 +143,12 @@ def test_measured_small_files_are_pinned_with_their_second_check() -> None:
                 pinned.append(node)
             assert node.get("unmeasured_reason", "").find("small non-LFS") < 0  # every small HF file now has a pin
             stack.extend(v for v in node.values() if isinstance(v, dict))
-    assert len(pinned) == 130 and all(len(p["sha256"]) == 64 and "git blob oid" in p["sha256_source"] for p in pinned)
+    assert all(len(p["sha256"]) == 64 for p in pinned)
+    blob = [p for p in pinned if "git blob oid" in p["sha256_source"]]  # the small HF files, checked by git blob oid
+    other = [p for p in pinned if p not in blob]  # files measured by download, each with an independent second check
+    assert len(blob) == 130
+    assert len(other) == 16  # pix2tex (2), RapidOCR (10), PP-Structure (4): each names its second check
+    assert all("checked a second way" in p["sha256_source"] or "only second check" in p["sha256_source"] for p in other)
 
 
 def test_release_build_lists_every_locked_package_and_pinned_model() -> None:

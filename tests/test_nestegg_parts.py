@@ -28,7 +28,11 @@ def test_every_part_is_complete() -> None:
         assert p.get("torch") in (None, *PARTS["torch"].keys()), p
         for m in p.get("models", []):
             assert m["step"] in {"unpinned", "htrlens_models", "spoke_script", "docling_download",
-                                 "mineru_download", "spacy_model"}, m
+                                 "mineru_download", "spacy_model", "pinned_models"}, m
+            if m["step"] == "pinned_models":  # every such reader has its files pinned in models_pinned.json
+                man = json.loads((NESTEGG / "models_pinned.json").read_text(encoding="utf-8"))["readers"][p["name"]]
+                assert all(meta.get("sha256") for mm in man["models"].values()
+                           if mm.get("source") in ("huggingface", "github_release") for meta in mm["files"].values()), p
 
 
 def test_report_items_are_carried() -> None:
@@ -1322,7 +1326,7 @@ def test_reader_envs_script_failure_is_a_fail_row(tmp_path: Path, monkeypatch, c
     assert rep.fails == 1 and "already set to C:/other.json" in capsys.readouterr().out
 
 
-def test_workbench_reader_envs_writes_only_blank_and_puts_back_off_when_the_probe_fails(tmp_path: Path, monkeypatch) -> None:
+def test_workbench_reader_envs_writes_only_blank_and_puts_back_off_when_the_probe_fails(tmp_path: Path, monkeypatch, capsys) -> None:
     """The Workbench side of the go-live switch, against stand-ins for the Workbench settings API."""
     import importlib.util
     import subprocess
@@ -1356,3 +1360,231 @@ def test_workbench_reader_envs_writes_only_blank_and_puts_back_off_when_the_prob
     store.clear()
     monkeypatch.setattr(w.subprocess, "run", lambda cmd, **k: subprocess.CompletedProcess(cmd, 2, "", "boom\n"))
     assert w.reader_envs(str(rec), "py") == 1 and store["harness.reader_envs"] == ""  # put back off
+    store["harness.reader_envs"] = str(rec)  # an earlier install left it on, and now the probe fails
+    assert w.reader_envs(str(rec), "py") == 1 and store["harness.reader_envs"] == str(rec)
+    assert "STILL ON" in capsys.readouterr().out  # never left on quietly
+
+
+def test_reader_envs_left_off_when_the_harness_environment_is_not_built(tmp_path: Path, monkeypatch, capsys) -> None:
+    """The fourth leg of the gate: with a PASS reader and a passed Run button, a missing harness env still leaves it off."""
+    m = _mod()
+    envs, parts = _wb_envs(tmp_path, m)
+    m.env_python(envs / "harness_adapters").unlink()
+    rec = _reader_record(envs)
+    calls = []
+    monkeypatch.setattr(m.subprocess, "run", lambda cmd, **k: calls.append(cmd))
+    rep = m.Report()
+    m.RUN_BUTTON["workbench"] = True
+    m.turn_on_reader_envs(rep, rec, envs, parts, False)
+    m.RUN_BUTTON.clear()
+    out = capsys.readouterr().out
+    assert calls == [] and rep.passes == 0 and "LEFT OFF (the harness_adapters environment is not built)" in out
+
+
+def _pinned_setup(tmp_path: Path, monkeypatch, models: dict) -> tuple:
+    """A fake models_pinned.json next to the real saved_copies.py, with a home copy and the original site."""
+    import shutil
+    m = _mod()
+    here = tmp_path / "nestegg"
+    here.mkdir(parents=True)
+    shutil.copy(NESTEGG / "saved_copies.py", here / "saved_copies.py")
+    (here / "saved_copies.json").write_text(json.dumps({"max_part_bytes": 2_000_000_000, "locations": [
+        {"name": "home copy", "kind": "folder", "path": "{install_root}/saved"},
+        {"name": "original site", "kind": "origin"}]}), encoding="utf-8")
+    (here / "models_pinned.json").write_text(json.dumps({"readers": {"Rdr": {"models": models}}}), encoding="utf-8")
+    monkeypatch.setattr(m, "HERE", here)
+    m.INSTALL_ROOT["root"] = tmp_path / "root"
+    envs = tmp_path / "root" / "envs"
+    envs.mkdir(parents=True)
+    spoke = tmp_path / "spoke"
+    (spoke / "scripts").mkdir(parents=True)
+    return m, envs, spoke, envs / "rdr.txt"
+
+
+def _file_pin(tmp_path: Path, name: str, body: bytes) -> dict:
+    import hashlib
+    src = tmp_path / "origin" / name
+    src.parent.mkdir(parents=True, exist_ok=True)
+    src.write_bytes(body)
+    return {"bytes": len(body), "sha256": hashlib.sha256(body).hexdigest(), "url": src.as_uri()}
+
+
+def test_pinned_models_writes_the_readers_lock_and_runs_its_own_check(tmp_path: Path, monkeypatch, capsys) -> None:
+    """HR 13/14: a lock-file reader (HtrQwen, GlmOcr) gets every pinned file, its lock in its own format, then
+    its own fetch script re-checks it. A file from a saved copy and one from the original site both count."""
+    target = tmp_path / "home" / "qwen"
+    monkeypatch.setenv("FAKE_MODEL_DIR", str(target))
+    files = {"config.json": _file_pin(tmp_path, "config.json", b"{}"),
+             "model.safetensors": _file_pin(tmp_path, "model.safetensors", b"weights")}
+    model = {"source": "huggingface", "repo_id": "org/qwen", "revision": "a" * 40, "files": files,
+             "local_dir": {"env": "FAKE_MODEL_DIR", "default": "~/unused"}, "reader_lock": "conclave_model_lock.json"}
+    m, envs, spoke, log = _pinned_setup(tmp_path, monkeypatch, {"q": model})
+    sc = m._saved_copies()
+    sc.split(tmp_path / "origin" / "config.json", tmp_path / "root" / "saved", 2_000_000_000)  # one in the home copy
+    (spoke / "scripts" / "fetch_model.py").write_text("print('PASS')\n", encoding="utf-8")
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    out = capsys.readouterr().out
+    assert rep.passes == 1 and rep.fails == 0, out
+    assert "home copy" in out and "original site" in out and "own lock check passed" in out
+    lock = json.loads((target / "conclave_model_lock.json").read_text(encoding="utf-8"))
+    assert lock == {"repo": "org/qwen", "revision": "a" * 40, "files": {p: f["sha256"] for p, f in files.items()}}
+    assert (target / "model.safetensors").read_bytes() == b"weights"
+    (spoke / "scripts" / "fetch_model.py").write_text("print('FAIL')\n", encoding="utf-8")  # the reader's check decides too
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.fails == 1 and rep.passes == 0
+
+
+def test_pinned_models_never_overwrites_a_model_with_another_lock(tmp_path: Path, monkeypatch, capsys) -> None:
+    target = tmp_path / "home" / "glm"
+    target.mkdir(parents=True)
+    monkeypatch.setenv("FAKE_MODEL_DIR", str(target))
+    (target / "model.safetensors").write_bytes(b"theirs")
+    (target / "conclave_model_lock.json").write_text(json.dumps({"revision": "b" * 40, "files": {}}), encoding="utf-8")
+    model = {"source": "huggingface", "repo_id": "org/glm", "revision": "a" * 40,
+             "files": {"model.safetensors": _file_pin(tmp_path, "model.safetensors", b"ours")},
+             "local_dir": {"env": "FAKE_MODEL_DIR", "default": "~/unused"}, "reader_lock": "conclave_model_lock.json"}
+    m, envs, spoke, log = _pinned_setup(tmp_path, monkeypatch, {"g": model})
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.holds == 1 and rep.passes == 0 and "left untouched" in capsys.readouterr().out
+    assert (target / "model.safetensors").read_bytes() == b"theirs"  # nothing of theirs changed
+    assert not m._place_local_dir(m._saved_copies(), model, m._saved_copies().load_config(), tmp_path / "root", print)
+
+
+def test_pinned_models_wrong_bytes_are_a_fail_and_the_cache_names_the_pin(tmp_path: Path, monkeypatch, capsys) -> None:
+    """The standard cache: refs/main names the pinned commit. Bytes that do not match the pin are never used."""
+    cache = tmp_path / "hub"
+    monkeypatch.setenv("HF_HUB_CACHE", str(cache))
+    good = _file_pin(tmp_path, "config.json", b"{}")
+    model = {"source": "huggingface", "repo_id": "org/tt", "revision": "c" * 40, "pinned_in_code": False,
+             "files": {"config.json": good}}
+    m, envs, spoke, log = _pinned_setup(tmp_path, monkeypatch, {"t": model})
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    out = capsys.readouterr().out
+    assert rep.passes == 1 and "does not name this revision" in out, out
+    repo = cache / "models--org--tt"
+    assert (repo / "refs" / "main").read_text(encoding="utf-8") == "c" * 40
+    assert (repo / "snapshots" / ("c" * 40) / "config.json").read_bytes() == b"{}"
+    bad = dict(model, revision="d" * 40, files={"config.json": dict(good, sha256="0" * 64)})
+    m, envs, spoke, log = _pinned_setup(tmp_path / "2", monkeypatch, {"t": bad})
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.fails == 1 and rep.passes == 0
+    assert not (repo / "snapshots" / ("d" * 40) / "config.json").exists()
+
+
+def test_pinned_models_names_a_tag_ref_and_fails_an_unmeasured_source(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Docling asks the cache for tag v2.3.0, so that ref names the pin; RapidOCR (modelscope, not measured yet)
+    is a FAIL row, never skipped quietly while the rest of the reader passes."""
+    cache = tmp_path / "hub"
+    monkeypatch.setenv("HF_HUB_CACHE", str(cache))
+    models = {"tf": {"source": "huggingface", "repo_id": "org/tf", "revision": "e" * 40, "revision_ref": "tag v2.3.0",
+                     "files": {"config.json": _file_pin(tmp_path, "config.json", b"{}")}},
+              "ocr": {"source": "modelscope", "files": {"det.onnx": {"sha256": None}},
+                      "unmeasured_reason": "modelscope is blocked here"}}
+    m, envs, spoke, log = _pinned_setup(tmp_path, monkeypatch, models)
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    out = capsys.readouterr().out
+    assert rep.passes == 1 and rep.fails == 1 and "modelscope is blocked here" in out, out
+    assert (cache / "models--org--tf" / "refs" / "v2.3.0").read_text(encoding="utf-8") == "e" * 40
+    assert not (cache / "models--org--tf" / "refs" / "main").exists()
+    assert m.hf_ref({"revision_ref": "main"}) == m.hf_ref({"revision_ref": "commit"}) == "main"
+
+
+def _mineru_model(tmp_path: Path) -> dict:
+    return {"source": "huggingface", "repo_id": "org/pek", "revision": "f" * 40, "mineru_config": True,
+            "files": {"models/x.pt": _file_pin(tmp_path, "x.pt", b"pek")}}
+
+
+def _fake_mineru_cli(envs: Path, body: str) -> None:
+    """A _mineru_cli venv whose `python -m mineru.cli.models_download` runs `body` (a stand-in for MinerU's own)."""
+    import subprocess
+    import sysconfig
+    env = envs / "_mineru_cli"
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(env)], check=True)
+    site = env / Path(sysconfig.get_path("purelib")).relative_to(sysconfig.get_path("data"))
+    (site / "mineru" / "cli").mkdir(parents=True)
+    for d in (site / "mineru", site / "mineru" / "cli"):
+        (d / "__init__.py").write_text("", encoding="utf-8")
+    (site / "mineru" / "cli" / "models_download.py").write_text(body, encoding="utf-8")
+
+
+def test_mineru_is_not_pass_until_its_reader_config_names_the_pinned_snapshot(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Reviewer 3 (#86): the MinerU reader finds models only via CONCLAVE_MINERU_MODELS_DIR, MINERU_TOOLS_CONFIG_JSON
+    or ~/mineru.json. Placed files alone are never PASS; another folder there is HOLD, untouched."""
+    cache = tmp_path / "hub"
+    monkeypatch.setenv("HF_HUB_CACHE", str(cache))
+    monkeypatch.delenv("CONCLAVE_MINERU_MODELS_DIR", raising=False)
+    cfg = tmp_path / "home" / "mineru.json"
+    monkeypatch.setenv("MINERU_TOOLS_CONFIG_JSON", str(cfg))
+    snap = cache / "models--org--pek" / "snapshots" / ("f" * 40)
+    m, envs, spoke, log = _pinned_setup(tmp_path, monkeypatch, {"p": _mineru_model(tmp_path)})
+    rep = m.Report()  # no _mineru_cli env and no config: FAIL, never PASS
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.fails == 1 and rep.passes == 0 and "would not find it" in capsys.readouterr().out
+    _fake_mineru_cli(envs, "import json, os, sys\n"
+                     "assert os.environ['HF_HUB_OFFLINE'] == '1'  # it can only resolve what is already in the cache\n"
+                     f"open(os.environ['MINERU_TOOLS_CONFIG_JSON'], 'w').write(json.dumps({{'models-dir': {{'pipeline': {str(snap)!r}}}}}))\n")
+    cfg.parent.mkdir(parents=True)
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    out = capsys.readouterr().out
+    assert rep.passes == 1 and "names the pinned snapshot" in out, out
+    other = {"models-dir": {"pipeline": str(tmp_path / "older")}, "keep": 1}
+    cfg.write_text(json.dumps(other), encoding="utf-8")
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.holds == 1 and rep.passes == 0 and json.loads(cfg.read_text(encoding="utf-8")) == other
+    monkeypatch.setenv("CONCLAVE_MINERU_MODELS_DIR", str(snap))  # the reader's own override wins, as in the reader
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.passes == 1 and "CONCLAVE_MINERU_MODELS_DIR" in capsys.readouterr().out
+
+
+def test_pinned_models_guards_reviewer_3_listed(tmp_path: Path, monkeypatch, capsys) -> None:
+    """The five legs reviewer 3's mutations showed untested (#86)."""
+    target = tmp_path / "home" / "q"
+    monkeypatch.setenv("FAKE_MODEL_DIR", str(target))
+    files = {"w.bin": _file_pin(tmp_path, "w.bin", b"w")}
+    lockm = {"source": "huggingface", "repo_id": "org/q", "revision": "a" * 40, "files": files,
+             "local_dir": {"env": "FAKE_MODEL_DIR", "default": "~/x"}, "reader_lock": "conclave_model_lock.json"}
+    # 1. same revision, different files in the lock: still someone else's model, HOLD
+    target.mkdir(parents=True)
+    (target / "conclave_model_lock.json").write_text(json.dumps({"revision": "a" * 40, "files": {"w.bin": "0" * 64}}))
+    m, envs, spoke, log = _pinned_setup(tmp_path, monkeypatch, {"q": lockm})
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.holds == 1 and rep.passes == 0
+    # 5. a lock that already matches the pin is never rewritten (its exact bytes stay)
+    mine = json.dumps({"repo": "org/q", "revision": "a" * 40, "files": {"w.bin": files["w.bin"]["sha256"]}})
+    (target / "conclave_model_lock.json").write_text(mine, encoding="utf-8")
+    (spoke / "scripts" / "fetch_model.py").write_text("print('PASS')\n", encoding="utf-8")
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.passes == 1 and (target / "conclave_model_lock.json").read_text(encoding="utf-8") == mine
+    # 2. a file without a pinned sha256: FAIL, nothing installed
+    m, envs, spoke, log = _pinned_setup(tmp_path / "2", monkeypatch, {"n": dict(lockm, files={"w.bin": {"bytes": 1}})})
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.fails == 1 and "without a pinned sha256" in capsys.readouterr().out
+    # 3. the package folder: a failing lookup is a FAIL, not a folder
+    pkg = {"source": "github_release", "files": files, "package_dir": {"package": "no_such_pkg_xyz", "sub": "c"}}
+    m, envs, spoke, log = _pinned_setup(tmp_path / "3", monkeypatch, {"k": pkg})
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.fails == 1 and "not found in the environment" in capsys.readouterr().out
+    import subprocess
+    real = m.subprocess.run
+    monkeypatch.setattr(m.subprocess, "run", lambda cmd, **k: subprocess.CompletedProcess(cmd, 1, str(tmp_path / "pk") + "\n", "boom")
+                        if "find_spec" in " ".join(map(str, cmd)) else real(cmd, **k))
+    assert m._package_dir(Path(sys.executable), pkg["package_dir"], log) is None  # a path printed by a failed run is not trusted
+    monkeypatch.setattr(m.subprocess, "run", real)
+    # 4. a reader with nothing pinned: FAIL
+    m, envs, spoke, log = _pinned_setup(tmp_path / "4", monkeypatch, {})
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.fails == 1 and "no model pinned" in capsys.readouterr().out

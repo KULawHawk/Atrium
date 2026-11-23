@@ -236,6 +236,10 @@
               "sha256": "2ebd87c4a8e59ae8f2d96872d2c0888b1823ea8c0d88eb10c0709cbaacd34b1e",
               "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
+          },
+          "local_dir": {
+            "env": "CONCLAVE_NOUGAT_MODEL_DIR",
+            "default": "~/.cache/conclave/nougat-base"
           }
         }
       }
@@ -689,7 +693,12 @@
               "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
               "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
-          }
+          },
+          "local_dir": {
+            "env": "CONCLAVE_HTRQWEN_MODEL_DIR",
+            "default": "~/.conclave/models/htrqwen/Qwen3-VL-8B-Instruct"
+          },
+          "reader_lock": "conclave_model_lock.json"
         }
       }
     },
@@ -767,7 +776,12 @@
               "sha256": "95abd49942be9cdc6e2653528aed7b4c1cb9e180828421d3488ab38da3057016",
               "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
-          }
+          },
+          "local_dir": {
+            "env": "CONCLAVE_GLMOCR_MODEL_DIR",
+            "default": "~/.conclave/models/glmocr/GLM-OCR"
+          },
+          "reader_lock": "conclave_model_lock.json"
         }
       }
     },
@@ -1000,65 +1014,66 @@
           "files": {
             "onnx/PP-OCRv4/det/ch_PP-OCRv4_det_mobile.onnx": {
               "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.8.0/onnx/PP-OCRv4/det/ch_PP-OCRv4_det_mobile.onnx",
-              "bytes": null,
-              "sha256": null,
-              "unmeasured_reason": "www.modelscope.cn is blocked from this sandbox; the proof build's models/docling total (1,301,198,269 B) minus the four HF repos above leaves ~97.85 MB for these files together"
+              "bytes": 4745517,
+              "sha256": "d2a7720d45a54257208b1e13e36a8479894cb74155a5efe29462512d42f49da9",
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py), two downloads agree; checked a second way: ModelScope's own file listing for RapidAI/RapidOCR at v3.8.0 gives the same sha256"
             },
             "onnx/PP-OCRv4/cls/ch_ppocr_mobile_v2.0_cls_mobile.onnx": {
               "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.8.0/onnx/PP-OCRv4/cls/ch_ppocr_mobile_v2.0_cls_mobile.onnx",
-              "bytes": null,
-              "sha256": null,
-              "unmeasured_reason": "www.modelscope.cn is blocked from this sandbox; the proof build's models/docling total (1,301,198,269 B) minus the four HF repos above leaves ~97.85 MB for these files together"
+              "bytes": 585532,
+              "sha256": "e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py), two downloads agree; checked a second way: ModelScope's own file listing for RapidAI/RapidOCR at v3.8.0 gives the same sha256"
             },
             "onnx/PP-OCRv4/rec/ch_PP-OCRv4_rec_mobile.onnx": {
               "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.8.0/onnx/PP-OCRv4/rec/ch_PP-OCRv4_rec_mobile.onnx",
-              "bytes": null,
-              "sha256": null,
-              "unmeasured_reason": "www.modelscope.cn is blocked from this sandbox; the proof build's models/docling total (1,301,198,269 B) minus the four HF repos above leaves ~97.85 MB for these files together"
+              "bytes": 10857958,
+              "sha256": "48fc40f24f6d2a207a2b1091d3437eb3cc3eb6b676dc3ef9c37384005483683b",
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py), two downloads agree; checked a second way: ModelScope's own file listing for RapidAI/RapidOCR at v3.8.0 gives the same sha256"
             },
             "torch/PP-OCRv4/det/ch_PP-OCRv4_det_mobile.pth": {
               "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.8.0/torch/PP-OCRv4/det/ch_PP-OCRv4_det_mobile.pth",
-              "bytes": null,
-              "sha256": null,
-              "unmeasured_reason": "www.modelscope.cn is blocked from this sandbox; the proof build's models/docling total (1,301,198,269 B) minus the four HF repos above leaves ~97.85 MB for these files together"
+              "bytes": 14506268,
+              "sha256": "89622c3f3e76b3ac7d10d9434c1f117a7471dba44723885cc04b49932a740d5b",
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py), two downloads agree; checked a second way: ModelScope's own file listing for RapidAI/RapidOCR at v3.8.0 gives the same sha256"
             },
             "torch/PP-OCRv4/cls/ch_ptocr_mobile_v2.0_cls_mobile.pth": {
               "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.8.0/torch/PP-OCRv4/cls/ch_ptocr_mobile_v2.0_cls_mobile.pth",
-              "bytes": null,
-              "sha256": null,
-              "unmeasured_reason": "www.modelscope.cn is blocked from this sandbox; the proof build's models/docling total (1,301,198,269 B) minus the four HF repos above leaves ~97.85 MB for these files together"
+              "bytes": 588638,
+              "sha256": "bfe13860824b3365c0c7f7ccfcddc8ff11645c60051739ff18bc9913f60c98e1",
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py), two downloads agree; checked a second way: ModelScope's own file listing for RapidAI/RapidOCR at v3.8.0 gives the same sha256"
             },
             "torch/PP-OCRv4/rec/ch_PP-OCRv4_rec_mobile.pth": {
               "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.8.0/torch/PP-OCRv4/rec/ch_PP-OCRv4_rec_mobile.pth",
-              "bytes": null,
-              "sha256": null,
-              "unmeasured_reason": "www.modelscope.cn is blocked from this sandbox; the proof build's models/docling total (1,301,198,269 B) minus the four HF repos above leaves ~97.85 MB for these files together"
+              "bytes": 26919769,
+              "sha256": "cb4265bb4300a2487e93e82ccfa1924bf9cd1194c1a202ab17a96b4911c27e0b",
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py), two downloads agree; checked a second way: ModelScope's own file listing for RapidAI/RapidOCR at v3.8.0 gives the same sha256"
             },
             "onnx/PP-OCRv4/det/en_PP-OCRv3_det_mobile.onnx": {
               "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.8.0/onnx/PP-OCRv4/det/en_PP-OCRv3_det_mobile.onnx",
-              "bytes": null,
-              "sha256": null,
-              "unmeasured_reason": "www.modelscope.cn is blocked from this sandbox; the proof build's models/docling total (1,301,198,269 B) minus the four HF repos above leaves ~97.85 MB for these files together"
+              "bytes": 2421707,
+              "sha256": "ea07c15d38ac40cd69da3c493444ec75b44ff23840553ff8ba102c1219ed39c2",
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py), two downloads agree; checked a second way: ModelScope's own file listing for RapidAI/RapidOCR at v3.8.0 gives the same sha256"
             },
             "onnx/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile.onnx": {
               "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.8.0/onnx/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile.onnx",
-              "bytes": null,
-              "sha256": null,
-              "unmeasured_reason": "www.modelscope.cn is blocked from this sandbox; the proof build's models/docling total (1,301,198,269 B) minus the four HF repos above leaves ~97.85 MB for these files together"
+              "bytes": 7653044,
+              "sha256": "e8770c967605983d1570cdf5352041dfb68fa0c21664f49f47b155abd3e0e318",
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py), two downloads agree; checked a second way: ModelScope's own file listing for RapidAI/RapidOCR at v3.8.0 gives the same sha256"
             },
             "torch/PP-OCRv4/det/en_PP-OCRv3_det_mobile.pth": {
               "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.8.0/torch/PP-OCRv4/det/en_PP-OCRv3_det_mobile.pth",
-              "bytes": null,
-              "sha256": null,
-              "unmeasured_reason": "www.modelscope.cn is blocked from this sandbox; the proof build's models/docling total (1,301,198,269 B) minus the four HF repos above leaves ~97.85 MB for these files together"
+              "bytes": 2540826,
+              "sha256": "62aba369c8245f131bb08348a7d9c3135234d5c139ec92b34c8ac7b9ba7c2846",
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py), two downloads agree; checked a second way: ModelScope's own file listing for RapidAI/RapidOCR at v3.8.0 gives the same sha256"
             },
             "torch/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile.pth": {
               "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.8.0/torch/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile.pth",
-              "bytes": null,
-              "sha256": null,
-              "unmeasured_reason": "www.modelscope.cn is blocked from this sandbox; the proof build's models/docling total (1,301,198,269 B) minus the four HF repos above leaves ~97.85 MB for these files together"
+              "bytes": 23761948,
+              "sha256": "f9723c94847de59df9b059faaed041fbb35f014ea973da40290b1e97004e1d4e",
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py), two downloads agree; checked a second way: ModelScope's own file listing for RapidAI/RapidOCR at v3.8.0 gives the same sha256"
             }
-          }
+          },
+          "not_placed_reason": "pinned and saved, but where docling 2.94 reads RapidOCR from when no artifacts folder is passed is not traced yet, so the installer does not place it"
         }
       }
     },
@@ -1247,7 +1262,8 @@
               "sha256": "9830b0c1532620851b6cdcd6bb2f4abed7d84ea70112497cc7d1e86a5885fdc6"
             }
           },
-          "license_note": "no license in the Hub card metadata; the repo README must be checked by hand"
+          "license_note": "no license in the Hub card metadata; the repo README must be checked by hand",
+          "mineru_config": true
         }
       }
     },
@@ -1276,16 +1292,20 @@
           "files": {
             "weights.pth": {
               "url": "https://github.com/lukas-blecher/LaTeX-OCR/releases/download/v0.0.1/weights.pth",
-              "bytes": null,
-              "sha256": null,
-              "unmeasured_reason": "the GitHub API for lukas-blecher/LaTeX-OCR is not reachable from this session (repo not enabled), so the release asset size/digest could not be read"
+              "bytes": 102113875,
+              "sha256": "a63d9141c53d266cb682fb5a8bd83bd5cbe283145e0e78ebdc0f895195a1dfaa",
+              "sha256_source": "measured 11/23/2026 by downloading the v0.0.1 release asset from github.com; checked a second way: the same sha256 is pinned independently by public projects (e.g. ShellTux/nixos-dotfiles pkgs/python/pip2tex/default.nix, found by GitHub code search)"
             },
             "image_resizer.pth": {
               "url": "https://github.com/lukas-blecher/LaTeX-OCR/releases/download/v0.0.1/image_resizer.pth",
-              "bytes": null,
-              "sha256": null,
-              "unmeasured_reason": "the GitHub API for lukas-blecher/LaTeX-OCR is not reachable from this session (repo not enabled), so the release asset size/digest could not be read"
+              "bytes": 19441973,
+              "sha256": "1c3820659985ad142b526490bb25c23d977176ac2073591b3bddada692718458",
+              "sha256_source": "measured 11/23/2026 by downloading the v0.0.1 release asset from github.com; checked a second way: the same sha256 is pinned independently by public projects (e.g. ShellTux/nixos-dotfiles pkgs/python/pip2tex/default.nix, found by GitHub code search)"
             }
+          },
+          "package_dir": {
+            "package": "pix2tex",
+            "sub": "model/checkpoints"
           }
         },
         "im2latex": {
@@ -1404,27 +1424,27 @@
           "files": {
             "en_PP-OCRv3_det_infer.tar": {
               "url": "https://paddleocr.bj.bcebos.com/PP-OCRv3/english/en_PP-OCRv3_det_infer.tar",
-              "bytes": null,
-              "sha256": null,
-              "unmeasured_reason": "paddleocr.bj.bcebos.com is blocked from this sandbox, and the proof build's ~/.cache/paddle was 0 bytes (never fetched)"
+              "bytes": 4003840,
+              "sha256": "e740eb522521827cc83da3ba33e1c70ccfd9b3cf7d9a24a420ce4ca5ebb8794f",
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py): two separate downloads gave the same bytes and sha256; PaddleOCR publishes no hash for these files, so that is the only second check"
             },
             "en_PP-OCRv4_rec_infer.tar": {
               "url": "https://paddleocr.bj.bcebos.com/PP-OCRv4/english/en_PP-OCRv4_rec_infer.tar",
-              "bytes": null,
-              "sha256": null,
-              "unmeasured_reason": "paddleocr.bj.bcebos.com is blocked from this sandbox, and the proof build's ~/.cache/paddle was 0 bytes (never fetched)"
+              "bytes": 10240000,
+              "sha256": "d5ae153a6fbdacd5776543d3194c4258154ed6f83467d55de1cc345f7dd20322",
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py): two separate downloads gave the same bytes and sha256; PaddleOCR publishes no hash for these files, so that is the only second check"
             },
             "en_ppstructure_mobile_v2.0_SLANet_infer.tar": {
               "url": "https://paddleocr.bj.bcebos.com/ppstructure/models/slanet/en_ppstructure_mobile_v2.0_SLANet_infer.tar",
-              "bytes": null,
-              "sha256": null,
-              "unmeasured_reason": "paddleocr.bj.bcebos.com is blocked from this sandbox, and the proof build's ~/.cache/paddle was 0 bytes (never fetched)"
+              "bytes": 10193408,
+              "sha256": "1f4aac346f441062f0f340d5cb8385d047d75bb6020928840dcf99f46e53a889",
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py): two separate downloads gave the same bytes and sha256; PaddleOCR publishes no hash for these files, so that is the only second check"
             },
             "picodet_lcnet_x1_0_fgd_layout_infer.tar": {
               "url": "https://paddleocr.bj.bcebos.com/ppstructure/models/layout/picodet_lcnet_x1_0_fgd_layout_infer.tar",
-              "bytes": null,
-              "sha256": null,
-              "unmeasured_reason": "paddleocr.bj.bcebos.com is blocked from this sandbox, and the proof build's ~/.cache/paddle was 0 bytes (never fetched)"
+              "bytes": 10096640,
+              "sha256": "67d67b15c3806b469e47fca89268bba7cd6e61c47f6fb005431a2772a40c8d72",
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py): two separate downloads gave the same bytes and sha256; PaddleOCR publishes no hash for these files, so that is the only second check"
             }
           }
         }

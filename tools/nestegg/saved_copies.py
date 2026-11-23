@@ -216,11 +216,11 @@ def fetch(sha: str, size: int | None, name: str, dest: Path, cfg: dict, install_
 
 
 def place_hf_snapshot(repo_id: str, revision: str, files: dict, hub_cache: Path, cfg: dict, install_root: Path,
-                      say=print) -> Path | None:
+                      say=print, ref: str = "main") -> Path | None:
     """Put a pinned Hugging Face snapshot into the standard hub cache from the saved copies (no origin here: the
     caller's own downloader is the original-site step). Files are written as plain files under
     snapshots/<revision>/ (as huggingface_hub itself does on Windows without symlinks), and refs/main points at the
-    pinned revision. Returns the snapshot folder only when EVERY file matched its pin, else None."""
+    pinned revision (or `ref`, the tag the reader asks for). Returns the snapshot folder only when EVERY file matched its pin, else None."""
     locs = {"locations": [loc for loc in cfg["locations"] if loc["kind"] != "origin"]}
     if not usable(locs["locations"], install_root):
         return None
@@ -233,7 +233,7 @@ def place_hf_snapshot(repo_id: str, revision: str, files: dict, hub_cache: Path,
         if fetch(meta["sha256"], meta.get("bytes"), f"{repo_id}/{path}", snap / path, locs, install_root, say=say) is None:
             return None
     (repo_dir / "refs").mkdir(parents=True, exist_ok=True)
-    (repo_dir / "refs" / "main").write_text(revision, encoding="utf-8")
+    (repo_dir / "refs" / ref).write_text(revision, encoding="utf-8")  # the name the reader asks for (main or a tag)
     return snap
 
 
