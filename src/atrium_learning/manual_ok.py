@@ -14,6 +14,10 @@ OK recorded with those words is refused unless the list is byte-for-byte ``MANUA
 after folding case, spacing and punctuation, so a re-typed copy of them cannot slip past either. A manual first
 used later needs its own OK with its own recorded words. Every OK line carries ``list_sha256`` so the record
 shows which list it came from (review of Atrium #65).
+
+What this check is and is not: it stops *accidental* reuse of Decision 41's words for a later manual. It does
+not prove that any recorded words are Jake's. Someone who rewords his answer can still record an OK on another
+list; the record then shows those reworded words and the list's sha256, so the mismatch is visible on review.
 """
 
 from __future__ import annotations
