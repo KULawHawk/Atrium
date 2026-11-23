@@ -110,6 +110,10 @@ func startOpt(t *testing.T, o opt) (uint32, string) {
 		if err := setDefault(tok, fmt.Sprintf("D:P(A;;GA;;;SY)(A;;0x%X;;;%s)(A;;0x%X;;;OW)", o.defMask, user, o.defMask)); err != nil {
 			t.Fatal(err)
 		}
+		tml := windows.Tokenmandatorylabel{Label: windows.SIDAndAttributes{Sid: mustSid(t, testChildLevel), Attributes: windows.SE_GROUP_INTEGRITY}}
+		if err := windows.SetTokenInformation(tok, windows.TokenIntegrityLevel, (*byte)(unsafe.Pointer(&tml)), tml.Size()); err != nil {
+			t.Fatal(err)
+		}
 	}
 	saP, saT, err := lockdownAttrs(user)
 	if err != nil {
@@ -388,6 +392,27 @@ func TestNarrowerDefaults(t *testing.T) {
 	} {
 		code, _ := startOpt(t, opt{procSD: true, threadSD: true, defMask: c.mask, argv: argv})
 		t.Logf("NARROW %s (0x%X): cmd.exe exit 0x%X", c.name, c.mask, code)
+	}
+	// Full rights minus only the dangerous thread rights (reviewer 3's question):
+	// does cmd.exe start, does a Go program start, and are those rights then
+	// refused on the child's later threads to a same-level program?
+	for _, c := range []struct {
+		name string
+		mask uint32
+	}{
+		{"all but suspend + set-context (0x1FFFED)", 0x1FFFED},
+		{"all but every T-16 thread right (0x13FCC5)", 0x13FCC5},
+	} {
+		code, _ := startOpt(t, opt{procSD: true, threadSD: true, defMask: c.mask, argv: argv})
+		var opened, total int
+		goCode, _ := startOpt(t, opt{procSD: true, threadSD: true, defMask: c.mask, probe: func(pid uint32) {
+			ids := threadIDs(pid)
+			total = len(ids)
+			asLevel(t, testChildLevel, func() {
+				opened = openCount(ids, windows.THREAD_SUSPEND_RESUME|windows.THREAD_SET_CONTEXT)
+			})
+		}})
+		t.Logf("NARROW %s: cmd.exe exit 0x%X; Go exit 0x%X; same level opened %d/%d Go threads for suspend+set-context", c.name, code, goCode, opened, total)
 	}
 }
 
