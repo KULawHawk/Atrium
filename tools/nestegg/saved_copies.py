@@ -253,6 +253,11 @@ def pull(to: Path, cfg: dict, only: set[str] | None = None, say=print) -> int:
         say(f"SAVED-COPIES: FAIL 1 (no {INDEX} in release {rel['repo']}@{rel['tag']})")
         return 1
     idx = json.loads(idx_file.read_text(encoding="utf-8"))
+    need = sum(e["bytes"] for s, e in idx.items() if not only or s in only)
+    free = shutil.disk_usage(to).free
+    if free < need + 2 * 1024**3:
+        say(f"SAVED-COPIES: FAIL 1 (needs {need / 1e9:.1f} GB plus 2 GB spare on {to}; {free / 1e9:.1f} GB free)")
+        return 1
     fails = 0
     for sha, entry in sorted(idx.items()):
         if only and sha not in only:

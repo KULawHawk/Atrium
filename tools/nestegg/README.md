@@ -14,6 +14,9 @@ Plan: project share `installer/PLAN_installer_2026-11-20.md`.
 | `Install-Prereqs.ps1` | 1, programs | See below. Ends `NESTEGG-PREREQS: PASS` or `FAIL n`. |
 | `install_parts.py` + `parts.json` + `locks/` | 2, parts | Builds every one of the 38 parts in its own environment from exact versions with hashes, then proves it is complete. Ends `NESTEGG-PARTS: PASS`, `HOLD n` or `FAIL n`. |
 | `htrlens_models.py` + `htrlens_models.json` | 2, HtrLens model files | Fetches the Kraken and TrOCR weights, checks every pinned sha256, loads them offline. Ends `NESTEGG-HTRLENS: PASS` or `FAIL n`. |
+| `saved_copies.py` + `saved_copies.json` | 2, saved copies | Decision 30 A (Jake 11/23). Every package and model file is looked for in this order: the home copy `<InstallRoot>\saved`, then the private saved-copy release, then the original site. Each file is hash-checked whichever copy it came from. Files are stored under their sha256, in parts under 2 GiB. A home-network disk can be added as one more folder entry. `check <folder>` re-hashes a copy. |
+| `Pull Saved Copies.cmd` | home copy | Double-click: fills `%USERPROFILE%\AdAstra\saved` from the private release, checking free disk first and hash-checking every piece. Uses your own `gh` sign-in. Ends `SAVED-COPIES: PASS` or `FAIL n`. |
+| `build_saved_release.py` + `release/build-saved-copy.yml` | release build | Runs only in the private saved-copies repository (Atrium is public). It downloads each pinned file, refuses a wrong hash, uploads it in parts, and keeps only one file on disk at a time. It can resume after a stop. |
 
 Still to come: release download of the five repos (I2 = C), core start-up, Settings switches, shortcuts and inventory, the doctor.
 
