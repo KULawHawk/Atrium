@@ -14,6 +14,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/kulawhawk/atrium/tools/phonerunner/internal/pccheck"
 )
 
 // The child half: busy goroutines (so the runtime preempts threads), a few
@@ -54,6 +56,12 @@ func startLocked(t *testing.T) (uint32, string) {
 	return startOpt(t, opt{procSD: true, threadSD: true, launchDefault: true})
 }
 
+// The runner's own token is already High, so the tests run the child at Medium
+// (lowering needs no privilege) and play the attacker one step lower, at Low:
+// the same one-step gap as High session part vs Medium agents on the PC.
+const testChildLevel = "S-1-16-8192"
+const lowIL = "S-1-16-4096"
+
 // opt turns each part of the lock-down on or off (the diagnostics below).
 type opt struct {
 	procSD, threadSD bool
@@ -81,7 +89,11 @@ func startOpt(t *testing.T, o opt) (uint32, string) {
 	user := tu.User.Sid.String()
 	switch {
 	case o.launchDefault:
-		if err := applyLockdown(tok, user); err != nil {
+		if err := setDefault(tok, defaultDACL(user)); err != nil {
+			t.Fatal(err)
+		}
+		tml := windows.Tokenmandatorylabel{Label: windows.SIDAndAttributes{Sid: mustSid(t, testChildLevel), Attributes: windows.SE_GROUP_INTEGRITY}}
+		if err := windows.SetTokenInformation(tok, windows.TokenIntegrityLevel, (*byte)(unsafe.Pointer(&tml)), tml.Size()); err != nil {
 			t.Fatal(err)
 		}
 	case o.defMask != 0:
@@ -157,6 +169,10 @@ func setDefault(tok windows.Token, sddl string) error {
 // code injection needs), as this test's own token at the given integrity level
 // ("" = unchanged). It returns how many threads opened out of how many exist.
 func threadAccess(t *testing.T, pid uint32, level string) (opened, total int) {
+	return threadMask(t, pid, level, windows.THREAD_SUSPEND_RESUME|windows.THREAD_SET_CONTEXT)
+}
+
+func threadMask(t *testing.T, pid uint32, level string, mask uint32) (opened, total int) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	if level != "" {
@@ -194,7 +210,7 @@ func threadAccess(t *testing.T, pid uint32, level string) (opened, total int) {
 			continue
 		}
 		total++
-		h, err := windows.OpenThread(windows.THREAD_SUSPEND_RESUME|windows.THREAD_SET_CONTEXT, false, te.ThreadID)
+		h, err := windows.OpenThread(mask, false, te.ThreadID)
 		if err == nil {
 			opened++
 			windows.CloseHandle(h)
@@ -205,6 +221,39 @@ func threadAccess(t *testing.T, pid uint32, level string) (opened, total int) {
 
 const mediumIL = "S-1-16-8192"
 
+// asLevel runs fn on a locked thread impersonating this test's own token
+// lowered to level.
+func asLevel(t *testing.T, level string, fn func()) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	var self, imp windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_DUPLICATE|windows.TOKEN_QUERY, &self); err != nil {
+		t.Fatal(err)
+	}
+	defer self.Close()
+	if err := windows.DuplicateTokenEx(self, windows.TOKEN_ALL_ACCESS, nil, windows.SecurityImpersonation, windows.TokenImpersonation, &imp); err != nil {
+		t.Fatal(err)
+	}
+	defer imp.Close()
+	tml := windows.Tokenmandatorylabel{Label: windows.SIDAndAttributes{Sid: mustSid(t, level), Attributes: windows.SE_GROUP_INTEGRITY}}
+	if err := windows.SetTokenInformation(imp, windows.TokenIntegrityLevel, (*byte)(unsafe.Pointer(&tml)), tml.Size()); err != nil {
+		t.Fatal(err)
+	}
+	if err := windows.SetThreadToken(nil, imp); err != nil {
+		t.Fatal(err)
+	}
+	defer windows.RevertToSelf()
+	fn()
+}
+
+func mustSid(t *testing.T, s string) *windows.SID {
+	sid, err := windows.StringToSid(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sid
+}
+
 // TestGoChildUnderLockdown: a Go program (the session part is one) must run
 // normally under the rights Launch gives it. This is the T-20 desk failure
 // ("session.ended ... pipe closed" every few seconds) reproduced off the PC.
@@ -214,6 +263,101 @@ func TestGoChildUnderLockdown(t *testing.T) {
 		t.Fatalf("child exit %d under the lock-down; its errors:\n%s", code, errs)
 	}
 	fmt.Println("PASS a Go child runs normally under the lock-down")
+}
+
+// TestLockdownBlocksLowerLevel: under the launch rights, a program one integrity
+// level below the child (Jake's agents, on the PC) is refused every right the
+// PC check (phonerunner-check, T-16) requires refused, on the process and on
+// every thread; the same program at the child's own level gets suspend +
+// set-context on its threads (the control: the probe itself works).
+func TestLockdownBlocksLowerLevel(t *testing.T) {
+	var bad []string
+	var threads, sameOpened, sameTotal int
+	code, errs := startOpt(t, opt{procSD: true, threadSD: true, launchDefault: true, probe: func(pid uint32) {
+		asLevel(t, lowIL, func() {
+			for _, d := range pccheck.Dangerous {
+				if h, err := windows.OpenProcess(d.Mask, false, pid); err == nil {
+					windows.CloseHandle(h)
+					bad = append(bad, "process: "+d.Name)
+				}
+			}
+			if h, err := windows.OpenProcess(pccheck.QueryLimited, false, pid); err == nil {
+				windows.CloseHandle(h)
+			} else {
+				bad = append(bad, "process: query-limited was refused (Jake must keep it)")
+			}
+		})
+		for _, d := range pccheck.DangerousThread {
+			var opened, total int
+			asLevel(t, lowIL, func() { opened, total = threadMaskNoImp(pid, d.Mask) })
+			threads = total
+			if opened > 0 {
+				bad = append(bad, fmt.Sprintf("thread: %s on %d of %d threads", d.Name, opened, total))
+			}
+		}
+		asLevel(t, testChildLevel, func() {
+			sameOpened, sameTotal = threadMaskNoImp(pid, windows.THREAD_SUSPEND_RESUME|windows.THREAD_SET_CONTEXT)
+		})
+	}})
+	if code != 0 {
+		t.Fatalf("child exit %d; its errors:\n%s", code, errs)
+	}
+	t.Logf("child threads %d; same level opened %d/%d for suspend+set-context", threads, sameOpened, sameTotal)
+	if threads == 0 || sameTotal == 0 {
+		t.Fatal("probe saw no threads; it proves nothing")
+	}
+	if sameOpened == 0 {
+		t.Fatal("control failed: even a same-level program opened no thread, so the probe cannot tell")
+	}
+	if len(bad) > 0 {
+		t.Fatalf("FAIL a lower-level program got:\n  %s", strings.Join(bad, "\n  "))
+	}
+	fmt.Println("PASS a lower-level program is refused every dangerous right on the child")
+}
+
+// threadMaskNoImp opens every thread of pid with mask as the calling thread is.
+func threadMaskNoImp(pid, mask uint32) (opened, total int) {
+	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
+	if err != nil {
+		return 0, 0
+	}
+	defer windows.CloseHandle(snap)
+	var te windows.ThreadEntry32
+	te.Size = uint32(unsafe.Sizeof(te))
+	for err := windows.Thread32First(snap, &te); err == nil; err = windows.Thread32Next(snap, &te) {
+		if te.OwnerProcessID != pid {
+			continue
+		}
+		total++
+		if h, err := windows.OpenThread(mask, false, te.ThreadID); err == nil {
+			opened++
+			windows.CloseHandle(h)
+		}
+	}
+	return opened, total
+}
+
+// TestSetLevelRaisesOnly: setLevel never lowers a token.
+func TestSetLevelRaisesOnly(t *testing.T) {
+	var self, tok windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_DUPLICATE|windows.TOKEN_QUERY, &self); err != nil {
+		t.Fatal(err)
+	}
+	defer self.Close()
+	if err := windows.DuplicateTokenEx(self, windows.TOKEN_ALL_ACCESS, nil, windows.SecurityImpersonation, windows.TokenPrimary, &tok); err != nil {
+		t.Fatal(err)
+	}
+	defer tok.Close()
+	before, err := levelOf(tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := setLevel(tok, lowIL); err != nil {
+		t.Fatal(err)
+	}
+	if after, _ := levelOf(tok); after != before {
+		t.Fatalf("level changed %d -> %d; setLevel must only raise", before, after)
+	}
 }
 
 // TestLockdownParts reports which part of the lock-down a Go child cannot run

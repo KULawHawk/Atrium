@@ -92,13 +92,21 @@ func threadSDDL(userSID string) string {
 }
 
 // defaultDACL is set as the session token's default DACL, so every object the
-// session part creates later (Go runtime threads above all) gets SYSTEM full
-// control and Jake only read-permissions + wait: no suspend, context, or
-// impersonation rights on any later thread (reviewer point on #53). OWNER RIGHTS
-// is listed so the owner's implicit permission-change right is removed too.
+// session part creates later (Go runtime threads above all) gets it. Jake must
+// have full rights here: with anything less a Go program cannot start at all
+// (STATUS_DLL_INIT_FAILED, 0xC0000142 — the T-20 desk failure, reproduced on a
+// Windows runner by TestLockdownParts). Protection of those later threads from
+// Jake's other programs comes from the integrity level instead (ChildLevel):
+// TestInjectionProbe shows a lower-level program opens none of them.
 func defaultDACL(userSID string) string {
-	return fmt.Sprintf("D:P(A;;GA;;;SY)(A;;0x120000;;;%s)(A;;0x120000;;;OW)", userSID)
+	return fmt.Sprintf("D:P(A;;GA;;;SY)(A;;GA;;;%s)(A;;GA;;;OW)", userSID)
 }
+
+// ChildLevel is the integrity level the session part and items run at: High,
+// one step above Jake's ordinary programs and agents (Medium under UAC), so they
+// cannot suspend, read or rewrite its threads or memory. The service, as SYSTEM,
+// may raise a copy of Jake's token to it; Jake's own token is never changed.
+const ChildLevel = "S-1-16-12288"
 
 // tokenDefaultDACL is TOKEN_DEFAULT_DACL.
 type tokenDefaultDACL struct{ DefaultDacl *windows.ACL }
@@ -131,7 +139,7 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 		return nil, fmt.Errorf("launch: user lookup: %w", err)
 	}
 	userSID := tu.User.Sid.String()
-	if err := applyLockdown(tok, userSID); err != nil {
+	if err := applyLockdown(tok, userSID, ChildLevel); err != nil {
 		return nil, err
 	}
 
@@ -277,8 +285,9 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 }
 
 // applyLockdown sets the token's default rights, which every object the child
-// creates later (its threads above all) receives.
-func applyLockdown(tok windows.Token, userSID string) error {
+// creates later (its threads above all) receives, and raises its integrity level
+// to level when it is lower (never lowers it).
+func applyLockdown(tok windows.Token, userSID, level string) error {
 	sdD, err := windows.SecurityDescriptorFromString(defaultDACL(userSID))
 	if err != nil {
 		return fmt.Errorf("launch: default rights: %w", err)
@@ -291,8 +300,42 @@ func applyLockdown(tok windows.Token, userSID string) error {
 	if err := windows.SetTokenInformation(tok, windows.TokenDefaultDacl, (*byte)(unsafe.Pointer(&tdd)), uint32(unsafe.Sizeof(tdd))); err != nil {
 		return fmt.Errorf("launch: default rights: %w", err)
 	}
+	return setLevel(tok, level)
+}
+
+// setLevel raises tok's integrity level to level (a S-1-16-N string) if lower.
+func setLevel(tok windows.Token, level string) error {
+	want, err := windows.StringToSid(level)
+	if err != nil {
+		return fmt.Errorf("launch: integrity level: %w", err)
+	}
+	if cur, err := levelOf(tok); err == nil && cur >= rid(want) {
+		return nil
+	}
+	tml := windows.Tokenmandatorylabel{Label: windows.SIDAndAttributes{Sid: want, Attributes: windows.SE_GROUP_INTEGRITY}}
+	if err := windows.SetTokenInformation(tok, windows.TokenIntegrityLevel, (*byte)(unsafe.Pointer(&tml)), tml.Size()); err != nil {
+		return fmt.Errorf("launch: integrity level: %w", err)
+	}
+	if cur, err := levelOf(tok); err != nil || cur < rid(want) {
+		return fmt.Errorf("launch: integrity level did not take (now %d, want %d)", cur, rid(want))
+	}
 	return nil
 }
+
+func levelOf(tok windows.Token) (uint32, error) {
+	var n uint32
+	windows.GetTokenInformation(tok, windows.TokenIntegrityLevel, nil, 0, &n)
+	if n == 0 {
+		return 0, errors.New("no integrity level")
+	}
+	buf := make([]byte, n)
+	if err := windows.GetTokenInformation(tok, windows.TokenIntegrityLevel, &buf[0], n, &n); err != nil {
+		return 0, err
+	}
+	return rid((*windows.Tokenmandatorylabel)(unsafe.Pointer(&buf[0])).Label.Sid), nil
+}
+
+func rid(s *windows.SID) uint32 { return s.SubAuthority(uint32(s.SubAuthorityCount()) - 1) }
 
 // lockdownAttrs are the process and first-thread rights of a launched child.
 func lockdownAttrs(userSID string) (*windows.SecurityAttributes, *windows.SecurityAttributes, error) {
