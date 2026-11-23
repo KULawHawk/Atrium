@@ -119,7 +119,12 @@ def test_failed_gh_call_says_why_and_masks_anything_secret(monkeypatch) -> None:
     for line, secret in (("Authorization: Basic dXNlcjpwYXNzd29yZA==", "dXNlcjpwYXNzd29yZA=="),
                          ("proxy-authorization: Bearer abc.def.ghi", "abc.def.ghi"),
                          ("fatal: https://x-access-token:s3cr3tvalue@github.com/o/r", "s3cr3tvalue"),
-                         ("token=sometokenvalue more words", "sometokenvalue")):
+                         ("token=sometokenvalue more words", "sometokenvalue"),
+                         ("GH_TOKEN=ghvaluexyz gh: not logged in", "ghvaluexyz"),
+                         ("env ACCESS_TOKEN=accessvalue123", "accessvalue123"),
+                         ("config api_key=apikeyvalue456", "apikeyvalue456"),
+                         ("X-Api-Key: headerkey789", "headerkey789"),
+                         ("DB_PASSWD=pw000 failed", "pw000")):
         out = m._gh_error(line)
         assert secret not in out and "[masked]" in out, out
     assert "HTTP 422" in m._gh_error("HTTP 422: Validation Failed")  # ordinary errors pass through untouched
