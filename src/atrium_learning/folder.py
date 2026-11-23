@@ -22,7 +22,7 @@ import re
 import shutil
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -144,18 +144,26 @@ def manual_oks(root: Path) -> set[str]:
     return {m for m, ev in state.items() if ev == "ok"}
 
 
-def record_manual_ok(root: Path, manual: str, by: str, ok: bool = True) -> list[str]:
+def record_manual_ok(
+    root: Path, manual: str, by: str, ok: bool = True, words: str | None = None, revisit: str | None = None
+) -> list[str]:
     """Record Jake's OK for one manual, or withdraw it. Withdrawing moves that manual's items aside in every aim.
 
-    Returns the sha256 of every item moved aside.
+    ``words`` is his answer verbatim (one line) and ``revisit`` an ISO date to look again; both are kept on the
+    OK line so the record shows exactly what he said and when. Returns the sha256 of every item moved aside.
     """
     learning = Path(root) / "learning"
     if not learning.is_dir():
         raise LearningFolderError(f"{learning} does not exist; run the AdAstra installer")
-    _append(
-        learning / MANUAL_OKS,
-        {"manual": _text(manual, "manual"), "event": "ok" if ok else "withdrawn", "at": _now(), "by": _text(by, "by")},
-    )
+    row = {"manual": _text(manual, "manual"), "event": "ok" if ok else "withdrawn", "at": _now(), "by": _text(by, "by")}
+    if words is not None:
+        row["words"] = _text(words, "words")
+    if revisit is not None:
+        try:
+            row["revisit"] = date.fromisoformat(revisit).isoformat()
+        except (TypeError, ValueError):
+            raise LearningFolderError(f"revisit {revisit!r} is not a YYYY-MM-DD date") from None
+    _append(learning / MANUAL_OKS, row)
     moved: list[str] = []
     if not ok:
         for aim_dir in sorted(p for p in learning.iterdir() if p.is_dir() and _AIM_NAME.match(p.name)):
