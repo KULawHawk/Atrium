@@ -231,7 +231,11 @@ if ($DryRun) {
   Say "PhoneRunner T-20 dry run (changes nothing) $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
   $tmp = Join-Path $env:TEMP ('phonerunner-t20-dryrun-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
   $dir = Prepare-Programs $tmp
+  # Continue, not Stop, around a program call: in Windows PowerShell 5.1 any stderr text from a
+  # program turns into a stopping error under Stop.
+  $ErrorActionPreference = 'Continue'
   $v = & (Join-Path $dir 'phonerunner-service.exe') version 2>&1
+  $ErrorActionPreference = 'Stop'
   if ($LASTEXITCODE -ne 0 -or "$v" -notlike 'phonerunner-service *') { Fail "phonerunner-service.exe version did not run ($v)" }
   Say "PASS $v"
   $u = Test-AlwaysNotify
@@ -376,11 +380,13 @@ $canary = Join-Path $Root 'private\t20_canary.txt'
 if (-not (Test-Path -LiteralPath $canary)) { [System.IO.File]::WriteAllText($canary, 'T-20 canary (synthetic). If you can read this through the inbox, the hard-link check failed.') }
 New-Item -ItemType HardLink -Path (Join-Path $linkDir 'data.txt') -Target $canary | Out-Null
 Say "PASS staged 3 synthetic items: $id500, $idEnv, $idLink"
+$old = @(Get-ChildItem -LiteralPath (Join-Path $Root 'inbox') -Directory -Filter 't20-*' | Where-Object { $_.Name -notlike "*-$stamp" })
+if ($old.Count -gt 0) { Say "INFO $($old.Count) older T-20 test items are still on the phone page (not deleted). Tap only the ones ending in -$stamp." }
 
 # 9a 500 lines
 try {
   $t = (Get-Date).ToUniversalTime()
-  Ask "On your phone: reload the page. Find '$id500' (T-20 test: print 500 lines), tap Run, and unlock the phone when it asks. This window waits up to 10 minutes."
+  Ask "On your phone: reload the page. Find '$id500' (T-20 test: print 500 lines; it ends in -$stamp, not an older one), tap Run, and unlock the phone when it asks. This window waits up to 10 minutes."
   $e = Wait-For $t { param($e) $e.event -eq 'run.ended' -and $e.item -eq $id500 } 10 "$id500 to finish"
   if ($null -eq $e) { throw "STEP: $id500 did not finish within 10 minutes (look at the phone for a refusal message)" }
   Start-Sleep -Seconds 2
@@ -399,7 +405,7 @@ try {
 $envStarted = $false
 try {
   $t = (Get-Date).ToUniversalTime()
-  Ask "On your phone: tap Run on '$idEnv' (T-20 test: clean environment) and unlock. Wait for this window to say TAP STOP NOW."
+  Ask "On your phone: tap Run on '$idEnv' (T-20 test: clean environment; ends in -$stamp) and unlock. Wait for this window to say TAP STOP NOW."
   $e = Wait-For $t { param($e) $e.event -eq 'run.started' -and $e.item -eq $idEnv } 10 "$idEnv to start"
   if ($null -eq $e) { throw "STEP: $idEnv did not start within 10 minutes" }
   $envStarted = $true
@@ -431,6 +437,11 @@ try {
     $pidText = (@(Read-Shared (Join-Path $wf[-1].FullName 'child.pid')) -join '').Trim()
     if ($pidText -match '^\d+$') { $childId = [int]$pidText }
   }
+  if ($childId -le 0) {
+    # Second source: the item's own "CHILD STARTED <pid>" line.
+    $cl = @(@(Get-OutputLines $idEnv) | Where-Object { $_ -match '^CHILD STARTED (\d+)$' } | Select-Object -Last 1)
+    if ($cl.Count -gt 0 -and $cl[0] -match '^CHILD STARTED (\d+)$') { $childId = [int]$Matches[1] }
+  }
   if ($childId -le 0) { Add-StepFail "${idEnv}: no child process id was written, so Stop is tested on the item alone" }
   elseif (-not (Get-Process -Id $childId -ErrorAction SilentlyContinue)) { Add-StepFail "${idEnv}: its child process ($childId) was not running before Stop"; $childId = 0 }
   $t = (Get-Date).ToUniversalTime()
@@ -456,7 +467,7 @@ try {
 
 # 9c hard link refused
 try {
-  Ask "On your phone: reload, open '$idLink'. It should list a problem for data.txt and Run should be refused. Try tapping Run once. Then press Enter here."
+  Ask "On your phone: reload, open '$idLink' (ends in -$stamp). It should list a problem for data.txt and Run should be refused. Try tapping Run once. Then press Enter here."
   [void](Read-Answer)
   if (@(Get-ChildItem -LiteralPath (Join-Path $Root 'approved') -Directory -Filter "$idLink-*").Count -ne 0) { throw "STEP: an approved copy of $idLink was made: the hard-link check did not stop it" }
   if (@(Get-Events $start | Where-Object { $_.event -eq 'run.started' -and $_.item -eq $idLink }).Count -ne 0) { throw "STEP: $idLink was started" }
