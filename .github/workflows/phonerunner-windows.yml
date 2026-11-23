@@ -1,0 +1,34 @@
+# PhoneRunner's Windows-only tests on a clean Windows machine.
+# NOT a required check. Runs only when tools/phonerunner changes, or by hand.
+# Cost: about $0.10 a run on windows-latest; concurrency cancels stale runs.
+name: phonerunner-windows
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/phonerunner/**"
+      - ".github/workflows/phonerunner-windows.yml"
+
+concurrency:
+  group: phonerunner-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  winsvc:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: tools/phonerunner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/phonerunner/go.mod
+          cache-dependency-path: tools/phonerunner/go.sum
+      - name: Windows-only tests (launch lock-down)
+        run: go test -count=1 -v ./internal/winsvc/

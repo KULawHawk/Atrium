@@ -5,7 +5,9 @@ package winsvc
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -172,6 +174,8 @@ func supervise(ctx context.Context, svc *service.Service, st *store.Store, exe, 
 			_ = st.Append("session.launch_failed", map[string]any{"error": err.Error()})
 		} else {
 			_ = st.Append("session.started", map[string]any{"pid": child.PID})
+			errTail := make(chan string, 1)
+			go func() { errTail <- readTail(child.Err, SessionErrBytes) }()
 			done := make(chan error, 1)
 			go func() { done <- capture.Read(child.Out, func(f capture.Frame) { svc.Ingest(ctx, f) }) }()
 			select {
@@ -182,8 +186,23 @@ func supervise(ctx context.Context, svc *service.Service, st *store.Store, exe, 
 				if err != nil {
 					msg = err.Error()
 				}
-				_ = st.Append("session.ended", map[string]any{"pid": child.PID, "reason": msg})
+				fields := map[string]any{"pid": child.PID, "reason": msg}
+				if code, ok := exitCode(child.Process, 5*time.Second); ok {
+					fields["exit_code"] = code
+					fields["why"] = ExitWhy(code)
+				}
 				child.Stop()
+				select {
+				case t := <-errTail:
+					// The raw error text stays on the PC (private\ is SYSTEM and
+					// Administrators only, never copied off); the log, which is
+					// copied off, gets only the exit code and a fixed reason.
+					if t != "" && keepSessionErrors(st.Root(), t) == nil {
+						fields["errors_in"] = `private\` + SessionErrFile
+					}
+				case <-time.After(5 * time.Second):
+				}
+				_ = st.Append("session.ended", fields)
 				wait = 5 * time.Second
 			}
 			child.Close()
@@ -197,4 +216,62 @@ func supervise(ctx context.Context, svc *service.Service, st *store.Store, exe, 
 			wait *= 2
 		}
 	}
+}
+
+// SessionErrFile holds the session part's last error output, PC-only.
+const SessionErrFile = "session-errors.log"
+
+// keepSessionErrors replaces private\session-errors.log with the latest text.
+func keepSessionErrors(root, text string) error {
+	dir := filepath.Join(root, "private")
+	tmp := filepath.Join(dir, SessionErrFile+".tmp")
+	if err := os.WriteFile(tmp, []byte(time.Now().UTC().Format(time.RFC3339)+"\r\n"+text+"\r\n"), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, filepath.Join(dir, SessionErrFile))
+}
+
+// ExitWhy turns a session part exit code into a fixed phrase for the log (no
+// program output ever reaches the copied-off log).
+func ExitWhy(code uint32) string {
+	switch code {
+	case 0:
+		return "exited normally"
+	case 0xC0000142:
+		return "could not start (Windows refused to load it: STATUS_DLL_INIT_FAILED)"
+	case 0xC0000005:
+		return "crashed (access violation)"
+	case 2:
+		return "stopped with an error (Go runtime exit 2)"
+	case 1:
+		return "stopped with an error (exit 1)"
+	}
+	return "stopped (other exit code)"
+}
+
+// SessionErrBytes is how much of the session part's error output is kept in the
+// PC-only file: the first lines say why it stopped (a Go crash dump is cut).
+const SessionErrBytes = 1500
+
+// readTail returns up to max bytes from the start of r, then reads r to its end so
+// the child never blocks on a full pipe.
+func readTail(r *os.File, max int) string {
+	if r == nil {
+		return ""
+	}
+	b, _ := io.ReadAll(io.LimitReader(r, int64(max)))
+	_, _ = io.Copy(io.Discard, r)
+	return strings.TrimSpace(string(b))
+}
+
+// exitCode waits up to d for the process to end and returns its exit code.
+func exitCode(p windows.Handle, d time.Duration) (uint32, bool) {
+	if ev, err := windows.WaitForSingleObject(p, uint32(d/time.Millisecond)); err != nil || ev != windows.WAIT_OBJECT_0 {
+		return 0, false
+	}
+	var code uint32
+	if err := windows.GetExitCodeProcess(p, &code); err != nil {
+		return 0, false
+	}
+	return code, true
 }
