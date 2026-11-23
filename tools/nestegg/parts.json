@@ -36,7 +36,7 @@
   },
   "parts": [
     {"name": "Docling",        "repo": "Conclave", "roots": ["conclave_lens_docling"],               "python": "3.13", "torch": "default", "gate3": true,
-     "models": [{"step": "docling_download"}]},
+     "models": [{"step": "pinned_models", "what": "Docling layout, TableFormer, figure classifier, CodeFormula + RapidOCR (models_pinned.json)"}]},
     {"name": "TableSurgeon",   "repo": "Conclave", "roots": ["conclave_lens_tablesurgeon"],          "python": "3.13", "torch": "default", "gate3": true,
      "models": [{"step": "pinned_models", "what": "table-transformer detection + structure (models_pinned.json)"}]},
     {"name": "MarkerPdf",      "repo": "Conclave", "roots": ["conclave_lens_markerpdf[gpu]"],        "python": "3.13", "torch": "default", "add": ["six==1.17.0"],
@@ -44,7 +44,7 @@
      "models": [{"step": "unpinned", "what": "surya models (downloaded by marker on first use)"}]},
     {"name": "MinerU",         "repo": "Conclave", "roots": ["conclave_lens_mineru[gpu]"],           "python": "3.13", "torch": "default", "add": ["six==1.17.0"],
      "side_env": {"name": "mineru", "python": "3.12", "packages": ["mineru[core]==3.2.2", "pdftext==0.6.3", "pypdfium2==4.30.0", "six==1.17.0"], "check": ["mineru", "--help"], "engine_file": "conclave_lens_mineru/src/conclave_lens_mineru/engine_requirements.txt"},
-     "models": [{"step": "mineru_download"}]},
+     "models": [{"step": "pinned_models", "what": "PDF-Extract-Kit pipeline subset (models_pinned.json)"}]},
     {"name": "NougatScience",  "repo": "Conclave", "roots": ["conclave_lens_nougat"],                "python": "3.13", "torch": "default",
      "models": [{"step": "pinned_models", "what": "nougat-base (models_pinned.json)"}]},
     {"name": "GotOcrUnified",  "repo": "Conclave", "roots": ["conclave_lens_gotocrunified"],         "python": "3.13", "torch": "default",

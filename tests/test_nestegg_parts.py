@@ -1455,3 +1455,22 @@ def test_pinned_models_wrong_bytes_are_a_fail_and_the_cache_names_the_pin(tmp_pa
     m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
     assert rep.fails == 1 and rep.passes == 0
     assert not (repo / "snapshots" / ("d" * 40) / "config.json").exists()
+
+
+def test_pinned_models_names_a_tag_ref_and_fails_an_unmeasured_source(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Docling asks the cache for tag v2.3.0, so that ref names the pin; RapidOCR (modelscope, not measured yet)
+    is a FAIL row, never skipped quietly while the rest of the reader passes."""
+    cache = tmp_path / "hub"
+    monkeypatch.setenv("HF_HUB_CACHE", str(cache))
+    models = {"tf": {"source": "huggingface", "repo_id": "org/tf", "revision": "e" * 40, "revision_ref": "tag v2.3.0",
+                     "files": {"config.json": _file_pin(tmp_path, "config.json", b"{}")}},
+              "ocr": {"source": "modelscope", "files": {"det.onnx": {"sha256": None}},
+                      "unmeasured_reason": "modelscope is blocked here"}}
+    m, envs, spoke, log = _pinned_setup(tmp_path, monkeypatch, models)
+    rep = m.Report()
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    out = capsys.readouterr().out
+    assert rep.passes == 1 and rep.fails == 1 and "modelscope is blocked here" in out, out
+    assert (cache / "models--org--tf" / "refs" / "v2.3.0").read_text(encoding="utf-8") == "e" * 40
+    assert not (cache / "models--org--tf" / "refs" / "main").exists()
+    assert m.hf_ref({"revision_ref": "main"}) == m.hf_ref({"revision_ref": "commit"}) == "main"

@@ -992,12 +992,19 @@ def saved_models(rep: Report, part: dict, envs: Path) -> None:
             rep.row("WARN", f"{part['name']} saved copy changed", msg[6:].strip())
 
     placed = [m["repo_id"] for m in hf
-              if sc.place_hf_snapshot(m["repo_id"], m["revision"], m["files"], hf_hub_cache(), cfg, root, say=say)]
+              if sc.place_hf_snapshot(m["repo_id"], m["revision"], m["files"], hf_hub_cache(), cfg, root, say=say,
+                                      ref=hf_ref(m))]
     for m in every:  # readers that load from their own folder (im2latex): each pinned file straight into that folder
         if m.get("local_dir"):
             placed += [m["repo_id"]] if _place_local_dir(sc, m, cfg, root, say) else []
     rep.row("INFO", f"{part['name']} saved models", f"{len(placed)} of {len(every)} Hugging Face models placed from a saved copy"
             + (f": {', '.join(placed)}" if placed else " (the rest download from the original site, hash-pinned where pinned)"))
+
+
+def hf_ref(m: dict) -> str:
+    """The name the reader's code asks the cache for: a tag ("tag v2.3.0") by its name, else main."""
+    ref = str(m.get("revision_ref") or "")
+    return ref.split(None, 1)[1] if ref.startswith("tag ") else "main"
 
 
 def hf_url(repo_id: str, revision: str, path: str) -> str:
@@ -1022,8 +1029,13 @@ def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, lo
     fetch script re-checks every file (offline: it only verifies a matching lock)."""
     label = f"{part['name']} model"
     reader = json.loads((HERE / "models_pinned.json").read_text(encoding="utf-8")).get("readers", {}).get(part["name"])
-    hf = [m for m in (reader or {}).get("models", {}).values() if m.get("source") in ("huggingface", "github_release")]
-    if not hf:
+    every = [m for m in (reader or {}).get("models", {}).values() if m.get("source") != "reference"]
+    for m in every:  # a model this step cannot fetch yet (modelscope, a CDN not measured) is a FAIL, never skipped
+        if m.get("source") not in ("huggingface", "github_release"):
+            rep.row("FAIL", label, f"{', '.join(sorted(m.get('files') or {})[:2]) or m.get('source')}...: from "
+                    f"{m.get('source')}, {m.get('unmeasured_reason') or 'not measured yet'}; not installed")
+    hf = [m for m in every if m.get("source") in ("huggingface", "github_release")]
+    if not every:
         rep.row("FAIL", label, f"no model pinned for {part['name']} in models_pinned.json")
         return
     sc = _saved_copies()
@@ -1065,9 +1077,9 @@ def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, lo
             rep.row("FAIL", label, f"{what}: {len(bad)} of {len(files)} files not found with the pinned sha256 "
                     f"(first: {bad[0]}; see {log})")
             continue
-        if not m.get("local_dir") and not m.get("package_dir"):  # the standard cache: refs/main names the pinned commit, as place_hf_snapshot does
-            (repo_dir / "refs").mkdir(parents=True, exist_ok=True)
-            (repo_dir / "refs" / "main").write_text(m["revision"], encoding="utf-8")
+        if not m.get("local_dir") and not m.get("package_dir"):  # the standard cache: the ref the reader asks for
+            (repo_dir / "refs").mkdir(parents=True, exist_ok=True)  # (main, or a tag such as v2.3.0) names the pin
+            (repo_dir / "refs" / hf_ref(m)).write_text(m["revision"], encoding="utf-8")
         where = ", ".join(f"{n} from {k}" for k, n in sorted(came.items()))
         if m.get("reader_lock"):
             lock = target / m["reader_lock"]
