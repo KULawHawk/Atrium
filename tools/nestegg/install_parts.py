@@ -1008,7 +1008,12 @@ def models(rep: Report, part: dict, src: Path, repo: Path, envs: Path, py: Path,
             rep.row("FAIL", label, "PDF-Extract-Kit fetched, but with no pinned revision or hash; not trusted until pinned"
                     if rc == 0 else f"PDF-Extract-Kit download failed (see {log})")
         elif step == "spacy_model":
-            local = saved_model_wheel(m, envs, log)  # Decision 30 A / HR 14: the saved copy first, so no internet is needed
+            try:  # Decision 30 A / HR 14: the saved copy first, so no internet is needed
+                local = saved_model_wheel(m, envs, log)
+            except Exception as exc:  # never silent: a FAIL row. Then the pinned URL on purpose: pip still checks its
+                local = None          # sha256 and Obsidian's content pin decides below, so nothing unchecked goes in
+                rep.row("FAIL", f"{m['name']} saved copy", f"reading the saved copies failed ({type(exc).__name__}: {exc}); "
+                        "trying the original URL, hash-pinned")
             rc = run([py, "-m", "pip", "install", "--no-deps", "--no-index", local], log) if local else \
                 run([py, "-m", "pip", "install", "--no-deps", f"{m['wheel']}#sha256={m['wheel_sha256']}"], log)
             chk = ("import sys, en_core_web_sm; from pathlib import Path; from obsidian.detect import PINNED_MODELS, model_sha256;"

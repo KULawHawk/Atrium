@@ -1209,3 +1209,46 @@ def test_only_a_scratch_test_folder_this_installer_made_is_removed(tmp_path: Pat
     assert not theirs.exists()
     src = (NESTEGG / "install_parts.py").read_text(encoding="utf-8")
     assert src.count("rmtree(envs / f\"{name}-test\"") == 1 and "TEST_ENV_MARK).is_file():" in src
+
+
+def test_own_tests_cleanup_removes_only_a_marked_scratch_folder(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Decision 50 A guard after the test run: an unmarked <Part>-test folder survives; the marked one goes."""
+    m = _mod()
+    envs = tmp_path / "envs"
+    (envs / "_logs").mkdir(parents=True)
+    (tmp_path / "spoke" / "tests").mkdir(parents=True)
+    part = {"name": "Demo", "python": "3.13", "roots": ["spoke"], "test_env": {"list": "x.txt", "roots": []}}
+    monkeypatch.setattr(m, "read_list", lambda p: {})
+    monkeypatch.setattr(m, "run", lambda *a, **k: 0)
+    folder = envs / "Demo-test"
+    for marked in (False, True):
+        folder.mkdir(exist_ok=True)
+        (folder / "keep.txt").write_text("x")
+        if marked:
+            (folder / m.TEST_ENV_MARK).write_text("{}")
+        monkeypatch.setattr(m, "_test_env", lambda *a, **k: Path("py"))  # the test env step itself is covered elsewhere
+        m.own_tests(m.Report(), part, tmp_path, Path("py"), envs, envs / "_logs" / "d.txt", "built", "status")
+        assert folder.exists() is (not marked)
+
+
+def test_saved_copy_error_for_spacy_wheel_is_a_fail_row_then_the_pinned_url(tmp_path: Path, monkeypatch, capsys) -> None:
+    """An exception reading the saved copies is never silent (FAIL row); the install then uses the #sha256= pinned URL."""
+    m = _mod()
+    envs = tmp_path / "envs"
+    envs.mkdir()
+    spec = {"step": "spacy_model", "wheel": "https://example.invalid/x/en_core_web_sm-3.8.0-py3-none-any.whl",
+            "wheel_sha256": "1" * 64, "name": "en_core_web_sm-3.8.0"}
+
+    def boom(*a, **k):
+        raise OSError("disk unreadable")
+
+    calls = []
+    monkeypatch.setattr(m, "saved_models", lambda *a, **k: None)
+    monkeypatch.setattr(m, "saved_model_wheel", boom)
+    monkeypatch.setattr(m, "run", lambda cmd, log, **k: calls.append([str(c) for c in cmd]) or 0)
+    rep = m.Report()
+    m.models(rep, {"name": "obsidian", "roots": ["."], "models": [spec]}, tmp_path, tmp_path, envs, Path("py"), envs / "l.txt")
+    out = capsys.readouterr().out
+    assert "FAIL  en_core_web_sm-3.8.0 saved copy" in out and "OSError: disk unreadable" in out
+    assert rep.fails >= 1
+    assert calls[0][-1] == spec["wheel"] + "#sha256=" + spec["wheel_sha256"] and "--no-index" not in calls[0]
