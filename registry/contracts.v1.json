@@ -30,7 +30,7 @@
     "obsidian": {
       "repo": "KULawHawk/Obsidian",
       "dir": "Obsidian",
-      "pinned_commit": "0a2df97",
+      "pinned_commit": "08ed519",
       "contract_dirs": [
         "src/obsidian/contracts"
       ]
@@ -221,7 +221,7 @@
       "path": "src/obsidian/contracts/obsidian_request.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "sha256": "3a99388fce156be394d755b83f463db24fae1bb59c441fea8b800d5b9d2ceb38"
+      "sha256": "3760405b90b433b2d3e1139c0a91fa5ba43456a1eea2b74b399fa6d75ff8c958"
     },
     {
       "name": "ObsidianResult/1",
@@ -229,7 +229,7 @@
       "path": "src/obsidian/contracts/obsidian_result.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "sha256": "82e4e6d08989dd1669ccf4e8c3e54b5b18e9ef7729253cdf4fab3ba237df5380"
+      "sha256": "d423f5e33a72839d583a07eb0a9a91be36cea93989cf6b3a56266fda278f1f0d"
     },
     {
       "name": "ObsidianSidecar/1",
@@ -237,7 +237,7 @@
       "path": "src/obsidian/contracts/obsidian_sidecar.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "sha256": "1a59548aa88de9601afa1d6d5e642d6e0b26cd477e186f12c0dc8f26b1606696"
+      "sha256": "47104519a70acfdde404b32086986949f919246e0d0af637650ca59739387d8f"
     },
     {
       "name": "VaultEntry/1",
@@ -253,7 +253,7 @@
       "path": "src/obsidian/contracts/share_record.v1.schema.json",
       "kind": "json_schema",
       "const_pointer": "/properties/contract/const",
-      "sha256": "a3f8b436b56dffd6a22d83cc8cd9c705f9468b0fb369c37deb7ad5776ae6f364"
+      "sha256": "36f8ed4d7a3401aaf38f84fec693b3e6f8d502eda803a19c30fe5aba400cabf8"
     },
     {
       "name": "KBInput/1",
