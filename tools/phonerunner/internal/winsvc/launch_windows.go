@@ -48,6 +48,11 @@ type Opts struct {
 	StderrToOut bool     // send stderr down the same pipe as stdout
 	Job         bool     // put the child in a kill-on-close job object
 	ErrPipe     bool     // give stderr its own pipe (Child.Err), so a startup failure can be logged
+	// Session marks the session part (the desktop watcher): it runs at High
+	// integrity with full default rights (a Go program cannot start with less).
+	// Everything else (Run button items) stays at Jake's own level with the
+	// read + wait default rights, so a running item cannot touch the watcher.
+	Session bool
 }
 
 // envBlock builds a Windows environment block.
@@ -91,21 +96,32 @@ func threadSDDL(userSID string) string {
 	return fmt.Sprintf("D:P(A;;GA;;;SY)(A;;0x0801;;;%s)(A;;0x0801;;;OW)", userSID)
 }
 
-// defaultDACL is set as the session token's default DACL, so every object the
-// session part creates later (Go runtime threads above all) gets it. Jake must
-// have full rights here: with anything less a Go program cannot start at all
+// sessionDefaultDACL is the session part's token default DACL, which every object
+// it creates later (Go runtime threads above all) gets. Jake must have full
+// rights: with anything less a Go program cannot start at all
 // (STATUS_DLL_INIT_FAILED, 0xC0000142 — the T-20 desk failure, reproduced on a
 // Windows runner by TestLockdownParts). Protection of those later threads from
-// Jake's other programs comes from the integrity level instead (ChildLevel):
-// TestInjectionProbe shows a lower-level program opens none of them.
-func defaultDACL(userSID string) string {
+// Jake's other programs, items included, comes from the integrity level instead
+// (ChildLevel): TestLockdownBlocksLowerLevel shows a lower-level program opens none.
+func sessionDefaultDACL(userSID string) string {
 	return fmt.Sprintf("D:P(A;;GA;;;SY)(A;;GA;;;%s)(A;;GA;;;OW)", userSID)
 }
 
-// ChildLevel is the integrity level the session part and items run at: High,
-// one step above Jake's ordinary programs and agents (Medium under UAC), so they
-// cannot suspend, read or rewrite its threads or memory. The service, as SYSTEM,
-// may raise a copy of Jake's token to it; Jake's own token is never changed.
+// itemDefaultDACL is an item's token default DACL: SYSTEM full control and Jake
+// only read-permissions + wait on everything the item creates later: no suspend,
+// context, or impersonation rights on any later thread (reviewer point on #53).
+// OWNER RIGHTS is listed so the owner's implicit permission-change right is
+// removed too.
+func itemDefaultDACL(userSID string) string {
+	return fmt.Sprintf("D:P(A;;GA;;;SY)(A;;0x120000;;;%s)(A;;0x120000;;;OW)", userSID)
+}
+
+// ChildLevel is the integrity level of the session part only: High, one step
+// above Jake's ordinary programs, agents and Run button items (Medium under UAC),
+// so none of them can suspend, read or rewrite its threads or memory. The
+// service, as SYSTEM, raises a private copy of Jake's token; Jake's own token is
+// never changed. Items are never raised: a High item could drive elevated
+// windows and would run anything it loads from Jake-writable folders at High.
 const ChildLevel = "S-1-16-12288"
 
 // tokenDefaultDACL is TOKEN_DEFAULT_DACL.
@@ -114,7 +130,7 @@ type tokenDefaultDACL struct{ DefaultDacl *windows.ACL }
 // LaunchSession starts exe in the active console session as the signed-in user.
 // Its error output gets its own pipe, so the service can log why it stopped.
 func LaunchSession(exe string, args []string) (*Child, error) {
-	return Launch(exe, args, Opts{ErrPipe: true})
+	return Launch(exe, args, Opts{ErrPipe: true, Session: true})
 }
 
 // Launch is LaunchSession with options (used for approved items).
@@ -139,7 +155,7 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 		return nil, fmt.Errorf("launch: user lookup: %w", err)
 	}
 	userSID := tu.User.Sid.String()
-	if err := applyLockdown(tok, userSID, ChildLevel); err != nil {
+	if err := applyLockdown(tok, userSID, o.Session); err != nil {
 		return nil, err
 	}
 
@@ -285,10 +301,14 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 }
 
 // applyLockdown sets the token's default rights, which every object the child
-// creates later (its threads above all) receives, and raises its integrity level
-// to level when it is lower (never lowers it).
-func applyLockdown(tok windows.Token, userSID, level string) error {
-	sdD, err := windows.SecurityDescriptorFromString(defaultDACL(userSID))
+// creates later (its threads above all) receives; for the session part it also
+// raises the integrity level to ChildLevel (never lowers it).
+func applyLockdown(tok windows.Token, userSID string, session bool) error {
+	sddl := itemDefaultDACL(userSID)
+	if session {
+		sddl = sessionDefaultDACL(userSID)
+	}
+	sdD, err := windows.SecurityDescriptorFromString(sddl)
 	if err != nil {
 		return fmt.Errorf("launch: default rights: %w", err)
 	}
@@ -300,7 +320,10 @@ func applyLockdown(tok windows.Token, userSID, level string) error {
 	if err := windows.SetTokenInformation(tok, windows.TokenDefaultDacl, (*byte)(unsafe.Pointer(&tdd)), uint32(unsafe.Sizeof(tdd))); err != nil {
 		return fmt.Errorf("launch: default rights: %w", err)
 	}
-	return setLevel(tok, level)
+	if !session {
+		return nil
+	}
+	return setLevel(tok, ChildLevel)
 }
 
 // setLevel raises tok's integrity level to level (a S-1-16-N string) if lower.

@@ -189,12 +189,16 @@ func supervise(ctx context.Context, svc *service.Service, st *store.Store, exe, 
 				fields := map[string]any{"pid": child.PID, "reason": msg}
 				if code, ok := exitCode(child.Process, 5*time.Second); ok {
 					fields["exit_code"] = code
+					fields["why"] = ExitWhy(code)
 				}
 				child.Stop()
 				select {
 				case t := <-errTail:
-					if t != "" {
-						fields["errors"] = t // passes the key filter in Append like every logged string
+					// The raw error text stays on the PC (private\ is SYSTEM and
+					// Administrators only, never copied off); the log, which is
+					// copied off, gets only the exit code and a fixed reason.
+					if t != "" && keepSessionErrors(st.Root(), t) == nil {
+						fields["errors_in"] = `private\` + SessionErrFile
 					}
 				case <-time.After(5 * time.Second):
 				}
@@ -214,8 +218,39 @@ func supervise(ctx context.Context, svc *service.Service, st *store.Store, exe, 
 	}
 }
 
-// SessionErrBytes is how much of the session part's error output is kept for the
-// log: the first lines say why it stopped (a Go crash dump that follows is cut).
+// SessionErrFile holds the session part's last error output, PC-only.
+const SessionErrFile = "session-errors.log"
+
+// keepSessionErrors replaces private\session-errors.log with the latest text.
+func keepSessionErrors(root, text string) error {
+	dir := filepath.Join(root, "private")
+	tmp := filepath.Join(dir, SessionErrFile+".tmp")
+	if err := os.WriteFile(tmp, []byte(time.Now().UTC().Format(time.RFC3339)+"\r\n"+text+"\r\n"), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, filepath.Join(dir, SessionErrFile))
+}
+
+// ExitWhy turns a session part exit code into a fixed phrase for the log (no
+// program output ever reaches the copied-off log).
+func ExitWhy(code uint32) string {
+	switch code {
+	case 0:
+		return "exited normally"
+	case 0xC0000142:
+		return "could not start (Windows refused to load it: STATUS_DLL_INIT_FAILED)"
+	case 0xC0000005:
+		return "crashed (access violation)"
+	case 2:
+		return "stopped with an error (Go runtime exit 2)"
+	case 1:
+		return "stopped with an error (exit 1)"
+	}
+	return "stopped (other exit code)"
+}
+
+// SessionErrBytes is how much of the session part's error output is kept in the
+// PC-only file: the first lines say why it stopped (a Go crash dump is cut).
 const SessionErrBytes = 1500
 
 // readTail returns up to max bytes from the start of r, then reads r to its end so

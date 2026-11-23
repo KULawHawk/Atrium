@@ -65,7 +65,9 @@ const lowIL = "S-1-16-4096"
 // opt turns each part of the lock-down on or off (the diagnostics below).
 type opt struct {
 	procSD, threadSD bool
-	launchDefault    bool         // the token default rights exactly as Launch sets them
+	launchDefault    bool         // the session part's default rights + level, as Launch sets them (level: testChildLevel)
+	item             bool         // an item's default rights, as Launch sets them (level unchanged)
+	argv             []string     // run this program instead of the test binary's child half
 	defMask          uint32       // else, if non-zero: default rights giving Jake this mask
 	probe            func(uint32) // called with the child's process id while it runs
 }
@@ -89,11 +91,15 @@ func startOpt(t *testing.T, o opt) (uint32, string) {
 	user := tu.User.Sid.String()
 	switch {
 	case o.launchDefault:
-		if err := setDefault(tok, defaultDACL(user)); err != nil {
+		if err := setDefault(tok, sessionDefaultDACL(user)); err != nil {
 			t.Fatal(err)
 		}
 		tml := windows.Tokenmandatorylabel{Label: windows.SIDAndAttributes{Sid: mustSid(t, testChildLevel), Attributes: windows.SE_GROUP_INTEGRITY}}
 		if err := windows.SetTokenInformation(tok, windows.TokenIntegrityLevel, (*byte)(unsafe.Pointer(&tml)), tml.Size()); err != nil {
+			t.Fatal(err)
+		}
+	case o.item:
+		if err := applyLockdown(tok, user, false); err != nil {
 			t.Fatal(err)
 		}
 	case o.defMask != 0:
@@ -118,10 +124,14 @@ func startOpt(t *testing.T, o opt) (uint32, string) {
 	}
 	windows.SetHandleInformation(er, windows.HANDLE_FLAG_INHERIT, 0)
 	exe, _ := os.Executable()
+	argv := []string{exe}
+	if len(o.argv) > 0 {
+		exe, argv = o.argv[0], o.argv
+	}
 	env := append(os.Environ(), "PHONERUNNER_LOCKDOWN_CHILD=1")
 	si := &windows.StartupInfo{Cb: uint32(unsafe.Sizeof(windows.StartupInfo{})), Flags: windows.STARTF_USESTDHANDLES, StdOutput: ew, StdErr: ew}
 	exe16, _ := windows.UTF16PtrFromString(exe)
-	cmd16, _ := windows.UTF16PtrFromString(windows.ComposeCommandLine([]string{exe}))
+	cmd16, _ := windows.UTF16PtrFromString(windows.ComposeCommandLine(argv))
 	var pi windows.ProcessInformation
 	err = windows.CreateProcessAsUser(tok, exe16, cmd16, saP, saT, true, windows.CREATE_UNICODE_ENVIRONMENT|windows.CREATE_NO_WINDOW, envBlock(env), nil, si, &pi)
 	windows.CloseHandle(ew)
@@ -265,8 +275,9 @@ func TestGoChildUnderLockdown(t *testing.T) {
 	fmt.Println("PASS a Go child runs normally under the lock-down")
 }
 
-// TestLockdownBlocksLowerLevel: under the launch rights, a program one integrity
-// level below the child (Jake's agents, on the PC) is refused every right the
+// TestLockdownBlocksLowerLevel: under the session part's launch rights, a program
+// one integrity level below it (on the PC: Jake's agents and every Run button
+// item, all Medium, against the watcher at High) is refused every right the
 // PC check (phonerunner-check, T-16) requires refused, on the process and on
 // every thread; the same program at the child's own level gets suspend +
 // set-context on its threads (the control: the probe itself works).
@@ -346,6 +357,27 @@ func openCount(ids []uint32, mask uint32) (opened int) {
 	return opened
 }
 
+// TestItemProgramsUnderItemRights: the programs Run button items use start and
+// exit normally under an item's rights (read + wait default rights, Jake's own
+// level). Items keep the old protection; only the session part changes.
+func TestItemProgramsUnderItemRights(t *testing.T) {
+	sys, _ := windows.GetSystemDirectory()
+	for _, argv := range [][]string{
+		{sys + `\cmd.exe`, "/c", "exit 0"},
+		{sys + `\WindowsPowerShell\v1.0\powershell.exe`, "-NoProfile", "-NonInteractive", "-Command", "exit 0"},
+	} {
+		code, errs := startOpt(t, opt{procSD: true, threadSD: true, item: true, argv: argv})
+		t.Logf("ITEM %s: exit %d (0x%X) %s", argv[0], code, code, errs)
+		if code != 0 {
+			t.Errorf("FAIL %s exit 0x%X under item rights", argv[0], code)
+		}
+	}
+	// A Go program as an item is NOT expected to start (same cause as the
+	// watcher); logged so the limit is on record.
+	code, _ := startOpt(t, opt{procSD: true, threadSD: true, item: true})
+	t.Logf("ITEM a Go program: exit 0x%X (a Go item cannot start under item rights)", code)
+}
+
 // TestSetLevelRaisesOnly: setLevel never lowers a token.
 func TestSetLevelRaisesOnly(t *testing.T) {
 	var self, tok windows.Token
@@ -416,4 +448,15 @@ func TestInjectionProbe(t *testing.T) {
 	windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &tok)
 	defer tok.Close()
 	t.Logf("PROBE test runs elevated: %v", tok.IsElevated())
+}
+
+// TestExitWhyFixed: the copied-off log gets only fixed phrases, never program text.
+func TestExitWhyFixed(t *testing.T) {
+	seen := map[string]bool{}
+	for _, c := range []uint32{0, 1, 2, 0xC0000005, 0xC0000142, 3, 0xDEADBEEF} {
+		seen[ExitWhy(c)] = true
+	}
+	if len(seen) != 6 || !seen["stopped (other exit code)"] {
+		t.Fatalf("unexpected phrases: %v", seen)
+	}
 }
