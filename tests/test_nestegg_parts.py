@@ -1588,3 +1588,207 @@ def test_pinned_models_guards_reviewer_3_listed(tmp_path: Path, monkeypatch, cap
     rep = m.Report()
     m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
     assert rep.fails == 1 and "no model pinned" in capsys.readouterr().out
+
+
+def test_mineru_read_back_and_a_config_without_a_pipeline(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Reviewer 3 (#86 follow-up): MinerU's own run that writes another folder, or exits 1, is FAIL (the read-back
+    decides, not the exit code alone); a config that exists without a models-dir.pipeline entry is HOLD, untouched."""
+    cache = tmp_path / "hub"
+    monkeypatch.setenv("HF_HUB_CACHE", str(cache))
+    monkeypatch.delenv("CONCLAVE_MINERU_MODELS_DIR", raising=False)
+    cfg = tmp_path / "home" / "mineru.json"
+    cfg.parent.mkdir(parents=True)
+    monkeypatch.setenv("MINERU_TOOLS_CONFIG_JSON", str(cfg))
+    snap = cache / "models--org--pek" / "snapshots" / ("f" * 40)
+    m, envs, spoke, log = _pinned_setup(tmp_path, monkeypatch, {"p": _mineru_model(tmp_path)})
+    _fake_mineru_cli(envs, "import json, os\n"
+                     f"open(os.environ['MINERU_TOOLS_CONFIG_JSON'], 'w').write(json.dumps({{'models-dir': {{'pipeline': {str(tmp_path / 'elsewhere')!r}}}}}))\n")
+    rep = m.Report()  # exit 0 but the wrong folder: FAIL
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.fails == 1 and rep.passes == 0 and "was not written with the pinned snapshot" in capsys.readouterr().out
+    cfg.unlink()
+    import shutil
+    shutil.rmtree(envs / "_mineru_cli")
+    _fake_mineru_cli(envs, "import json, os, sys\n"
+                     f"open(os.environ['MINERU_TOOLS_CONFIG_JSON'], 'w').write(json.dumps({{'models-dir': {{'pipeline': {str(snap)!r}}}}}))\n"
+                     "sys.exit(1)\n")
+    rep = m.Report()  # the right folder but exit 1: FAIL too
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.fails == 1 and rep.passes == 0 and "exit 1" in capsys.readouterr().out
+    cfg.write_text(json.dumps({"other": 1}), encoding="utf-8")
+    rep = m.Report()  # a config without a pipeline entry: HOLD, its bytes unchanged
+    m.pinned_models(rep, {"name": "Rdr"}, spoke, envs, Path(sys.executable), log)
+    assert rep.holds == 1 and rep.passes == 0 and "without a models-dir.pipeline entry" in capsys.readouterr().out
+    assert json.loads(cfg.read_text(encoding="utf-8")) == {"other": 1}
+
+
+def _capture_env(envs: Path, name: str, script: str) -> None:
+    """A venv with a stand-in conclave_locutus_rulings.wiring (same capture_state rule) and the launcher's exe."""
+    import subprocess
+    import sysconfig
+    env = envs / name
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(env)], check=True)
+    site = env / Path(sysconfig.get_path("purelib")).relative_to(sysconfig.get_path("data"))
+    pkg = site / "conclave_locutus_rulings"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "wiring.py").write_text(
+        "import os\ndef capture_state():\n"
+        "    return 'Locutus capture: ON' if os.environ.get('CONCLAVE_LOCUTUS_KEY_FILE','').strip() "
+        "else 'Locutus capture: OFF (no key)'\n", encoding="utf-8")
+    exe = env / ("Scripts" if sys.platform == "win32" else "bin") / (script + (".exe" if sys.platform == "win32" else ""))
+    exe.write_text("", encoding="utf-8")
+
+
+def test_locutus_capture_key_made_once_never_shown_and_launchers_switch_it_on(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Decision 57 A: a random key in the user profile (outside OneDrive, the install folder and every repo), made
+    only if none exists, never printed; each review launcher sets it for its own window, checked to read ON."""
+    m = _mod()
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    for var in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
+        monkeypatch.delenv(var, raising=False)
+    root = tmp_path / "AdAstra"
+    envs = root / "envs"
+    envs.mkdir(parents=True)
+    _capture_env(envs, "workbench", "conclave-workbench")
+    rep = m.Report()
+    m.locutus_capture(rep, envs, root, dry=False)  # the review console env is not built: a WARN, never a false ON
+    out = capsys.readouterr().out
+    key = m.locutus_key_path()
+    secret = key.read_text(encoding="ascii")
+    assert len(secret) == 64 and int(secret, 16) >= 0 and key.parent.parent.parent == home
+    assert secret not in out and rep.fails == 0, out
+    launcher = (root / "Open Workbench.cmd").read_text(encoding="utf-8")
+    assert f'set "CONCLAVE_LOCUTUS_KEY_FILE={key}"' in launcher and secret not in launcher
+    assert "conclave-workbench" in launcher and not (root / "Open Review Console.cmd").exists()
+    assert "Open Workbench.cmd" in out and "reviewconsole environment not built" in out
+    rep = m.Report()
+    m.locutus_capture(rep, envs, root, dry=False)  # a second run: the key is never overwritten, loudly
+    out = capsys.readouterr().out
+    assert key.read_text(encoding="ascii") == secret and "NOT overwritten" in out
+    assert m.make_locutus_key(key) is False and key.read_text(encoding="ascii") == secret
+
+
+def test_locutus_capture_refuses_a_bad_key_place_and_a_launcher_it_did_not_write(tmp_path: Path, monkeypatch, capsys) -> None:
+    """A failed step leaves capture off and says why; nothing of Jake's is replaced."""
+    m = _mod()
+    root = tmp_path / "AdAstra"
+    envs = root / "envs"
+    envs.mkdir(parents=True)
+    home = tmp_path / "OneDrive - Home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setenv("OneDrive", str(home))
+    rep = m.Report()
+    m.locutus_capture(rep, envs, root, dry=False)
+    assert rep.fails == 1 and "inside OneDrive" in capsys.readouterr().out and not home.exists()
+    monkeypatch.delenv("OneDrive")
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    assert "git repository" in m._key_place_problem(repo / "k" / "key", root)
+    assert "install folder" in m._key_place_problem(root / "keys" / "key", root)
+    assert m._key_place_problem(tmp_path / "plain" / "k" / "key", root) is None
+    mine = root / "Open Workbench.cmd"
+    mine.write_text("@echo off\r\nJake's own launcher\r\n", encoding="utf-8")
+    assert "left untouched" in m._write_launcher(mine, tmp_path / "key", tmp_path / "exe")
+    assert "Jake's own launcher" in mine.read_text(encoding="utf-8")
+    rep = m.Report()
+    m.locutus_capture(rep, envs, root, dry=True)  # a dry run writes nothing
+    assert rep.fails == 0 and not (home / ".adastra_keys").exists()
+
+
+def test_locutus_key_place_follows_a_link_into_onedrive_on_first_install(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Reviewer 3 on #87: on a first install the key folder does not exist yet, and a junction/symlink above it
+    (here ~/.adastra_keys -> OneDrive) must still be followed. FAIL, no key made, nothing created in OneDrive."""
+    m = _mod()
+    home = tmp_path / "home"
+    home.mkdir()
+    od = tmp_path / "OneDrive - Personal"
+    (od / "keys").mkdir(parents=True)
+    (home / ".adastra_keys").symlink_to(od / "keys", target_is_directory=True)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setenv("OneDrive", str(od))
+    root = tmp_path / "AdAstra"
+    envs = root / "envs"
+    envs.mkdir(parents=True)
+    key = m.locutus_key_path()
+    assert not key.parent.exists() and "inside OneDrive" in m._key_place_problem(key, root)
+    rep = m.Report()
+    m.locutus_capture(rep, envs, root, dry=False)
+    assert rep.fails == 1 and rep.passes == 0 and "inside OneDrive" in capsys.readouterr().out
+    assert list((od / "keys").iterdir()) == []
+    monkeypatch.delenv("OneDrive")  # no OneDrive variable set: the folder name alone still refuses
+    assert "looks like a OneDrive folder" in m._key_place_problem(key, root)
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    (home / ".adastra_keys").unlink()
+    (home / ".adastra_keys").symlink_to(repo, target_is_directory=True)
+    assert "git repository" in m._key_place_problem(key, root)
+    (home / ".adastra_keys").unlink()
+    (home / ".adastra_keys").symlink_to(root, target_is_directory=True)
+    assert "install folder" in m._key_place_problem(key, root)
+
+
+def test_locutus_keys_are_random(tmp_path: Path) -> None:
+    """Two keys made apart differ (a fixed key would pass a length-and-hex check)."""
+    m = _mod()
+    a, b = tmp_path / "a" / "k", tmp_path / "b" / "k"
+    assert m.make_locutus_key(a) and m.make_locutus_key(b)
+    ka, kb = a.read_text(encoding="ascii"), b.read_text(encoding="ascii")
+    assert len(ka) == len(kb) == 64 and ka != kb and len(set(ka)) > 4
+
+
+def test_locutus_capture_no_launcher_without_capture_on_or_with_an_empty_key(tmp_path: Path, monkeypatch, capsys) -> None:
+    """A launcher is written only after its environment reads "Locutus capture: ON" with the key; an empty key
+    file is a FAIL with capture off."""
+    m = _mod()
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    for var in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
+        monkeypatch.delenv(var, raising=False)
+    root = tmp_path / "AdAstra"
+    envs = root / "envs"
+    envs.mkdir(parents=True)
+    _capture_env(envs, "workbench", "conclave-workbench")
+    import sysconfig
+    site = envs / "workbench" / Path(sysconfig.get_path("purelib")).relative_to(sysconfig.get_path("data"))
+    (site / "conclave_locutus_rulings" / "wiring.py").write_text(
+        "def capture_state():\n    return 'Locutus capture: OFF (no key)'\n", encoding="utf-8")
+    rep = m.Report()
+    m.locutus_capture(rep, envs, root, dry=False)
+    out = capsys.readouterr().out
+    assert rep.fails == 1 and "did not read capture ON" in out and not (root / "Open Workbench.cmd").exists()
+    m.locutus_key_path().unlink()
+    monkeypatch.setattr(m, "make_locutus_key", lambda k: (k.parent.mkdir(parents=True, exist_ok=True), k.write_text(""))[0] or True)
+    rep = m.Report()
+    m.locutus_capture(rep, envs, root, dry=False)
+    out = capsys.readouterr().out
+    assert rep.fails == 1 and rep.passes == 0 and "empty or not a file" in out
+    assert not (root / "Open Workbench.cmd").exists()
+
+
+def test_locutus_key_place_is_checked_again_after_the_folder_is_made(tmp_path: Path, monkeypatch, capsys) -> None:
+    """If the place changes between the first check and mkdir (a link made in between), the check after mkdir
+    refuses before any key is written."""
+    m = _mod()
+    home = tmp_path / "home"
+    home.mkdir()
+    od = tmp_path / "OneDrive - Personal"
+    (od / "keys").mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setenv("OneDrive", str(od))
+    real, calls = m._key_place_problem, []
+
+    def first_passes_then_link(key, root):
+        calls.append(1)
+        if len(calls) == 1:
+            (home / ".adastra_keys").symlink_to(od / "keys", target_is_directory=True)
+            return None
+        return real(key, root)
+    monkeypatch.setattr(m, "_key_place_problem", first_passes_then_link)
+    root = tmp_path / "AdAstra"
+    (root / "envs").mkdir(parents=True)
+    rep = m.Report()
+    m.locutus_capture(rep, root / "envs", root, dry=False)
+    assert len(calls) == 2 and rep.fails == 1 and "inside OneDrive" in capsys.readouterr().out
+    assert not list(od.rglob("partition_key_v1"))
