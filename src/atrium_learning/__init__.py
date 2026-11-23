@@ -6,6 +6,7 @@ It has no rules of its own about what is safe: each aim hands in its own gate.
 """
 
 from atrium_learning.folder import (
+    ADD_BACK_DAYS,
     AIMS,
     CLASSES,
     HOLD_REASONS,
@@ -13,10 +14,12 @@ from atrium_learning.folder import (
     GateResult,
     LearningFolder,
     LearningFolderError,
+    add_back_warning,
     find_install_root,
 )
 
 __all__ = [
+    "ADD_BACK_DAYS",
     "AIMS",
     "CLASSES",
     "HOLD_REASONS",
@@ -24,5 +27,6 @@ __all__ = [
     "GateResult",
     "LearningFolder",
     "LearningFolderError",
+    "add_back_warning",
     "find_install_root",
 ]
