@@ -786,7 +786,7 @@ def write_reader_envs(envs: Path, entries: list[dict]) -> Path:
     for e in entries:
         keep[e["part"]] = e
     lsum = LOCKS / "SOURCE_SHA256.txt"
-    doc = {"schema": READER_ENVS_SCHEMA, "provisional": "format owned by LensRunner once its reader host lands",
+    doc = {"schema": READER_ENVS_SCHEMA, "provisional": False,  # LensRunner 0.1.0a2 (Conclave #2913) refuses a provisional record
            "locks_sha256": hashlib.sha256(lsum.read_bytes()).hexdigest() if lsum.is_file() else None,
            "readers": [keep[k] for k in sorted(keep)]}
     tmp = out.with_suffix(".tmp")

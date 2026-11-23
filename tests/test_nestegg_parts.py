@@ -592,7 +592,7 @@ def test_reader_record_file_replaces_rebuilt_parts_only(tmp_path, monkeypatch) -
     m.write_reader_envs(tmp_path, [{"part": "A", "status": "PASS"}, {"part": "B", "status": "PASS"}])
     out = m.write_reader_envs(tmp_path, [{"part": "B", "status": "FAIL"}])  # a failed rebuild never keeps its last good entry
     doc = json.loads(out.read_text(encoding="utf-8"))
-    assert doc["schema"] == 1 and {e["part"]: e["status"] for e in doc["readers"]} == {"A": "PASS", "B": "FAIL"}
+    assert doc["schema"] == 1 and doc["provisional"] is False and {e["part"]: e["status"] for e in doc["readers"]} == {"A": "PASS", "B": "FAIL"}
     assert not out.with_suffix(".tmp").exists()
 
 
