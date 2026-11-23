@@ -22,6 +22,7 @@ import (
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/control"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/pccheck"
 	"github.com/kulawhawk/atrium/tools/phonerunner/internal/tslog"
+	"github.com/kulawhawk/atrium/tools/phonerunner/internal/tsprobe"
 )
 
 // ServiceName is the Windows service name (also what the PC guard should protect).
@@ -151,6 +152,11 @@ func Login() error {
 	defer ts.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+	// A network that blocks Tailscale looks like a sign-in that never ends; say so
+	// before Jake is sent to a sign-in that cannot work.
+	if r := tsprobe.Probe(ctx, "", nil, nil); r.Blocked {
+		return errors.New("FAIL login: " + r.Problem)
+	}
 	if _, err := ts.Up(ctx); err != nil {
 		return fmt.Errorf("FAIL login: %w", err)
 	}

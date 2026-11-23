@@ -6,6 +6,9 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -105,10 +108,24 @@ func TestT20DeskSelfTest(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// The service log as the desk script reads it: one start that failed to join
+	// Tailscale, then a restart (seq counts from 1 again) that is listening.
+	old, err := store.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old.Append("tailscale", map[string]any{"msg": "tsnet starting"})
+	old.Append("tailscale.not_up", map[string]any{"error": "tsnet.Up: context canceled"})
 	st, err := store.Open(root)
 	if err != nil {
 		t.Fatal(err)
 	}
+	st.Append("tailscale", map[string]any{"msg": "tsnet starting"})
+	st.Append("service.listening", map[string]any{"url": "https://phonerunner.example.ts.net/", "paired": true})
+	// A stand-in for a network filter: a certificate Windows does not trust.
+	filter := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer filter.Close()
+	_, port, _ := net.SplitHostPort(filter.Listener.Addr().String())
 	sysRoot, _ := windows.GetSystemWindowsDirectory()
 	var ctl *control.Control
 	rn := runner.New(startJobbed, st.Logger(), func(item, line string) { ctl.Keep(item, line) }, time.Now)
@@ -125,7 +142,7 @@ func TestT20DeskSelfTest(t *testing.T) {
 	}
 
 	ps := exec.Command(filepath.Join(sysRoot, `System32\WindowsPowerShell\v1.0\powershell.exe`),
-		"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", desk, "-SelfTestRoot", root)
+		"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", desk, "-SelfTestRoot", root, "-SelfTestTlsPort", port)
 	var psOut bytes.Buffer
 	ps.Stdout, ps.Stderr = &psOut, &psOut
 	if err := ps.Start(); err != nil {
@@ -203,6 +220,10 @@ loop:
 		t.Errorf("the hard-link item was not refused as not runnable: %v", linkRefusal)
 	}
 	for _, want := range []string{
+		"PASS service-up check from the log: up at https://phonerunner.example.ts.net/",
+		"PASS network check: the real controlplane.tailscale.com answered with a genuine certificate",
+		"PASS network check: a stand-in filter certificate is reported as: this network blocks Tailscale:",
+		"PASS which-program check: a service registered or running from another program is caught",
 		"PASS t20-500-", "PASS approved copy made: t20-500-",
 		"CHECK no-user-folders-in-environment PASS", "CHECK module-path-system-only PASS",
 		"CHECK runs-from-approved-copy PASS", "CHECK temp-is-run-work-folder PASS", "CHECK can-write-temp PASS",
