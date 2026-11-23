@@ -236,6 +236,10 @@
               "sha256": "2ebd87c4a8e59ae8f2d96872d2c0888b1823ea8c0d88eb10c0709cbaacd34b1e",
               "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
+          },
+          "local_dir": {
+            "env": "CONCLAVE_NOUGAT_MODEL_DIR",
+            "default": "~/.cache/conclave/nougat-base"
           }
         }
       }
@@ -689,7 +693,12 @@
               "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
               "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
-          }
+          },
+          "local_dir": {
+            "env": "CONCLAVE_HTRQWEN_MODEL_DIR",
+            "default": "~/.conclave/models/htrqwen/Qwen3-VL-8B-Instruct"
+          },
+          "reader_lock": "conclave_model_lock.json"
         }
       }
     },
@@ -767,7 +776,12 @@
               "sha256": "95abd49942be9cdc6e2653528aed7b4c1cb9e180828421d3488ab38da3057016",
               "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
-          }
+          },
+          "local_dir": {
+            "env": "CONCLAVE_GLMOCR_MODEL_DIR",
+            "default": "~/.conclave/models/glmocr/GLM-OCR"
+          },
+          "reader_lock": "conclave_model_lock.json"
         }
       }
     },
@@ -1286,6 +1300,10 @@
               "sha256": "1c3820659985ad142b526490bb25c23d977176ac2073591b3bddada692718458",
               "sha256_source": "measured 11/23/2026 by downloading the v0.0.1 release asset from github.com; checked a second way: the same sha256 is pinned independently by public projects (e.g. ShellTux/nixos-dotfiles pkgs/python/pip2tex/default.nix, found by GitHub code search)"
             }
+          },
+          "package_dir": {
+            "package": "pix2tex",
+            "sub": "model/checkpoints"
           }
         },
         "im2latex": {
