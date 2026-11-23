@@ -102,6 +102,10 @@ func startOpt(t *testing.T, o opt) (uint32, string) {
 		if err := applyLockdown(tok, user, false); err != nil {
 			t.Fatal(err)
 		}
+		tml := windows.Tokenmandatorylabel{Label: windows.SIDAndAttributes{Sid: mustSid(t, testChildLevel), Attributes: windows.SE_GROUP_INTEGRITY}}
+		if err := windows.SetTokenInformation(tok, windows.TokenIntegrityLevel, (*byte)(unsafe.Pointer(&tml)), tml.Size()); err != nil {
+			t.Fatal(err)
+		}
 	case o.defMask != 0:
 		if err := setDefault(tok, fmt.Sprintf("D:P(A;;GA;;;SY)(A;;0x%X;;;%s)(A;;0x%X;;;OW)", o.defMask, user, o.defMask)); err != nil {
 			t.Fatal(err)
@@ -175,73 +179,24 @@ func setDefault(tok windows.Token, sddl string) error {
 	return windows.SetTokenInformation(tok, windows.TokenDefaultDacl, (*byte)(unsafe.Pointer(&tdd)), uint32(unsafe.Sizeof(tdd)))
 }
 
-// threadAccess tries to open every thread of pid for suspend + set-context (what
-// code injection needs), as this test's own token at the given integrity level
-// ("" = unchanged). It returns how many threads opened out of how many exist.
-func threadAccess(t *testing.T, pid uint32, level string) (opened, total int) {
-	return threadMask(t, pid, level, windows.THREAD_SUSPEND_RESUME|windows.THREAD_SET_CONTEXT)
-}
 
-func threadMask(t *testing.T, pid uint32, level string, mask uint32) (opened, total int) {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	if level != "" {
-		var self, imp windows.Token
-		if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_DUPLICATE|windows.TOKEN_QUERY, &self); err != nil {
-			t.Fatal(err)
-		}
-		defer self.Close()
-		if err := windows.DuplicateTokenEx(self, windows.TOKEN_ALL_ACCESS, nil, windows.SecurityImpersonation, windows.TokenImpersonation, &imp); err != nil {
-			t.Fatal(err)
-		}
-		defer imp.Close()
-		sid, err := windows.StringToSid(level)
-		if err != nil {
-			t.Fatal(err)
-		}
-		tml := windows.Tokenmandatorylabel{Label: windows.SIDAndAttributes{Sid: sid, Attributes: windows.SE_GROUP_INTEGRITY}}
-		if err := windows.SetTokenInformation(imp, windows.TokenIntegrityLevel, (*byte)(unsafe.Pointer(&tml)), tml.Size()); err != nil {
-			t.Fatal(err)
-		}
-		if err := windows.SetThreadToken(nil, imp); err != nil {
-			t.Fatal(err)
-		}
-		defer windows.RevertToSelf()
-	}
-	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer windows.CloseHandle(snap)
-	var te windows.ThreadEntry32
-	te.Size = uint32(unsafe.Sizeof(te))
-	for err := windows.Thread32First(snap, &te); err == nil; err = windows.Thread32Next(snap, &te) {
-		if te.OwnerProcessID != pid {
-			continue
-		}
-		total++
-		h, err := windows.OpenThread(mask, false, te.ThreadID)
-		if err == nil {
-			opened++
-			windows.CloseHandle(h)
-		}
-	}
-	return opened, total
-}
-
-const mediumIL = "S-1-16-8192"
-
-// asLevel runs fn on a locked thread impersonating this test's own token
-// lowered to level.
+// asLevel runs fn on a locked thread impersonating this test's own token with
+// every privilege removed (the runner is an administrator, and its privileges
+// would bypass the rights under test) and lowered to level.
 func asLevel(t *testing.T, level string, fn func()) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	var self, imp windows.Token
-	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_DUPLICATE|windows.TOKEN_QUERY, &self); err != nil {
+	var self, bare, imp windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_DUPLICATE|windows.TOKEN_QUERY|windows.TOKEN_ASSIGN_PRIMARY, &self); err != nil {
 		t.Fatal(err)
 	}
 	defer self.Close()
-	if err := windows.DuplicateTokenEx(self, windows.TOKEN_ALL_ACCESS, nil, windows.SecurityImpersonation, windows.TokenImpersonation, &imp); err != nil {
+	const disableMaxPrivilege = 0x1
+	if r, _, e := procCreateRestrictedToken.Call(uintptr(self), disableMaxPrivilege, 0, 0, 0, 0, 0, 0, uintptr(unsafe.Pointer(&bare))); r == 0 {
+		t.Fatal(e)
+	}
+	defer bare.Close()
+	if err := windows.DuplicateTokenEx(bare, windows.TOKEN_ALL_ACCESS, nil, windows.SecurityImpersonation, windows.TokenImpersonation, &imp); err != nil {
 		t.Fatal(err)
 	}
 	defer imp.Close()
@@ -377,21 +332,24 @@ func TestItemProgramsUnderItemRights(t *testing.T) {
 }
 
 // TestItemLaterThreads records the item trade: a program at the item's own level
-// (on the PC: any program Jake runs, agents included) is refused the item's
-// process and first thread, but may open threads the item creates later.
+// with no special privileges (on the PC: any program Jake runs, agents
+// included) is refused the item's process and first thread, but may open
+// threads the item creates later. (Both run at Medium here.)
 func TestItemLaterThreads(t *testing.T) {
 	var procBad []string
 	var opened, total int
 	code, _ := startOpt(t, opt{procSD: true, threadSD: true, item: true, probe: func(pid uint32) {
-		for _, d := range pccheck.Dangerous {
-			if h, err := windows.OpenProcess(d.Mask, false, pid); err == nil {
-				windows.CloseHandle(h)
-				procBad = append(procBad, d.Name)
-			}
-		}
 		ids := threadIDs(pid)
 		total = len(ids)
-		opened = openCount(ids, windows.THREAD_SUSPEND_RESUME|windows.THREAD_SET_CONTEXT)
+		asLevel(t, testChildLevel, func() {
+			for _, d := range pccheck.Dangerous {
+				if h, err := windows.OpenProcess(d.Mask, false, pid); err == nil {
+					windows.CloseHandle(h)
+					procBad = append(procBad, d.Name)
+				}
+			}
+			opened = openCount(ids, windows.THREAD_SUSPEND_RESUME|windows.THREAD_SET_CONTEXT)
+		})
 	}})
 	if code != 0 {
 		t.Fatalf("item child exit 0x%X", code)
@@ -446,32 +404,6 @@ func TestLockdownParts(t *testing.T) {
 		code, errs := startOpt(t, c.o)
 		t.Logf("PART %s: exit %d (0x%X) %s", c.name, code, code, errs)
 	}
-}
-
-// TestInjectionProbe: with each candidate default rights plus the launch's
-// process and first-thread rights, can a program running as the same user open
-// the child's threads for suspend + set-context? Once at this test's own level
-// and once lowered to Medium (where Jake's ordinary programs and agents run).
-// Logged, not failed: it is the evidence for the fix decision.
-func TestInjectionProbe(t *testing.T) {
-	for _, c := range []struct {
-		name string
-		mask uint32
-	}{
-		{"generic read+execute", windows.GENERIC_READ | windows.GENERIC_EXECUTE},
-		{"generic all", windows.GENERIC_ALL},
-	} {
-		var same, med [2]int
-		code, _ := startOpt(t, opt{procSD: true, threadSD: true, defMask: c.mask, probe: func(pid uint32) {
-			same[0], same[1] = threadAccess(t, pid, "")
-			med[0], med[1] = threadAccess(t, pid, mediumIL)
-		}})
-		t.Logf("PROBE %s: child exit %d; same level opened %d/%d threads; Medium opened %d/%d", c.name, code, same[0], same[1], med[0], med[1])
-	}
-	var tok windows.Token
-	windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &tok)
-	defer tok.Close()
-	t.Logf("PROBE test runs elevated: %v", tok.IsElevated())
 }
 
 // TestExitWhyFixed: the copied-off log gets only fixed phrases, never program text.
