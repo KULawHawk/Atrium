@@ -50,7 +50,10 @@ var procCreateRestrictedToken = windows.NewLazySystemDLL("advapi32.dll").NewProc
 // thread rights and token default rights that Launch gives the session part and
 // items, using a copy of the test's own token (no SYSTEM needed). It returns the
 // exit code and the first part of the child's error output.
-func startLocked(t *testing.T) (uint32, string) {
+func startLocked(t *testing.T) (uint32, string) { return startWith(t, true, true, true) }
+
+// startWith turns each part of the lock-down on or off (the diagnostic below).
+func startWith(t *testing.T, procSD, threadSD, defRights bool) (uint32, string) {
 	t.Helper()
 	var self windows.Token
 	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_DUPLICATE|windows.TOKEN_QUERY|windows.TOKEN_ASSIGN_PRIMARY|windows.TOKEN_ADJUST_DEFAULT, &self); err != nil {
@@ -67,12 +70,20 @@ func startLocked(t *testing.T) (uint32, string) {
 		t.Fatal(err)
 	}
 	user := tu.User.Sid.String()
-	if err := applyLockdown(tok, user); err != nil {
-		t.Fatal(err)
+	if defRights {
+		if err := applyLockdown(tok, user); err != nil {
+			t.Fatal(err)
+		}
 	}
 	saP, saT, err := lockdownAttrs(user)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !procSD {
+		saP = nil
+	}
+	if !threadSD {
+		saT = nil
 	}
 	inherit := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), InheritHandle: 1}
 	var er, ew windows.Handle
@@ -120,4 +131,22 @@ func TestGoChildUnderLockdown(t *testing.T) {
 		t.Fatalf("child exit %d under the lock-down; its errors:\n%s", code, errs)
 	}
 	fmt.Println("PASS a Go child runs normally under the lock-down")
+}
+
+// TestLockdownParts reports which part of the lock-down a Go child cannot run
+// under (logged, not failed: the verdict is TestGoChildUnderLockdown). The plain
+// run is the control that shows the harness itself works.
+func TestLockdownParts(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		p, th, d bool
+	}{
+		{"plain", false, false, false},
+		{"process-rights-only", true, false, false},
+		{"first-thread-rights-only", false, true, false},
+		{"default-rights-only", false, false, true},
+	} {
+		code, errs := startWith(t, c.p, c.th, c.d)
+		t.Logf("PART %s: exit %d (0x%X) %s", c.name, code, code, errs)
+	}
 }
