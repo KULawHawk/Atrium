@@ -156,19 +156,62 @@ function Ensure([string]$Name, [scriptblock]$Find, [string]$WingetId, [string]$V
     else { Row 'FAIL' $Name ("not found after winget (exit code {0}). If a Windows security box was declined, run this again and choose Yes." -f $rc) }
 }
 
+# --- Tesseract: locked to the version proven working (Jake 11/22 10:45 PM: "getting a version that we know is
+# working ... always keep a copy of the last known working version, always."). Jake's PC: 5.4.0.20240606 from UB
+# Mannheim's own installer, which winget does not offer. A present Tesseract of any other version is FAIL and is
+# left as it is (changing it is the person's step). A missing one is installed only from the installer file whose
+# sha256 was measured; until that hash is recorded below, it is FAIL "not locked", never installed unpinned.
+# The installer file ships with the install bundle at <InstallRoot>\.adastra\kept\tesseract\ and stays there as the
+# last known working copy. This script never downloads it.
+$TessVersion = '5.4.0.20240606'
+$TessSetupName = "tesseract-ocr-w64-setup-$TessVersion.exe"
+$TessSetupSha256 = ''  # 64 hex, measured on the PC from the kept installer; '' = not locked
+function Tesseract-Version([string]$Dir) {
+    $line = Try-Cmd (Join-Path $Dir 'tesseract.exe') @('--version')
+    if ($line -match 'v?(\d+\.\d+\.\d+(\.\d+)?)') { return $Matches[1] }
+    return $null
+}
+function Check-TesseractData([string]$Dir) {
+    $langs = & (Join-Path $Dir 'tesseract.exe') --list-langs 2>&1 | ForEach-Object { "$_".Trim() }
+    if ($langs -contains 'eng') { Row 'PASS' 'Tesseract eng data' 'present (TableSurgeon and OcrTesseract refuse to run without it)' }
+    else { Row 'FAIL' 'Tesseract eng data' 'missing: tesseract --list-langs has no eng; TableSurgeon (lens 0.2.4) and OcrTesseract refuse to run without it' }
+}
+function Ensure-Tesseract {
+    $kept = Join-Path $InstallRoot ".adastra\kept\tesseract\$TessSetupName"
+    $have = Find-Tesseract
+    if ($have) {
+        $v = Tesseract-Version $have
+        if ($v -eq $TessVersion) { Row 'PASS' 'Tesseract OCR' "already present at the locked version $v`: $have"; $script:found['tesseract_dir'] = $have; Check-TesseractData $have }
+        else { Row 'FAIL' 'Tesseract OCR' ("present at {0} ({1}), but the build is locked to {2}; left as it is (changing it is your step)" -f $(if ($v) { $v } else { 'an unreadable version' }), $have, $TessVersion) }
+        return
+    }
+    if ($TessSetupSha256 -notmatch '^[0-9a-f]{64}$') { Row 'FAIL' 'Tesseract OCR' "not locked: the sha256 of $TessSetupName is not measured yet, so it is not installed"; return }
+    if ($DryRun) { Row 'TODO' 'Tesseract OCR' "would install $TessSetupName from $kept after checking sha256 $TessSetupSha256 (one Windows security box)"; return }
+    if (-not (Test-Path -LiteralPath $kept)) { Row 'FAIL' 'Tesseract OCR' "the locked installer is not at $kept (it ships with the install bundle; this script never downloads by itself)"; return }
+    $got = (Get-FileHash -LiteralPath $kept -Algorithm SHA256).Hash.ToLower()
+    if ($got -ne $TessSetupSha256) { Row 'FAIL' 'Tesseract OCR' "kept installer's sha256 $got is not the measured $TessSetupSha256; not run"; return }
+    Say ("....  {0,-20} running {1} (sha256 checked; one Windows security box)" -f 'Tesseract OCR', $TessSetupName)
+    $proc = Start-Process -FilePath $kept -Wait -PassThru
+    Refresh-Path
+    $have = Find-Tesseract
+    $v = if ($have) { Tesseract-Version $have } else { $null }
+    if ($v -eq $TessVersion) { Row 'PASS' 'Tesseract OCR' "installed $v`: $have (installer kept at $kept)"; $script:found['tesseract_dir'] = $have; Check-TesseractData $have }
+    else { Row 'FAIL' 'Tesseract OCR' ("not at {0} after the installer (exit code {1}, found {2}). If the Windows security box was declined, run this again and choose Yes." -f $TessVersion, $proc.ExitCode, $(if ($v) { $v } else { 'nothing' })) }
+}
+
 Say ("Nestegg phase 1 (prerequisites) {0}  install folder: {1}{2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm'), $InstallRoot, $(if ($DryRun) { '  [DRY RUN: nothing installed]' } else { '' }))
 
 if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     Row 'FAIL' 'winget' 'not found. Install "App Installer" from the Microsoft Store (the person''s own step), then run this again.'
 } else {
     # Versions: Poppler and mutool as on Jake's working PC (read 11/22/2026); the rest as found working on the GitHub
-    # Windows runner 11/21-22/2026. Tesseract: Jake's PC runs 5.4.0.20240606, which winget does not offer. CI checks winget still offers
+    # Windows runner 11/21-22/2026. Tesseract: see Ensure-Tesseract above. CI checks winget still offers
     # each one ('winget show --version'). '' = not measured yet, so that program is never installed by this script.
     Ensure 'Python 3.13'      ${function:Find-Python}    'Python.Python.3.13'           '3.13.17'         @('--scope', 'user') '(per user, no Windows security box)' 'python'
     Ensure 'Python 3.12'      ${function:Find-Python312} 'Python.Python.3.12'           '3.12.10'         @('--scope', 'user') '(per user; HtrLens, MinerU and Paddle need it)' 'python312'
     Ensure 'Git'              ${function:Find-Git}       'Git.Git'                      '2.56.1'        @()                  '(one Windows security box)'          'git'
     Ensure 'GitHub CLI'       ${function:Find-Gh}        'GitHub.cli'                   '2.104.0'       @()                  '(one Windows security box)'          'gh'
-    Ensure 'Tesseract OCR'    ${function:Find-Tesseract} 'UB-Mannheim.TesseractOCR'     ''              @()                  '(one Windows security box)'          'tesseract_dir'
+    Ensure-Tesseract  # locked to 5.4.0.20240606 from UB Mannheim's own installer at a measured sha256 (Jake 11/22 10:45 PM)
     Ensure 'Poppler'          ${function:Find-Poppler}   'oschwartz10612.Poppler'       '25.07.0-0'     @('--scope', 'user') '(per user, no Windows security box)' 'poppler_bin'
     Ensure 'MuPDF mutool'     ${function:Find-Mutool}    'ArtifexSoftware.mutool'       '1.23.0'        @()                  '(Hierarchy reader)'                   'mutool_dir'
     Ensure 'VC++ runtime x64' ${function:Find-VC}        'Microsoft.VCRedist.2015+.x64' '14.52.37029.0' @()                  '(one Windows security box)'          'vcredist'

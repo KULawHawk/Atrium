@@ -96,13 +96,12 @@ def test_prereqs_installs_only_through_winget_with_exact_ids() -> None:
     assert "if (-not $Version) { Row 'FAIL' $Name (\"not locked:" in code
     rows = re.findall(r"^\s*Ensure '[^']+'\s+\$\{function:Find-\w+\}\s+'([^']+)'\s+'([^']*)'", code, flags=re.M)
     ids = [i for i, _ in rows]
-    assert dict(rows)["ArtifexSoftware.mutool"] == "1.23.0" and dict(rows)["UB-Mannheim.TesseractOCR"] == ""  # not measured yet
+    assert dict(rows)["ArtifexSoftware.mutool"] == "1.23.0"
     assert ids == [
         "Python.Python.3.13",
         "Python.Python.3.12",
         "Git.Git",
         "GitHub.cli",
-        "UB-Mannheim.TesseractOCR",
         "oschwartz10612.Poppler",
         "ArtifexSoftware.mutool",
         "Microsoft.VCRedist.2015+.x64",
@@ -141,3 +140,15 @@ def test_no_double_quotes_inside_python_dash_c_text():
         text = (NESTEGG / name).read_text(encoding="utf-8")
         for m in re.finditer(r"'-c',\s*'([^']|'')*'", text):
             assert '"' not in m.group(0), (name, m.group(0))
+
+
+def test_tesseract_is_locked_to_the_proven_version_and_never_downloaded() -> None:
+    """Jake 11/22 10:45 PM: a version known to work, always keep the last known working copy. Tesseract
+    5.4.0.20240606 (his PC) from UB Mannheim's own installer at a measured sha256, kept with the bundle."""
+    code = "\n".join(_code_lines(PREREQS))
+    assert "$TessVersion = '5.4.0.20240606'" in code
+    assert re.search(r"^\s*Ensure-Tesseract\b", code, flags=re.M)
+    assert "if ($v -eq $TessVersion)" in code and "left as it is" in code  # other versions FAIL, never changed
+    assert "if ($TessSetupSha256 -notmatch '^[0-9a-f]{64}$')" in code and "not locked:" in code
+    assert code.index("Get-FileHash -LiteralPath $kept") < code.index("Start-Process -FilePath $kept")
+    assert "Check-TesseractData" in code and "--list-langs" in code and "'eng'" in code
