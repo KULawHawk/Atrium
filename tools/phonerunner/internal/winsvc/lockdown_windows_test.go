@@ -91,7 +91,7 @@ func startOpt(t *testing.T, o opt) (uint32, string) {
 	user := tu.User.Sid.String()
 	switch {
 	case o.launchDefault:
-		if err := setDefault(tok, sessionDefaultDACL(user)); err != nil {
+		if err := setDefault(tok, defaultDACL(user)); err != nil {
 			t.Fatal(err)
 		}
 		tml := windows.Tokenmandatorylabel{Label: windows.SIDAndAttributes{Sid: mustSid(t, testChildLevel), Attributes: windows.SE_GROUP_INTEGRITY}}
@@ -358,8 +358,7 @@ func openCount(ids []uint32, mask uint32) (opened int) {
 }
 
 // TestItemProgramsUnderItemRights: the programs Run button items use start and
-// exit normally under an item's rights (read + wait default rights, Jake's own
-// level). Items keep the old protection; only the session part changes.
+// exit normally under an item's launch rights (Jake's own level).
 func TestItemProgramsUnderItemRights(t *testing.T) {
 	sys, _ := windows.GetSystemDirectory()
 	for _, argv := range [][]string{
@@ -372,10 +371,35 @@ func TestItemProgramsUnderItemRights(t *testing.T) {
 			t.Errorf("FAIL %s exit 0x%X under item rights", argv[0], code)
 		}
 	}
-	// A Go program as an item is NOT expected to start (same cause as the
-	// watcher); logged so the limit is on record.
-	code, _ := startOpt(t, opt{procSD: true, threadSD: true, item: true})
-	t.Logf("ITEM a Go program: exit 0x%X (a Go item cannot start under item rights)", code)
+	if code, errs := startOpt(t, opt{procSD: true, threadSD: true, item: true}); code != 0 {
+		t.Errorf("FAIL a Go program exit 0x%X under item rights: %s", code, errs)
+	}
+}
+
+// TestItemLaterThreads records the item trade: a program at the item's own level
+// (on the PC: any program Jake runs, agents included) is refused the item's
+// process and first thread, but may open threads the item creates later.
+func TestItemLaterThreads(t *testing.T) {
+	var procBad []string
+	var opened, total int
+	code, _ := startOpt(t, opt{procSD: true, threadSD: true, item: true, probe: func(pid uint32) {
+		for _, d := range pccheck.Dangerous {
+			if h, err := windows.OpenProcess(d.Mask, false, pid); err == nil {
+				windows.CloseHandle(h)
+				procBad = append(procBad, d.Name)
+			}
+		}
+		ids := threadIDs(pid)
+		total = len(ids)
+		opened = openCount(ids, windows.THREAD_SUSPEND_RESUME|windows.THREAD_SET_CONTEXT)
+	}})
+	if code != 0 {
+		t.Fatalf("item child exit 0x%X", code)
+	}
+	t.Logf("ITEM same level: process rights granted %v; later threads opened %d/%d for suspend+set-context", procBad, opened, total)
+	if len(procBad) > 0 {
+		t.Fatalf("FAIL the item's process gave %v to a same-level program", procBad)
+	}
 }
 
 // TestSetLevelRaisesOnly: setLevel never lowers a token.
