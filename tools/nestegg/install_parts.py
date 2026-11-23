@@ -522,6 +522,11 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
         for ln in (chk.stdout or chk.stderr).strip().splitlines():
             rep.row("FAIL", f"{name} pip check", ln)
         return
+    for mod in part.get("must_import", []):  # a library the part reaches lazily (the probe may not see it in code)
+        r = subprocess.run([py, "-I", "-c", f"import {mod}"], capture_output=True, text=True)
+        if r.returncode:
+            rep.row("FAIL", f"{name} import", f"{mod} does not import: {(r.stderr or '').strip().splitlines()[-1:]}")
+            return
     try:  # how an installed program finds the install root (learning folders etc.): <env>/adastra.json, read-only for it
         env.mkdir(parents=True, exist_ok=True)
         (env / "adastra.json").write_text(json.dumps({"install_root": str(INSTALL_ROOT.get("root") or envs.parent),

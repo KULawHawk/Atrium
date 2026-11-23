@@ -731,3 +731,10 @@ def test_reader_models_placed_from_saved_copy_when_every_file_is_pinned(tmp_path
     m.saved_models(rep, {"name": "TableSurgeon"}, tmp_path / "root" / "envs")
     assert (tmp_path / "hub" / "models--o--ok" / "snapshots" / ("a" * 40) / "w.safetensors").read_bytes() == b"weights"
     assert rows == [("INFO", "TableSurgeon saved models", "1 of 2 Hugging Face models placed from a saved copy: o/ok")]
+
+
+def test_learning_folder_adders_carry_atrium_learning() -> None:
+    """Learning-folders thread (Atrium #64 merged e53727a): workbench and obsidian add to learning folders (SET-9)."""
+    by = {p["name"]: p for p in PARTS["parts"]}
+    for n in ("workbench", "obsidian"):
+        assert "atrium" in by[n].get("add_repos", []) and "atrium_learning" in by[n].get("must_import", [])
