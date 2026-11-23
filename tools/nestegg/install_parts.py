@@ -310,12 +310,15 @@ def own_tests(rep: Report, part: dict, repo: Path, py: Path, envs: Path, log: Pa
     for d in dirs:  # from the project folder, as its own CI runs them (its pytest settings and import paths apply)
         rc = rc or run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", *noqt, "tests"], log, cwd=d.parent)
     where = "its locked test environment" if part.get("test_env") else "this exact set"
-    if part.get("test_env"):
-        shutil.rmtree(envs / f"{name}-test", ignore_errors=True)  # used only for the proof; never left installed
+    if part.get("test_env") and (envs / f"{name}-test" / TEST_ENV_MARK).is_file():
+        shutil.rmtree(envs / f"{name}-test", ignore_errors=True)  # used only for the proof; never left installed (Decision 50 A)
     if rc == 0:
         rep.row("PASS", name, f"{done}; {status}; its own tests pass under {where}")
     else:
         rep.row("FAIL", name, f"{done}; its own tests fail under {where} (exit {rc}, see {log})")
+
+
+TEST_ENV_MARK = "adastra_scratch_test_env.json"  # Decision 50 A: names a scratch test folder this installer made
 
 
 def _test_env(rep: Report, part: dict, repo: Path, envs: Path, log: Path, done: str, status: str) -> Path | None:
@@ -328,10 +331,18 @@ def _test_env(rep: Report, part: dict, repo: Path, envs: Path, log: Path, done: 
         rep.row("HOLD", name, f"{done}; {status}; its test environment is not locked ({'; '.join(probs)})")
         return None
     env = envs / f"{name}-test"
-    shutil.rmtree(env, ignore_errors=True)
+    if env.exists() and not (env / TEST_ENV_MARK).is_file():  # Decision 50 A: only a folder this installer made is removed
+        rep.row("HOLD", name, f"{done}; {status}; {env} already exists and was not made by this installer; left untouched")
+        return None
+    shutil.rmtree(env, ignore_errors=True)  # an earlier run's own scratch test folder (it carries the marker)
     base = base_python(part["python"])
     if base is None or run(base + ["-m", "venv", env], log):
         rep.row("HOLD", name, f"{done}; {status}; could not create its test environment (see {log})")
+        return None
+    try:
+        (env / TEST_ENV_MARK).write_text(json.dumps({"part": name, "scratch_test_env": True}) + "\n", encoding="utf-8")
+    except OSError as exc:
+        rep.row("HOLD", name, f"{done}; {status}; could not mark its test environment ({exc})")
         return None
     py = env_python(env)
     if locked_install(py, lines, envs / "_logs" / f"{name}.testenv.txt", log) \

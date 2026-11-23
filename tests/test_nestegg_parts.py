@@ -1185,3 +1185,27 @@ def test_saved_copy_build_fails_loudly_when_a_model_list_is_missing(tmp_path: Pa
     (tmp_path / "htrlens_models.json").unlink()
     with pytest.raises(SystemExit, match="htrlens_models.json not found"):
         b.model_items()
+
+
+def test_only_a_scratch_test_folder_this_installer_made_is_removed(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Decision 50 A: envs\\<Part>-test is removed only when it carries the installer's own marker."""
+    m = _mod()
+    rep = m.Report()
+    envs = tmp_path / "envs"
+    (envs / "_logs").mkdir(parents=True)
+    theirs = envs / "Demo-test"
+    theirs.mkdir()
+    (theirs / "keep.txt").write_text("made by Jake")
+    monkeypatch.setattr(m, "read_list", lambda p: {"demo": "1.0"})
+    monkeypatch.setattr(m, "lock_reqs", lambda *a, **k: (["demo==1.0 --hash=sha256:" + "0" * 64], []))
+    monkeypatch.setattr(m, "load_sums", lambda win: {})
+    part = {"name": "Demo", "python": "3.13", "test_env": {"list": "x.txt", "roots": []}}
+    assert m._test_env(rep, part, tmp_path, envs, envs / "_logs" / "d.txt", "built", "status") is None
+    assert (theirs / "keep.txt").read_text() == "made by Jake"
+    assert rep.holds == 1 and "not made by this installer; left untouched" in capsys.readouterr().out
+    (theirs / m.TEST_ENV_MARK).write_text("{}")  # an earlier run's own scratch folder: removed, then rebuilt
+    monkeypatch.setattr(m, "base_python", lambda v: None)
+    m._test_env(rep, part, tmp_path, envs, envs / "_logs" / "d.txt", "built", "status")
+    assert not theirs.exists()
+    src = (NESTEGG / "install_parts.py").read_text(encoding="utf-8")
+    assert src.count("rmtree(envs / f\"{name}-test\"") == 1 and "TEST_ENV_MARK).is_file():" in src
