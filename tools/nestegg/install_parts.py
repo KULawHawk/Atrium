@@ -1033,7 +1033,7 @@ def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, lo
     for m in every:  # a model this step cannot fetch yet (modelscope, a CDN not measured) is a FAIL, never skipped
         if m.get("source") not in ("huggingface", "github_release"):
             rep.row("FAIL", label, f"{', '.join(sorted(m.get('files') or {})[:2]) or m.get('source')}...: from "
-                    f"{m.get('source')}, {m.get('unmeasured_reason') or 'not measured yet'}; not installed")
+                    f"{m.get('source')}, {m.get('not_placed_reason') or m.get('unmeasured_reason') or 'not measured yet'}; not installed")
     hf = [m for m in every if m.get("source") in ("huggingface", "github_release")]
     if not every:
         rep.row("FAIL", label, f"no model pinned for {part['name']} in models_pinned.json")
