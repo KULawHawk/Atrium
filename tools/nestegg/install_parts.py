@@ -1086,6 +1086,35 @@ def _package_dir(py: Path, pd: dict, log: Path) -> Path | None:
     return Path(r.stdout.strip().splitlines()[-1]) / pd["sub"]
 
 
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def _bundled_check(rep: Report, label: str, m: dict, py: Path, log: Path) -> None:
+    """Model files shipped inside a locked wheel (rapidocr's own models): nothing is fetched or written; each file
+    the reader will load is hash-checked where the installed package keeps it."""
+    pd = m["package_dir"]
+    what = f"{pd['package']} built-in models"
+    target = _package_dir(py, pd, log)
+    if target is None:
+        rep.row("FAIL", label, f"{what}: package {pd['package']} not found in the environment (see {log})")
+        return
+    bad = []
+    for name, meta in sorted((m.get("files") or {}).items()):
+        f = target / name
+        if not f.is_file() or f.stat().st_size != meta.get("bytes") or _sha256(f) != meta.get("sha256"):
+            bad.append(name)
+    if bad or not m.get("files"):
+        rep.row("FAIL", label, f"{what}: {len(bad)} of {len(m.get('files') or {})} files missing or not the pinned bytes at "
+                f"{target} (first: {bad[0] if bad else 'none pinned'})")
+        return
+    rep.row("PASS", label, f"{what}: {len(m['files'])} files hash-checked in place at {target} (shipped in the locked wheel)")
+
+
 def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, log: Path) -> None:
     """HR 13/14: every Hugging Face model of this reader in models_pinned.json, at its pinned revision, each file
     hash-checked. Saved copies first, then the original site at the pinned commit; a file whose bytes do not
@@ -1095,13 +1124,21 @@ def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, lo
     reader = json.loads((HERE / "models_pinned.json").read_text(encoding="utf-8")).get("readers", {}).get(part["name"])
     every = [m for m in (reader or {}).get("models", {}).values() if m.get("source") != "reference"]
     for m in every:  # a model this step cannot fetch yet (modelscope, a CDN not measured) is a FAIL, never skipped
+        if m.get("unused_reason"):  # pinned and saved, but traced as not loaded by the installed reader
+            rep.row("INFO", label, f"{', '.join(sorted(m.get('files') or {})[:2])}...: kept pinned and saved, not placed: {m['unused_reason']}")
+            continue
+        if m.get("source") == "package_bundled":  # shipped inside a locked wheel: checked in place below
+            continue
         if m.get("source") not in PLACEABLE or m.get("not_placed_reason"):
             rep.row("FAIL", label, f"{', '.join(sorted(m.get('files') or {})[:2]) or m.get('source')}...: from "
                     f"{m.get('source')}, {m.get('not_placed_reason') or m.get('unmeasured_reason') or 'not measured yet'}; not installed")
-    hf = [m for m in every if m.get("source") in PLACEABLE and not m.get("not_placed_reason")]
+    hf = [m for m in every if m.get("source") in PLACEABLE and not m.get("not_placed_reason") and not m.get("unused_reason")]
     if not every:
         rep.row("FAIL", label, f"no model pinned for {part['name']} in models_pinned.json")
         return
+    for m in every:
+        if m.get("source") == "package_bundled" and not m.get("unused_reason"):
+            _bundled_check(rep, label, m, py, log)
     sc = _saved_copies()
     cfg = sc.load_config()  # every location, the original site last
     root = INSTALL_ROOT.get("root") or envs.parent
@@ -1150,7 +1187,8 @@ def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, lo
             (repo_dir / "refs").mkdir(parents=True, exist_ok=True)  # (main, or a tag such as v2.3.0) names the pin
             (repo_dir / "refs" / hf_ref(m)).write_text(m["revision"], encoding="utf-8")
         where = ", ".join(f"{n} from {k}" for k, n in sorted(came.items()))
-        if any("on Jake's PC" in str(meta.get("sha256_source", "")) for meta in files.values()):
+        if any("on Jake's PC" in str(meta.get("sha256_source", "")) and "file listing" not in str(meta.get("sha256_source", ""))
+               for meta in files.values()):  # a site that publishes its own hashes (ModelScope's listing) is not trust-on-first-use
             where += "; hashes measured on the PC, the site publishes none (trust on first use)"
         if m.get("reader_lock"):
             lock = target / m["reader_lock"]
