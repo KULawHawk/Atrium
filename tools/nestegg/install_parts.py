@@ -1057,6 +1057,24 @@ def _mineru_config(snapshot: Path, envs: Path, log: Path) -> tuple[str, str]:
                     f"(models_download exit {rc}; models-dir.pipeline = {pdir}); the MinerU reader would not find it (see {log})")
 
 
+PLACEABLE = ("huggingface", "github_release", "datalab_cdn")
+
+
+def _settings_dir(envs: Path, sd: dict, log: Path) -> Path | None:
+    """The model folder as the reader's own library computes it, read in that library's environment."""
+    try:
+        r = subprocess.run([str(env_python(envs / sd["env"])), "-I", "-c", sd["code"]], capture_output=True, text=True,
+                           check=False)
+    except OSError as exc:  # the environment is not built: a named FAIL upstream
+        with log.open("a", encoding="utf-8") as fh:
+            fh.write(f"could not start {sd['env']}: {exc}\n")
+        return None
+    with log.open("a", encoding="utf-8") as fh:
+        fh.write(r.stdout + r.stderr)
+    out = r.stdout.strip().splitlines()
+    return Path(out[-1]) if r.returncode == 0 and out else None
+
+
 def _package_dir(py: Path, pd: dict, log: Path) -> Path | None:
     """A folder inside an installed package of the reader's environment, found without importing the package."""
     code = "import importlib.util,sys;s=importlib.util.find_spec(sys.argv[1]);print(s.submodule_search_locations[0])"
@@ -1068,6 +1086,35 @@ def _package_dir(py: Path, pd: dict, log: Path) -> Path | None:
     return Path(r.stdout.strip().splitlines()[-1]) / pd["sub"]
 
 
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def _bundled_check(rep: Report, label: str, m: dict, py: Path, log: Path) -> None:
+    """Model files shipped inside a locked wheel (rapidocr's own models): nothing is fetched or written; each file
+    the reader will load is hash-checked where the installed package keeps it."""
+    pd = m["package_dir"]
+    what = f"{pd['package']} built-in models"
+    target = _package_dir(py, pd, log)
+    if target is None:
+        rep.row("FAIL", label, f"{what}: package {pd['package']} not found in the environment (see {log})")
+        return
+    bad = []
+    for name, meta in sorted((m.get("files") or {}).items()):
+        f = target / name
+        if not f.is_file() or f.stat().st_size != meta.get("bytes") or _sha256(f) != meta.get("sha256"):
+            bad.append(name)
+    if bad or not m.get("files"):
+        rep.row("FAIL", label, f"{what}: {len(bad)} of {len(m.get('files') or {})} files missing or not the pinned bytes at "
+                f"{target} (first: {bad[0] if bad else 'none pinned'})")
+        return
+    rep.row("PASS", label, f"{what}: {len(m['files'])} files hash-checked in place at {target} (shipped in the locked wheel)")
+
+
 def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, log: Path) -> None:
     """HR 13/14: every Hugging Face model of this reader in models_pinned.json, at its pinned revision, each file
     hash-checked. Saved copies first, then the original site at the pinned commit; a file whose bytes do not
@@ -1077,18 +1124,26 @@ def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, lo
     reader = json.loads((HERE / "models_pinned.json").read_text(encoding="utf-8")).get("readers", {}).get(part["name"])
     every = [m for m in (reader or {}).get("models", {}).values() if m.get("source") != "reference"]
     for m in every:  # a model this step cannot fetch yet (modelscope, a CDN not measured) is a FAIL, never skipped
-        if m.get("source") not in ("huggingface", "github_release"):
+        if m.get("unused_reason"):  # pinned and saved, but traced as not loaded by the installed reader
+            rep.row("INFO", label, f"{', '.join(sorted(m.get('files') or {})[:2])}...: kept pinned and saved, not placed: {m['unused_reason']}")
+            continue
+        if m.get("source") == "package_bundled":  # shipped inside a locked wheel: checked in place below
+            continue
+        if m.get("source") not in PLACEABLE or m.get("not_placed_reason"):
             rep.row("FAIL", label, f"{', '.join(sorted(m.get('files') or {})[:2]) or m.get('source')}...: from "
                     f"{m.get('source')}, {m.get('not_placed_reason') or m.get('unmeasured_reason') or 'not measured yet'}; not installed")
-    hf = [m for m in every if m.get("source") in ("huggingface", "github_release")]
+    hf = [m for m in every if m.get("source") in PLACEABLE and not m.get("not_placed_reason") and not m.get("unused_reason")]
     if not every:
         rep.row("FAIL", label, f"no model pinned for {part['name']} in models_pinned.json")
         return
+    for m in every:
+        if m.get("source") == "package_bundled" and not m.get("unused_reason"):
+            _bundled_check(rep, label, m, py, log)
     sc = _saved_copies()
     cfg = sc.load_config()  # every location, the original site last
     root = INSTALL_ROOT.get("root") or envs.parent
     for m in hf:
-        what = f"{m['repo_id']}@{m['revision'][:7]}" if m.get("repo_id") else ", ".join(sorted(m.get("files") or {}))
+        what = f"{m['repo_id']}@{m['revision'][:7]}" if m.get("repo_id") else f"{m.get('source')} ({', '.join(sorted(m.get('files') or {})[:2])}{', ...' if len(m.get('files') or {}) > 2 else ''})"
         files = m.get("files") or {}
         unpinned = [p for p, meta in files.items() if not meta.get("sha256")]
         if not files or unpinned:
@@ -1099,6 +1154,11 @@ def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, lo
             clash = _lock_conflict(m, target)
             if clash:
                 rep.row("HOLD", label, f"{what}: {clash} at {target}; left untouched (move it aside to install the pinned one)")
+                continue
+        elif m.get("settings_dir"):  # a folder the reader's own library names (surya's MODEL_CACHE_DIR)
+            target = _settings_dir(envs, m["settings_dir"], log)
+            if target is None:
+                rep.row("FAIL", label, f"{what}: could not read the model folder from {m['settings_dir']['env']} (see {log})")
                 continue
         elif m.get("package_dir"):  # inside the reader's own environment (pix2tex reads model/checkpoints there)
             target = _package_dir(py, m["package_dir"], log)
@@ -1123,10 +1183,13 @@ def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, lo
             rep.row("FAIL", label, f"{what}: {len(bad)} of {len(files)} files not found with the pinned sha256 "
                     f"(first: {bad[0]}; see {log})")
             continue
-        if not m.get("local_dir") and not m.get("package_dir"):  # the standard cache: the ref the reader asks for
+        if not (m.get("local_dir") or m.get("package_dir") or m.get("settings_dir")):  # the standard cache: the ref the reader asks for
             (repo_dir / "refs").mkdir(parents=True, exist_ok=True)  # (main, or a tag such as v2.3.0) names the pin
             (repo_dir / "refs" / hf_ref(m)).write_text(m["revision"], encoding="utf-8")
         where = ", ".join(f"{n} from {k}" for k, n in sorted(came.items()))
+        if any("on Jake's PC" in str(meta.get("sha256_source", "")) and "file listing" not in str(meta.get("sha256_source", ""))
+               for meta in files.values()):  # a site that publishes its own hashes (ModelScope's listing) is not trust-on-first-use
+            where += "; hashes measured on the PC, the site publishes none (trust on first use)"
         if m.get("reader_lock"):
             lock = target / m["reader_lock"]
             if not lock.is_file():
@@ -1147,7 +1210,7 @@ def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, lo
                     rep.row(cfg_state, label, f"{what}: files match the pin, but {cfg_why}")
                     continue
                 where += f"; {cfg_why}"
-            note = "" if m.get("local_dir") or m.get("package_dir") or m.get("pinned_in_code") else \
+            note = "" if m.get("local_dir") or m.get("package_dir") or m.get("settings_dir") or m.get("pinned_in_code") else \
                 "; the reader's code does not name this revision yet (Conclave follow-up), so this pin holds offline"
             rep.row("PASS", label, f"{what}: {len(files)} files hash-checked ({where}) at {target}{note}")
 

@@ -147,7 +147,7 @@ def test_measured_small_files_are_pinned_with_their_second_check() -> None:
     blob = [p for p in pinned if "git blob oid" in p["sha256_source"]]  # the small HF files, checked by git blob oid
     other = [p for p in pinned if p not in blob]  # files measured by download, each with an independent second check
     assert len(blob) == 130
-    assert len(other) == 16  # pix2tex (2), RapidOCR (10), PP-Structure (4): each names its second check
+    assert len(other) == 67  # pix2tex (2), RapidOCR (10 + 3 in its wheel), PP-Structure (4), surya (48): each names its second check
     assert all("checked a second way" in p["sha256_source"] or "only second check" in p["sha256_source"] for p in other)
 
 
