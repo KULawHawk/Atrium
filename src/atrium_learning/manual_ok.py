@@ -7,16 +7,39 @@ The list holds one manual id per line (``<file stem> [<first 12 of sha256>]``; `
 items use that exact id as their ``source``. A manual already OK'd is reported ``ALREADY`` and not written again.
 ``--withdraw`` withdraws instead, which moves that manual's items aside in every aim (nothing deleted).
 Prints ``MANUAL-OK: PASS/FAIL``.
+
+**Decision 41's words cover one list only.** Jake's 11/23 answer approved the manuals in use *that day*, so an
+OK recorded with those words is refused unless the list is byte-for-byte ``MANUALS_IN_USE_2026-11-23.txt``
+(sha256 pinned below; CRLF line endings are read as LF so a Windows copy still matches). The words are compared
+after folding case, spacing and punctuation, so a re-typed copy of them cannot slip past either. A manual first
+used later needs its own OK with its own recorded words. Every OK line carries ``list_sha256`` so the record
+shows which list it came from (review of Atrium #65).
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import re
 import sys
 from pathlib import Path
 from typing import Sequence
 
 from atrium_learning.folder import LearningFolderError, find_install_root, manual_oks, record_manual_ok
+
+#: Jake's answer to Decision 41 (LF-3), 6:29 AM CT 11/23/2026, verbatim.
+DECISION_41_WORDS = "They're all approved as of now and revisit in 5 mo"
+#: sha256 of learning-folders/MANUALS_IN_USE_2026-11-23.txt (LF line endings): the only list those words cover.
+DECISION_41_LIST_SHA256 = "f6e30875d9e7c0668126420f75ebc54c31bfda372c0af3a4b4ebc2d49d601fcb"
+
+
+def _fold(words: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", words.casefold())
+
+
+def list_sha256(data: bytes) -> str:
+    """sha256 of a manual list, with CRLF read as LF."""
+    return hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest()
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -31,12 +54,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if not args.list.is_file():
             raise LearningFolderError(f"list not found: {args.list}")
-        ids = [x.strip() for x in args.list.read_text(encoding="utf-8").splitlines()]
+        data = args.list.read_bytes()
+        digest = list_sha256(data)
+        ids = [x.strip() for x in data.decode("utf-8").splitlines()]
         ids = [x for x in ids if x and not x.startswith("#")]
         if not ids:
             raise LearningFolderError("the list names no manual")
         if not args.withdraw and not args.words:
             raise LearningFolderError("--words (Jake's answer, verbatim) is required to record an OK")
+        if not args.withdraw and _fold(args.words) == _fold(DECISION_41_WORDS) and digest != DECISION_41_LIST_SHA256:
+            raise LearningFolderError(
+                f"Decision 41's words cover only MANUALS_IN_USE_2026-11-23.txt (sha256 {DECISION_41_LIST_SHA256[:12]}); "
+                f"this list is {digest[:12]}. A manual first used later needs its own OK with its own words"
+            )
         root = args.root or find_install_root()
         current = manual_oks(root)
         written = already = moved = 0
@@ -49,7 +79,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"ALREADY withdrawn {manual}")
                 already += 1
                 continue
-            moved += len(record_manual_ok(root, manual, args.by, not args.withdraw, args.words, args.revisit))
+            moved += len(record_manual_ok(root, manual, args.by, not args.withdraw, args.words, args.revisit, digest))
             print(f"{'WITHDRAWN' if args.withdraw else 'OK'} {manual}")
             written += 1
     except LearningFolderError as exc:
