@@ -208,6 +208,14 @@ def test_source_pin_passes_only_when_tools_equal_the_pinned_atrium_commit(tmp_pa
     assert sp.main(verify) == 1 and "nestegg/extra.py is in nestegg/ but not pinned" in capsys.readouterr().out
     (sc_root / "nestegg" / "extra.py").unlink()
 
+    for extra in (".github/workflows/other.yml", ".github/actions/x/action.yml", ".github/dependabot.yml"):
+        (sc_root / extra).parent.mkdir(parents=True, exist_ok=True)
+        (sc_root / extra).write_text("on: push\n")  # reviewer 3's probe: a second workflow outside the pin
+        assert sp.main(verify) == 1 and f"{extra} is in .github/ but not pinned" in capsys.readouterr().out
+        (sc_root / extra).unlink()
+    assert sp.main(verify) == 0
+    capsys.readouterr()
+
     (atr / "tools" / "nestegg" / "saved_copies.py").write_text("# not what the commit holds\n")  # pin names other bytes
     assert sp.main(verify) == 1 and "tools/nestegg/saved_copies.py at Atrium" in capsys.readouterr().out
 
