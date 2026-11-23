@@ -122,14 +122,18 @@ def package_url(fn: str) -> str | None:
 # ---- the release ----------------------------------------------------------------------------------------------------
 
 # anything shaped like a credential is masked before gh's own error text is printed (reporting only)
-_SECRET = re.compile(r"(gh[opsur]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|(?i:authorization|bearer|token)[\s:=]+\S+)")
+_SECRET = re.compile(r"gh[opsur]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}")
+# a header-like word masks everything after it to the end of that line ("Authorization: Basic <base64>" included)
+_AFTER = re.compile(r"(?i)\b(proxy-authorization|authorization|bearer|basic|token|password|secret)\b[\s:=].*$")
+_USERINFO = re.compile(r"(://)[^/\s@]+@")  # https://user:token@host
 
 
 def _gh_error(stderr: str) -> str:
     """gh's own words on a failure, so a FAIL row says why (run 45174686732 had 35 bare 'exit status 1' rows).
     Credential-shaped text is masked; at most the last 3 lines and 300 characters are kept."""
     lines = [ln.strip() for ln in (stderr or "").splitlines() if ln.strip()][-3:]
-    text = _SECRET.sub("[masked]", " | ".join(lines))
+    lines = [_USERINFO.sub(r"\1[masked]@", _AFTER.sub(r"\1 [masked]", _SECRET.sub("[masked]", ln))) for ln in lines]
+    text = " | ".join(lines)
     return (text[:300] + "...") if len(text) > 300 else (text or "no error text from gh")
 
 
