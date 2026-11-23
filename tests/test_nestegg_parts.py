@@ -1326,7 +1326,7 @@ def test_reader_envs_script_failure_is_a_fail_row(tmp_path: Path, monkeypatch, c
     assert rep.fails == 1 and "already set to C:/other.json" in capsys.readouterr().out
 
 
-def test_workbench_reader_envs_writes_only_blank_and_puts_back_off_when_the_probe_fails(tmp_path: Path, monkeypatch) -> None:
+def test_workbench_reader_envs_writes_only_blank_and_puts_back_off_when_the_probe_fails(tmp_path: Path, monkeypatch, capsys) -> None:
     """The Workbench side of the go-live switch, against stand-ins for the Workbench settings API."""
     import importlib.util
     import subprocess
@@ -1360,6 +1360,25 @@ def test_workbench_reader_envs_writes_only_blank_and_puts_back_off_when_the_prob
     store.clear()
     monkeypatch.setattr(w.subprocess, "run", lambda cmd, **k: subprocess.CompletedProcess(cmd, 2, "", "boom\n"))
     assert w.reader_envs(str(rec), "py") == 1 and store["harness.reader_envs"] == ""  # put back off
+    store["harness.reader_envs"] = str(rec)  # an earlier install left it on, and now the probe fails
+    assert w.reader_envs(str(rec), "py") == 1 and store["harness.reader_envs"] == str(rec)
+    assert "STILL ON" in capsys.readouterr().out  # never left on quietly
+
+
+def test_reader_envs_left_off_when_the_harness_environment_is_not_built(tmp_path: Path, monkeypatch, capsys) -> None:
+    """The fourth leg of the gate: with a PASS reader and a passed Run button, a missing harness env still leaves it off."""
+    m = _mod()
+    envs, parts = _wb_envs(tmp_path, m)
+    m.env_python(envs / "harness_adapters").unlink()
+    rec = _reader_record(envs)
+    calls = []
+    monkeypatch.setattr(m.subprocess, "run", lambda cmd, **k: calls.append(cmd))
+    rep = m.Report()
+    m.RUN_BUTTON["workbench"] = True
+    m.turn_on_reader_envs(rep, rec, envs, parts, False)
+    m.RUN_BUTTON.clear()
+    out = capsys.readouterr().out
+    assert calls == [] and rep.passes == 0 and "LEFT OFF (the harness_adapters environment is not built)" in out
 
 
 def _pinned_setup(tmp_path: Path, monkeypatch, models: dict) -> tuple:

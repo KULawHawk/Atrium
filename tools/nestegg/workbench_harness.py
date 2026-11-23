@@ -113,7 +113,8 @@ def reader_envs(record: str, harness_py: str) -> int:
             save_user_value(path, HARNESS_READER_ENVS_KEY, "")
         print(f"WORKBENCH-READER-ENVS: FAIL the preset probe with --reader-envs {seen} exited {r.returncode}: "
               f"{tail[0][:200]}; " + ("harness.reader_envs put back off" if wrote else
-              "harness.reader_envs was already set to this file before; left as it was"))
+              "harness.reader_envs is STILL ON (an earlier install set it to this same file; this run did not "
+              "change it). Readers may not start: clear \"Reader environments record\" in Settings > Harness to turn it off"))
         return 1
     print(f"WORKBENCH-READER-ENVS: OK {seen} (written to {path}; the preset probe reads it)")
     return 0
