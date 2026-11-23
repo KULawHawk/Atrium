@@ -91,3 +91,27 @@ def test_release_repo_left_empty_until_jake_picks_a_private_one(tmp_path: Path) 
     rows: list[str] = []
     assert sc.fetch("0" * 64, 5, "f", tmp_path / "d", _cfg(rel), tmp_path, say=rows.append) is None
     assert "not chosen yet" in rows[0]
+
+
+def _build():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("bsr", NESTEGG / "build_saved_release.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_release_build_lists_every_locked_package_and_pinned_model() -> None:
+    m = _build()
+    pk = m.package_items()
+    assert len(pk) > 100 and all(len(i["sha256"]) == 64 for i in pk)
+    md = m.model_items()  # at least the HtrLens TrOCR files (hash-pinned) and Kraken
+    assert any("trocr-base-handwritten" in i["name"] for i in md)
+    assert all(i["url"].startswith("https://") for i in md)
+    assert m._dist("torch-2.6.0+cu124-cp313-cp313-linux_x86_64.whl") == ("torch", "2.6.0+cu124")
+
+
+def test_release_job_template_lives_outside_atrium_workflows() -> None:
+    assert (NESTEGG / "release" / "build-saved-copy.yml").is_file()
+    wf = (NESTEGG.parents[1] / ".github" / "workflows")
+    assert not any("saved" in p.name for p in wf.iterdir())  # Atrium is public: never build the release here
