@@ -185,3 +185,29 @@ def test_rerun_with_nothing_changed_passes(root, tmp_path):
     dest = tmp_path / "share"
     for run in ("r1", "r2"):
         assert copy_out(root, dest, ok_guard, {}, ["readers-print"], run)["readers-print"] == "PASS n=1"
+
+
+def test_side_folder_labels_never_copied_and_duck_gate_works(root, tmp_path):
+    """Obsidian's labels\\<sha256>.obsidian.json sit beside approved\\ and never leave the PC."""
+    labels = root / "learning" / "obsidian" / "labels"
+    labels.mkdir()
+    sha = LearningFolder(root, "obsidian").approved()[0]
+    (labels / f"{sha}.obsidian.json").write_text('{"synthetic": true}')
+
+    class Duck:
+        passed, gate, human_checked = True, "obsidian.learning:gate", True
+
+    dest = tmp_path / "share"
+    result = copy_out(root, dest, ok_guard, {"obsidian": lambda p: Duck()}, ["obsidian"], run_id="r1")
+    assert result == {"obsidian": "PASS n=1"}
+    names = sorted(p.name for p in (dest / "obsidian").iterdir())
+    assert len(names) == 2 and not any("obsidian.json" in n for n in names)
+
+
+def test_copy_out_badly_shaped_gate_fails_the_aim(root, tmp_path):
+    class Duck:
+        passed, gate, human_checked = 1, "obsidian.learning:gate", True
+
+    result = copy_out(root, tmp_path / "share", ok_guard, {"obsidian": lambda p: Duck()}, ["obsidian"], run_id="r1")
+    assert result["obsidian"].startswith("FAIL") and "GateResult" in result["obsidian"]
+    assert not (tmp_path / "share").exists()

@@ -210,6 +210,52 @@ def test_gate_must_return_gateresult(root, tmp_path):
         LearningFolder(root, "obsidian").add(item(tmp_path), "P", "obsidian copy", "jake", gate=lambda p: True)
 
 
+class Duck:
+    """A gate result shaped like GateResult but not one: what Obsidian returns without importing this library."""
+
+    def __init__(self, passed: object = True, gate: object = "obsidian.learning:gate", human_checked: object = True):
+        self.passed, self.gate, self.human_checked = passed, gate, human_checked
+
+
+def test_duck_typed_gate_result_accepted(root, tmp_path):
+    f = LearningFolder(root, "obsidian")
+    sha = f.add(item(tmp_path), "P", "obsidian checked copy", "jake", gate=lambda p: Duck())
+    assert f.approved() == [sha]
+    assert lines(root, "obsidian")[0]["gate"] == "obsidian.learning:gate"
+
+
+@pytest.mark.parametrize(
+    "duck",
+    [
+        Duck(passed=1),
+        Duck(passed="yes"),
+        Duck(passed=None),
+        Duck(human_checked=1),
+        Duck(human_checked="checked"),
+        Duck(gate=None),
+        Duck(gate=7),
+        Duck(gate=""),
+        Duck(gate="two\nlines"),
+        GateResult(1, "obsidian.learning:gate", human_checked=True),  # a real GateResult still needs real bools
+        object(),
+    ],
+)
+def test_badly_shaped_gate_result_refused(root, tmp_path, duck):
+    f = LearningFolder(root, "obsidian")
+    with pytest.raises(LearningFolderError):
+        f.add(item(tmp_path), "P", "obsidian checked copy", "jake", gate=lambda p: duck)
+    assert f.approved() == []
+
+
+def test_duck_typed_refusal_and_unchecked_still_refused(root, tmp_path):
+    f = LearningFolder(root, "obsidian")
+    with pytest.raises(LearningFolderError, match="refused"):
+        f.add(item(tmp_path), "P", "c", "jake", gate=lambda p: Duck(passed=False))
+    with pytest.raises(LearningFolderError, match="Decision 38"):
+        f.add(item(tmp_path), "P", "c", "jake", gate=lambda p: Duck(human_checked=False))
+    assert f.approved() == []
+
+
 def test_checked_real_report_item_added(root, tmp_path):
     f = LearningFolder(root, "obsidian")
     sha = f.add(item(tmp_path), "P", "obsidian checked copy", "jake", gate=checked)

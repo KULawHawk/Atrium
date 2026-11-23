@@ -9,6 +9,11 @@ Rules carried here (design §2, §3, §7, §8):
 * Classes: ``S`` synthetic/public, ``M`` from a licensed manual (needs Jake's OK for that manual on record),
   ``P`` derived from a real report (needs the aim's own gate AND a human check: Decision 38 = A).
 * Nothing is deleted (SEC-8): taking an item out moves it to ``held-aside``.
+* An aim may keep its own side files in other subfolders (Obsidian keeps signed labels in ``labels\\``,
+  named ``<sha256>.obsidian.json``). Only ``approved\\`` items and their manifest rows are ever copied out;
+  other subfolders are never read by copy-out and never copied.
+* An aim's gate returns a :class:`GateResult` or any object with bool ``passed``, bool ``human_checked`` and a
+  string ``gate``; anything else is refused.
 * "Add automatically" is a per-aim switch, OFF by default; each change writes an audit line. With it off,
   :meth:`LearningFolder.offer` adds nothing and the item waits for Jake's click.
 """
@@ -77,6 +82,22 @@ class GateResult:
 
 
 Gate = Callable[[Path], GateResult]
+
+
+def _verdict(result: object) -> GateResult:
+    """Accept a :class:`GateResult` or any object shaped like one, so an aim (Obsidian) need not import this library.
+
+    The shape is strict: ``passed`` and ``human_checked`` must be real ``bool`` values (not 1, "yes" or None) and
+    ``gate`` a non-empty one-line string. Anything else is a refusal, never a pass.
+    """
+    passed = getattr(result, "passed", None)
+    human = getattr(result, "human_checked", None)
+    gate = getattr(result, "gate", None)
+    if type(passed) is not bool or type(human) is not bool or not isinstance(gate, str):
+        raise LearningFolderError(
+            "the aim's gate did not return a GateResult (passed and human_checked must be bool, gate a string)"
+        )
+    return GateResult(passed=passed, gate=_text(gate, "gate"), human_checked=human)
 
 
 def _now() -> str:
@@ -265,9 +286,7 @@ class LearningFolder:
             raise LearningFolderError("a real-report item needs its aim's own gate")
         if gate is None:
             return "manual_ok" if cls == "M" else "provenance"
-        result = gate(item)
-        if not isinstance(result, GateResult):
-            raise LearningFolderError("the aim's gate did not return a GateResult")
+        result = _verdict(gate(item))
         if not result.passed:
             raise LearningFolderError(f"gate {result.gate} refused the item")
         if cls == "P" and not result.human_checked:
