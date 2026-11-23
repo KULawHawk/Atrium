@@ -66,6 +66,9 @@ function Finish([string]$l) {
   if ($SelfTest) { $l = "SELFTEST $l" }
   Say ""; Say $l
   try { [System.IO.File]::WriteAllLines($Result, $Lines) ; Write-Host "(result file: $Result)" } catch { Write-Host "(could not write $Result)" }
+  # The window stays open (-NoExit) after the run: let go of the one-window lock now, so a later
+  # T-20 run is not refused because of a finished window.
+  if ($script:OneWindow) { try { $script:OneWindow.ReleaseMutex() } catch {}; $script:OneWindow.Dispose(); $script:OneWindow = $null }
   if ($l -like '*: PASS*') { exit 0 } else { exit 1 }
 }
 function Fail([string]$why) { Finish "T20: FAIL ($why)" }
@@ -262,6 +265,25 @@ function Get-ServiceUpProblem {
   return "it started at $($after[0].at) and has not joined Tailscale yet"
 }
 
+# Which program the service runs. Registration: $null when Windows starts $Dest\phonerunner-service.exe
+# for it (or it is not installed), else the problem. Running process: same, for the live process.
+function Get-ServiceRegProblem([string]$name = $Svc, [string]$want = (Join-Path $Dest 'phonerunner-service.exe')) {
+  $w = @(Get-CimInstance Win32_Service -Filter "Name='$name'")
+  if ($w.Count -eq 0) { return $null }
+  $pn = "$($w[0].PathName)".Trim()
+  $ic = [StringComparison]::OrdinalIgnoreCase
+  if ($pn -eq $want -or $pn -eq "`"$want`"" -or $pn.StartsWith("`"$want`" ", $ic) -or $pn.StartsWith("$want ", $ic)) { return $null }
+  return "the $name service is registered to start '$pn', not '$want'"
+}
+function Get-ServiceProcProblem([string]$name = $Svc, [string]$want = (Join-Path $Dest 'phonerunner-service.exe')) {
+  $w = @(Get-CimInstance Win32_Service -Filter "Name='$name'")
+  if ($w.Count -eq 0 -or -not $w[0].ProcessId) { return "the $name service has no running process" }
+  $pr = @(Get-CimInstance Win32_Process -Filter "ProcessId=$($w[0].ProcessId)")
+  if ($pr.Count -eq 0 -or -not $pr[0].ExecutablePath) { return "cannot confirm which program the running service is from this window" }
+  if ($pr[0].ExecutablePath -ne $want) { return "the running service is '$($pr[0].ExecutablePath)', not '$want'" }
+  return $null
+}
+
 # Do the 4 programs in Program Files already match SHA256SUMS.txt?
 function Test-ProgramsMatch {
   $sums = Read-Sums
@@ -281,7 +303,15 @@ function Invoke-Preflight {
   Say "PASS pre-flight: this network reaches Tailscale (genuine certificate)"
   $s = Get-Service -Name $Svc -ErrorAction SilentlyContinue
   if (-not $s) { Say "INFO pre-flight: PhoneRunner is not installed yet; the run installs it"; return $false }
+  # A service registered from another folder would keep running an old program even after this
+  # run copies new ones to $Dest; stop here rather than test the wrong program.
+  $rp = Get-ServiceRegProblem
+  if ($rp) { Fail "PRE-FLIGHT: $rp. Nothing was changed" }
   $match = Test-ProgramsMatch
+  if ($match -and $s.Status -eq 'Running') {
+    $pp = Get-ServiceProcProblem
+    if ($pp) { Say "INFO pre-flight: $pp; the run restarts it"; $match = $false }
+  }
   if ($s.Status -ne 'Running') { Say "INFO pre-flight: the PhoneRunner service is $($s.Status); the run starts it"; return $false }
   try { $p = Get-ServiceUpProblem } catch { Say "INFO pre-flight: cannot read the service log from this window ($($_.Exception.Message)); checked again after the admin box"; return $false }
   if ($p) {
@@ -335,6 +365,8 @@ if ($DryRun) {
   $notReady = @()
   $b = Get-TailscaleBlock
   if ($b) { Say "NOT READY: $b"; $notReady += 'network blocks Tailscale' } else { Say "PASS this network reaches Tailscale (genuine certificate)" }
+  $rp = Get-ServiceRegProblem
+  if ($rp) { Say "NOT READY: $rp"; $notReady += 'service registered elsewhere' }
   if ($s -and $s.Status -eq 'Running') {
     try { $p = Get-ServiceUpProblem } catch { $p = "cannot read the service log from this window ($($_.Exception.Message))" }
     if ($p) { Say "NOT READY: the PhoneRunner service is not up: $p"; $notReady += 'service not up' } else { Say "PASS the PhoneRunner service is up at $script:UpURL" }
@@ -351,7 +383,7 @@ $isAdmin = $me.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 # Only one T-20 window at a time: a second one stopping the service would break the first.
 if (-not $SelfTest -and $isAdmin) {
   $script:OneWindow = New-Object System.Threading.Mutex($false, 'Global\PhoneRunnerT20Desk')
-  if (-not $script:OneWindow.WaitOne(0)) { Write-Host "T20: another T-20 window is already running. Close this one; nothing was changed."; exit 1 }
+  if (-not $script:OneWindow.WaitOne(0)) { Write-Host "T20: another T-20 window is still running. Let it finish (or close it), then run this again. Nothing was changed."; exit 1 }
 }
 # Pre-flight before the admin box: nothing is asked of Jake if Tailscale is blocked here or the
 # service is up to date and not up.
@@ -381,6 +413,14 @@ if ($SelfTest) {
     if ("$b" -notlike 'this network blocks Tailscale:*') { Fail "SELFTEST a filter-style certificate was not reported as a block: $b" }
     Say "PASS network check: a stand-in filter certificate is reported as: $b"
   }
+  # The which-program checks, against a service every Windows has (svchost with arguments).
+  $svch = Join-Path $env:SystemRoot 'System32\svchost.exe'
+  $r1 = Get-ServiceRegProblem 'EventLog' $svch; $p1 = Get-ServiceProcProblem 'EventLog' $svch
+  if ($r1 -or $p1) { Fail "SELFTEST which-program check refused the right program: $r1 $p1" }
+  $r2 = Get-ServiceRegProblem 'EventLog' 'C:\Program Files\PhoneRunner\phonerunner-service.exe'
+  $p2 = Get-ServiceProcProblem 'EventLog' 'C:\Program Files\PhoneRunner\phonerunner-service.exe'
+  if (-not $r2 -or -not $p2) { Fail "SELFTEST which-program check accepted the wrong program: '$r2' '$p2'" }
+  Say "PASS which-program check: a service registered or running from another program is caught ($r2)"
   $exe = 'phonerunner-service.exe'
 } else {
 
@@ -424,6 +464,9 @@ if (-not (Test-Path -LiteralPath (Join-Path $Root 'tsnet\tailscaled.state'))) {
 
 # 5 start, phone visits, read its device ID
 if ($healthy) { $url = $script:UpURL } else { $up = Restart-PR; $url = $up.url }
+$pp = Get-ServiceProcProblem
+if ($pp) { Fail "$pp (the test would not be testing these programs)" }
+Say "PASS the running service is $Dest\phonerunner-service.exe"
 Say "PASS service running. Page address: $url"
 $cfg = Read-Config
 $paired = [bool](@($cfg.allowed_node_ids) | Where-Object { $_ })

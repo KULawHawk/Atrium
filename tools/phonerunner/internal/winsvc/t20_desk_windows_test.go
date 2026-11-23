@@ -223,6 +223,7 @@ loop:
 		"PASS service-up check from the log: up at https://phonerunner.example.ts.net/",
 		"PASS network check: the real controlplane.tailscale.com answered with a genuine certificate",
 		"PASS network check: a stand-in filter certificate is reported as: this network blocks Tailscale:",
+		"PASS which-program check: a service registered or running from another program is caught",
 		"PASS t20-500-", "PASS approved copy made: t20-500-",
 		"CHECK no-user-folders-in-environment PASS", "CHECK module-path-system-only PASS",
 		"CHECK runs-from-approved-copy PASS", "CHECK temp-is-run-work-folder PASS", "CHECK can-write-temp PASS",
