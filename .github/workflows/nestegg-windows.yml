@@ -1,0 +1,204 @@
+# Nestegg on a clean Windows machine (Decision 276 = I6 A, Jake 11/20/2026 9:36 PM CT).
+# NOT a required check. Runs only when tools/nestegg changes, or by hand.
+# Budget: about 2-4 runs, $1-4 total (approved as stated); concurrency cancels stale runs.
+name: nestegg-windows
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/nestegg/**"
+      - ".github/workflows/nestegg-windows.yml"
+
+concurrency:
+  group: nestegg-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  phase0-check:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Phase 0 read-only check (Windows PowerShell 5.1, as on a new PC)
+        shell: powershell
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'nestegg_check.log'
+          powershell -NoProfile -ExecutionPolicy Bypass -File "tools\nestegg\Check-AdAstra.ps1" -InstallRoot (Join-Path $env:RUNNER_TEMP 'AdAstra') *>&1 | Tee-Object -FilePath $log
+          $last = (Get-Content $log | Where-Object { $_ -match '^NESTEGG-CHECK: ' } | Select-Object -Last 1)
+          if (-not $last) { Write-Host 'FAIL: no NESTEGG-CHECK verdict line (script did not finish)'; exit 1 }
+          Write-Host "verdict: $last"
+          # A GAP is expected on a runner (no Tesseract/Poppler there). What this job proves:
+          # the script parses and runs to its verdict on a clean Windows, and changes nothing.
+          if (Test-Path (Join-Path $env:RUNNER_TEMP 'AdAstra')) { Write-Host 'FAIL: the check created the install folder'; exit 1 }
+          Write-Host 'NESTEGG-WINDOWS: PASS'
+      - name: Keep the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nestegg-check-log
+          path: ${{ runner.temp }}/nestegg_check.log
+
+  phase1-prereqs:
+    # Really installs on the throwaway runner. -AssumeYes answers winget's agreement question
+    # ONLY here; "Install AdAstra.cmd" never passes it, so on a real PC the person answers it.
+    # The runner has no UAC box (it is an elevated service account), so this cannot test the
+    # Windows security boxes; those stay the person's own clicks and are tested by reading.
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Phase 1 dry run, then install, then run again (second run must install nothing)
+        shell: powershell
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'AdAstra'
+          $f = "tools\nestegg\Install-Prereqs.ps1"
+          # every pinned version must still be offered by winget; an unmeasured one prints what winget offers
+          $bad = 0
+          foreach ($m in [regex]::Matches((Get-Content $f -Raw), "(?m)^\s*Ensure '[^']+'\s+\$\{function:Find-\w+\}\s+'([^']+)'\s+'([^']*)'")) {
+            $id = $m.Groups[1].Value; $ver = $m.Groups[2].Value
+            if ($ver) {
+              winget show --id $id --exact --version $ver --source winget --accept-source-agreements --disable-interactivity *> $null
+              if ($LASTEXITCODE -eq 0) { Write-Host "  pin OK    $id $ver" } else {
+                Write-Host "  pin GONE  $id $ver (winget exit $LASTEXITCODE); winget offers:"; $bad++
+                winget show --id $id --exact --versions --source winget --accept-source-agreements --disable-interactivity 2>&1 | Select-Object -Last 6 | ForEach-Object { Write-Host "      $_" }
+              }
+            } else {
+              Write-Host "  not measured: $id; winget offers:"
+              winget show --id $id --exact --versions --source winget --accept-source-agreements --disable-interactivity 2>&1 | Select-Object -Last 6 | ForEach-Object { Write-Host "      $_" }
+            }
+          }
+          if ($bad) { Write-Host "FAIL: $bad pinned version(s) no longer offered by winget"; exit 1 }
+          $dry = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -DryRun *>&1 | Tee-Object -Variable d
+          if (Test-Path $root) { Write-Host 'FAIL: the dry run created the install folder'; exit 1 }
+          # Tesseract (Jake 11/23 12:17 AM, A): fetch UB Mannheim's official release file, check it against the
+          # fingerprint written in Install-Prereqs.ps1, and place it where the installer looks. A mismatch fails the job.
+          $src = Get-Content $f -Raw
+          $tver = [regex]::Match($src, "(?m)^\`$TessVersion = '([^']+)'").Groups[1].Value
+          $tsha = [regex]::Match($src, "(?m)^\`$TessSetupSha256 = '([0-9a-f]{64})'").Groups[1].Value
+          if (-not $tver -or -not $tsha) { Write-Host 'FAIL: Tesseract version or fingerprint not found in Install-Prereqs.ps1'; exit 1 }
+          $tname = "tesseract-ocr-w64-setup-$tver.exe"
+          $tdir = Join-Path $root '.adastra\kept\tesseract'
+          New-Item -ItemType Directory -Force -Path $tdir | Out-Null
+          $tdest = Join-Path $tdir $tname
+          Invoke-WebRequest -Uri "https://github.com/UB-Mannheim/tesseract/releases/download/v$tver/$tname" -OutFile $tdest -UseBasicParsing
+          $tgot = (Get-FileHash -LiteralPath $tdest -Algorithm SHA256).Hash.ToLower()
+          if ($tgot -ne $tsha) { Write-Host "FAIL: downloaded $tname sha256 $tgot is not the recorded $tsha"; exit 1 }
+          Write-Host "  Tesseract installer fetched and matches the recorded sha256 $tsha"
+          $one = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -AssumeYes *>&1 | Tee-Object -Variable o
+          $v1 = ($o | Where-Object { "$_" -match '^NESTEGG-PREREQS: ' } | Select-Object -Last 1)
+          Write-Host "first run: $v1"
+          if ("$v1" -ne 'NESTEGG-PREREQS: PASS') { $o | ForEach-Object { Write-Host "  | $_" } }
+          if ("$v1" -ne 'NESTEGG-PREREQS: PASS') { exit 1 }
+          if (-not (Test-Path (Join-Path $root '.adastra\prereqs.json'))) { Write-Host 'FAIL: prereqs.json not written'; exit 1 }
+          $two = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root *>&1 | Tee-Object -Variable t
+          $v2 = ($t | Where-Object { "$_" -match '^NESTEGG-PREREQS: ' } | Select-Object -Last 1)
+          if ("$v2" -ne 'NESTEGG-PREREQS: PASS') { Write-Host "FAIL: second run $v2"; exit 1 }
+          if ($t | Where-Object { "$_" -match 'installing winget package' }) { Write-Host 'FAIL: second run installed something'; exit 1 }
+          Get-Content (Join-Path $root '.adastra\prereqs.json')
+          Write-Host 'NESTEGG-PHASE1-WINDOWS: PASS'
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nestegg-prereqs-logs
+          path: ${{ runner.temp }}/AdAstra/.adastra
+          include-hidden-files: true
+
+  htrlens-models:
+    # Jake 11/21: every install includes the HtrLens model files and fails loudly without them.
+    # This job measures the pinned files once (sha256 of each TrOCR file, the Kraken model's size
+    # and licence), then, once the pins are filled in, fetches + verifies + loads them offline.
+    # kraken 5.x needs Python 3.12 or older (Requires-Python <3.13), so this reader gets its own 3.12.
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the reader's engines (CPU torch, as on a PC with no NVIDIA card)
+        shell: powershell
+        run: |
+          $t0 = Get-Date
+          python -m pip install --upgrade pip
+          python -m pip install "torch==2.4.1" "torchvision==0.19.1" --index-url https://download.pytorch.org/whl/cpu
+          if ($LASTEXITCODE -ne 0) { Write-Host 'FAIL: torch CPU install'; exit 1 }
+          python -m pip install "kraken>=5.2,<6.0" "transformers>=4.40,<5.0" "huggingface_hub>=0.20"
+          if ($LASTEXITCODE -ne 0) { Write-Host 'FAIL: kraken/transformers install'; exit 1 }
+          python -m pip freeze | Select-String -Pattern '^(torch|torchvision|kraken|transformers|huggingface.hub|coremltools)=='
+          $sp = python -c 'import sysconfig; print(sysconfig.get_paths()[''purelib''])'
+          $mb = [math]::Round(((Get-ChildItem $sp -Recurse -File | Measure-Object Length -Sum).Sum) / 1MB)
+          Write-Host ("TIMING engines-install {0:N0} s, site-packages {1} MB" -f ((Get-Date) - $t0).TotalSeconds, $mb)
+      - name: Measure the pinned files
+        shell: powershell
+        env:
+          HF_HUB_DISABLE_PROGRESS_BARS: "1"
+        run: |
+          # Python writes download notes to stderr; under the runner's ErrorActionPreference=Stop
+          # Windows PowerShell 5.1 turns that into a terminating NativeCommandError (run 1 of this job).
+          $ErrorActionPreference = 'Continue'
+          $t0 = Get-Date
+          python -I tools\nestegg\htrlens_models.py --measure *>&1 | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'htrlens_measure.txt')
+          Write-Host ("TIMING measure-download {0:N0} s" -f ((Get-Date) - $t0).TotalSeconds)
+          # measure mode always ends FAIL by design; this step passes only if every file was measured
+          $n = (Get-Content (Join-Path $env:RUNNER_TEMP 'htrlens_measure.txt') | Where-Object { $_ -match '^MEASURED ' }).Count
+          if ($n -lt 11) { Write-Host "FAIL: only $n MEASURED lines (want 9 TrOCR files + Kraken file + Kraken licence)"; exit 1 }
+          exit 0
+      - name: Fetch, verify and load offline (every pin must be filled in)
+        shell: powershell
+        env:
+          HF_HUB_DISABLE_PROGRESS_BARS: "1"
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $m = Get-Content tools\nestegg\htrlens_models.json -Raw
+          if ($m -match '"sha256": null') { Write-Host 'FAIL: a pin in htrlens_models.json is empty; copy it from the measure step'; exit 1 }
+          $t0 = Get-Date
+          python -I tools\nestegg\htrlens_models.py --load-check direct *>&1 | Tee-Object -Variable o
+          Write-Host ("TIMING fetch-verify-load {0:N0} s" -f ((Get-Date) - $t0).TotalSeconds)
+          $v = ($o | Where-Object { "$_" -match '^NESTEGG-HTRLENS: ' } | Select-Object -Last 1)
+          if ("$v" -ne 'NESTEGG-HTRLENS: PASS') { Write-Host "FAIL: $v"; exit 1 }
+          # second run must verify from the cache without downloading again
+          python -I tools\nestegg\htrlens_models.py --load-check direct *>&1 | Tee-Object -Variable o2
+          $v2 = ($o2 | Where-Object { "$_" -match '^NESTEGG-HTRLENS: ' } | Select-Object -Last 1)
+          if ("$v2" -ne 'NESTEGG-HTRLENS: PASS') { Write-Host "FAIL second run: $v2"; exit 1 }
+          Write-Host 'NESTEGG-HTRLENS-WINDOWS: PASS'
+      - name: Keep the measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: htrlens-measure
+          path: ${{ runner.temp }}/htrlens_measure.txt
+
+  phase2-parts:
+    # Builds the one part this public-to-the-runner repo holds (atrium) through the real builder on Windows:
+    # proves the py launcher lookup, Scripts\python.exe paths, the import probe and the verdict line. The
+    # other repos are private to this runner, so the full 38-part build is proven on the PC or a rented machine.
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src/atrium
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Dry run of every part, then a real build of the atrium part
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          foreach ($r in 'Conclave','locutus','sequoia','obsidian') { New-Item -ItemType Directory -Force -Path (Join-Path 'src' $r) | Out-Null }
+          $b = 'src\atrium\tools\nestegg\install_parts.py'
+          python -I $b --src src --envs (Join-Path $env:RUNNER_TEMP 'envs') --dry-run *>&1 | Tee-Object -Variable d
+          # the dry run reports every part not locked yet (FAIL rows, by name); it must never print PASS while any is unlocked
+          $dv = "$(($d | Select-Object -Last 1))"
+          if ($dv -notmatch '^NESTEGG-PARTS: (PASS \d+|HOLD \d+|FAIL \d+)') { Write-Host "FAIL: dry run gave no verdict ($dv)"; exit 1 }
+          if ($d | Where-Object { "$_" -match '^FAIL ' -and "$_" -notmatch ' not locked ' }) { Write-Host 'FAIL: dry run failed for a reason other than "not locked"'; exit 1 }
+          Write-Host "dry run: $dv"
+          python -I $b --src src --envs (Join-Path $env:RUNNER_TEMP 'envs') --only atrium *>&1 | Tee-Object -Variable o
+          $v = "$(($o | Where-Object { "$_" -match '^NESTEGG-PARTS: ' } | Select-Object -Last 1))"
+          if ($v -notmatch '^NESTEGG-PARTS: PASS \d+$') { Write-Host "FAIL: $v"; exit 1 }
+          Write-Host 'NESTEGG-PHASE2-WINDOWS: PASS'

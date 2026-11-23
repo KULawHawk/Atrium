@@ -1,0 +1,103 @@
+{
+  "_about": "Every part Nestegg builds, one environment each (CL-1). Read by install_parts.py. Source: the 11/22 package accounting (/mnt/project-files/package-accounting/PACKAGE_ACCOUNTING_2026-11-22.md, sections A-C) and the proven pod kit POD_CALIB_GPU_v5.sh. Jake 11/22 12:20 AM CT: anything used or referenced is part of the build. Versions owned by a part's own files (lock files, download scripts, side-env scripts) are read from there at install time, never re-typed here.",
+  "torch": {
+    "default": {"pins": ["torch==2.6.0", "torchvision==0.21.0"]},
+    "htrlens": {"pins": ["torch==2.4.1", "torchvision==0.19.1"], "why": "kraken 5.x requires torch~=2.4 and Python <3.13"},
+    "note": "torch comes from each part's known-good list (PyPI: CUDA 12 build on Linux, CPU build on Windows); these pins are checked against that list"
+  },
+  "lock": {
+    "about": "Known-good lists and measured hashes in locks/ (copied byte for byte from the package accounting thread's backup; locks/SOURCE_SHA256.txt has the source hashes). One set of lists: changes are made there and copied here.",
+    "linux_only": "^(nvidia-.*|cuda-.*|triton)$",
+    "cuda_local": "^cu[0-9]+$",
+    "windows_extras": {"colorama": {"version": "0.4.6", "when": ["click", "tqdm", "colorlog"], "why": "these use colorama only on Windows, so a list measured on Linux leaves it out; pip check on Windows names anything else"}}
+  },
+  "gate3_constraints": {
+    "file": "Conclave/docs/pod_provisioning/venv-gate3-freeze.txt",
+    "names": ["docling", "docling-core", "docling-ibm-models", "docling-parse", "docling-slim", "transformers", "pypdfium2", "pillow", "numpy", "opencv-python-headless", "timm", "safetensors", "huggingface-hub", "camelot-py", "pdfplumber"]
+  },
+  "probe": {
+      "about": "modules of vendored libraries that no shipped code reaches, and outside names never imported on the Pythons we install; each entry prints as INFO 'not probed' with its reason",
+      "not_reached": {
+          "locutus.forge": "no shipped Conclave code imports it: the package thread imported 28 shipped entry modules (rulings, Bridge, Console, Workbench, Observatory, profiler, locutus tags/atlas/packs/planner/firewall, obsidian.egress) in the built environment, all OK (11/22); needs numpy/pytesseract",
+          "locutus.observatory.coupling_corpus": "no shipped Conclave code imports it: the package thread imported 28 shipped entry modules (rulings, Bridge, Console, Workbench, Observatory, profiler, locutus tags/atlas/packs/planner/firewall, obsidian.egress) in the built environment, all OK (11/22); needs reportlab/pikepdf",
+          "obsidian.kdf": "no shipped Conclave code imports it: the package thread imported 28 shipped entry modules (rulings, Bridge, Console, Workbench, Observatory, profiler, locutus tags/atlas/packs/planner/firewall, obsidian.egress) in the built environment, all OK (11/22); needs argon2",
+          "obsidian.store": "no shipped Conclave code imports it: the package thread imported 28 shipped entry modules (rulings, Bridge, Console, Workbench, Observatory, profiler, locutus tags/atlas/packs/planner/firewall, obsidian.egress) in the built environment, all OK (11/22); needs argon2",
+          "obsidian.unlock": "no shipped Conclave code imports it: the package thread imported 28 shipped entry modules (rulings, Bridge, Console, Workbench, Observatory, profiler, locutus tags/atlas/packs/planner/firewall, obsidian.egress) in the built environment, all OK (11/22); needs argon2",
+          "obsidian.sealed_runs": "no shipped Conclave code imports it: the package thread imported 28 shipped entry modules (rulings, Bridge, Console, Workbench, Observatory, profiler, locutus tags/atlas/packs/planner/firewall, obsidian.egress) in the built environment, all OK (11/22); needs argon2"
+      },
+      "ignore": {
+          "tomli": "imported only when Python < 3.11 (conclave_classifier/patterns.py:22); every part runs 3.12 or 3.13"
+      }
+  },
+  "learning": {
+    "_about": "Per-aim learning folders (Jake 11/22 6:18 PM; design learning-folders/DESIGN_learning_folders_2026-11-22.md sections 2 and 4). Created under <InstallRoot>\\learning on first install; upgrade and repair never touch existing contents (SEC-8). Class P contents are never put in a package backup.",
+    "subdirs": ["inbox", "approved", "held-aside", "feedback"],
+    "aims": ["readers-print", "handwriting", "formulas-tables", "obsidian", "obsidian-wording", "sequoia", "locutus", "conclave-voting", "install-health"]
+  },
+  "parts": [
+    {"name": "Docling",        "repo": "Conclave", "roots": ["conclave_lens_docling"],               "python": "3.13", "torch": "default", "gate3": true,
+     "models": [{"step": "docling_download"}]},
+    {"name": "TableSurgeon",   "repo": "Conclave", "roots": ["conclave_lens_tablesurgeon"],          "python": "3.13", "torch": "default", "gate3": true,
+     "models": [{"step": "unpinned", "what": "table-transformer detection + structure"}]},
+    {"name": "MarkerPdf",      "repo": "Conclave", "roots": ["conclave_lens_markerpdf[gpu]"],        "python": "3.13", "torch": "default", "add": ["six==1.17.0"],
+     "side_env": {"name": "marker", "python": "3.13", "packages": ["marker-pdf==1.10.2", "surya-ocr==0.17.1", "pdftext==0.6.3", "pypdfium2==4.30.0", "six==1.17.0"], "check": ["marker_single", "--help"], "engine_file": "conclave_lens_markerpdf/src/conclave_lens_markerpdf/engine_requirements.txt"},
+     "models": [{"step": "unpinned", "what": "surya models (downloaded by marker on first use)"}]},
+    {"name": "MinerU",         "repo": "Conclave", "roots": ["conclave_lens_mineru[gpu]"],           "python": "3.13", "torch": "default", "add": ["six==1.17.0"],
+     "side_env": {"name": "mineru", "python": "3.12", "packages": ["mineru[core]==3.2.2", "pdftext==0.6.3", "pypdfium2==4.30.0", "six==1.17.0"], "check": ["mineru", "--help"], "engine_file": "conclave_lens_mineru/src/conclave_lens_mineru/engine_requirements.txt"},
+     "models": [{"step": "mineru_download"}]},
+    {"name": "NougatScience",  "repo": "Conclave", "roots": ["conclave_lens_nougat"],                "python": "3.13", "torch": "default",
+     "models": [{"step": "unpinned", "what": "nougat-base"}]},
+    {"name": "GotOcrUnified",  "repo": "Conclave", "roots": ["conclave_lens_gotocrunified"],         "python": "3.13", "torch": "default",
+     "models": [{"step": "spoke_script", "script": "scripts/download_model.py", "expect": "models/GOT-OCR2_0/config.json"}]},
+    {"name": "FormulaLens",    "repo": "Conclave", "roots": ["conclave_lens_formula[gpu]"],          "python": "3.13", "torch": "default",
+     "models": [{"step": "unpinned", "what": "pix2tex weights"}]},
+    {"name": "HtrLens",        "repo": "Conclave", "roots": ["conclave_lens_htrlens[gpu]"],          "python": "3.12", "torch": "htrlens", "add": ["click", "scipy"],
+     "models": [{"step": "htrlens_models"}]},
+    {"name": "FormFieldLens",  "repo": "Conclave", "roots": ["conclave_lens_formfield"],             "python": "3.13", "torch": "default",
+     "models": [{"step": "spoke_script", "script": "scripts/download_models.py"}]},
+    {"name": "ColPaliVerify",  "repo": "Conclave", "roots": ["conclave_lens_colpaliverify[gpu]"],    "python": "3.13", "torch": "default",
+     "models": [{"step": "spoke_script", "script": "scripts/download_model.py"}]},
+    {"name": "VisionLocal",    "repo": "Conclave", "roots": ["conclave_lens_visionlocal"],           "python": "3.13", "torch": "default", "free_gb": 30,
+     "models": [{"step": "spoke_script", "script": "scripts/download_model.py", "args": ["{models}/qwen2_vl_7b", "--model", "qwen2_vl_7b"], "expect_abs": "{models}/qwen2_vl_7b/config.json",
+                 "unpinned": "the script fetches revision \"main\", which is not a pin"}]},
+    {"name": "HtrQwen",        "repo": "Conclave", "roots": ["conclave_lens_htrqwen[gpu]"],          "python": "3.13", "torch": "default",
+     "models": [{"step": "unpinned", "what": "Qwen3-VL-8B (the spoke's lock file pins it; Nestegg fetch not built yet)"}]},
+    {"name": "GlmOcr",         "repo": "Conclave", "roots": ["conclave_lens_glmocr[gpu]"],           "python": "3.13", "torch": "default", "add": ["accelerate"],
+     "models": [{"step": "unpinned", "what": "GLM-OCR (the spoke's lock file pins it; Nestegg fetch not built yet)"}]},
+    {"name": "HtrHosted",      "repo": "Conclave", "roots": ["conclave_lens_htrhosted[hosted]"],     "python": "3.13", "note": "hosted reader: Jake's own signup, agreement, key and unlock; Nestegg installs the code only"},
+    {"name": "Adjudicator",    "repo": "Conclave", "roots": ["conclave_lens_adjudicator"],           "python": "3.13"},
+    {"name": "VisionClaude",   "repo": "Conclave", "roots": ["conclave_lens_visionclaude"],          "python": "3.13"},
+    {"name": "Hierarchy",      "repo": "Conclave", "roots": ["conclave_lens_hierarchy"],             "python": "3.13", "programs": ["mutool"]},
+    {"name": "OcrTesseract",   "repo": "Conclave", "roots": ["conclave_lens_ocrtesseract"],          "python": "3.13", "probe_ignore": {"torch": "reached only through LensRunner, which this lens never constructs (package thread 11/22)"}, "programs": ["tesseract"]},
+    {"name": "OcrPaddle",      "repo": "Conclave", "roots": ["conclave_lens_ocrpaddle"],             "python": "3.13",
+     "probe_ignore": {"torch": "reached only through LensRunner, which this lens never constructs (package thread 11/22)", "paddle": "imported only by side_env_worker.py, which runs in the .paddle-env side environment (checked by the spoke's own script)", "paddleocr": "same as paddle"},
+     "spoke_side_env": {"script": "scripts/setup_side_env.ps1", "python": "3.12"},
+     "models": [{"step": "unpinned", "what": "PaddleOCR models (side env setup fetches them)"}]},
+    {"name": "PdfText",        "repo": "Conclave", "roots": ["conclave_lens_pdftext"],               "python": "3.13", "probe_ignore": {"torch": "reached only through LensRunner, which this lens never constructs (package thread 11/22)"}},
+    {"name": "StructuredHeuristic", "repo": "Conclave", "roots": ["conclave_lens_structuredheuristic"], "python": "3.13"},
+    {"name": "harness_adapters", "repo": "Conclave", "roots": ["conclave_harness_adapters", "conclave_integration_locutus_rulings", "conclave_integration_locutus_pack", "conclave_lens_pdftext", "conclave_lens_structuredheuristic"],         "python": "3.13", "probe_ignore": {"colpali_engine": "ColPaliVerify runs in its own environment through colpali_subprocess_verifier_client.py (its transformers pin conflicts with this one)", "peft": "same as colpali_engine"}, "torch": "default", "add": ["pillow"]},
+    {"name": "apexbridge",     "repo": "Conclave", "roots": ["conclave_infra_apexbridge", "conclave_integration_locutus_rulings", "conclave_integration_observatory_triage", "conclave_integration_stage1_triage", "conclave_integration_observatory_sink", "conclave_integration_locutus_pack"],           "python": "3.13", "add": ["torch==2.6.0"], "programs": ["pdftoppm"], "no_caller": ["conclave_integration_observatory_triage", "conclave_integration_stage1_triage"]},
+    {"name": "workbench",      "repo": "Conclave", "roots": ["conclave_infra_workbench", "conclave_integration_locutus_rulings", "conclave_infra_observatory"],            "python": "3.13", "add": ["anthropic==2.12.0"], "harness_from": "harness_adapters", "test_env": {"list": "_test_env_workbench_py3.13.txt", "roots": ["conclave_infra_workbench", "conclave_infra_documentprofiler", "conclave_infra_observatory", "conclave_integration_locutus_rulings", "conclave_harness_adapters", "conclave_integration_observatory_sink", "conclave_integration_locutus_pack"]}, "note": "the Run button launches the harness with the harness.python setting; a blank harness.python on a fresh install would fail at Run, so the installer writes it (the harness_adapters environment) and proves it starts", "programs": ["tesseract", "pdftoppm", "mutool"]},
+    {"name": "reviewconsole",  "repo": "Conclave", "roots": ["conclave_infra_reviewconsole[gui,spotcheck]", "conclave_integration_locutus_rulings"], "python": "3.13"},
+    {"name": "votingengine",   "repo": "Conclave", "roots": ["conclave_infra_votingengine[shape-veto]"], "python": "3.13",
+     "probe_ignore": {"torch": "reached only through LensRunner, which this part never constructs (package thread 11/22)"}},
+    {"name": "documentprofiler", "repo": "Conclave", "roots": ["conclave_infra_documentprofiler[vlm]"], "python": "3.13"},
+    {"name": "observatory",    "repo": "Conclave", "roots": ["conclave_infra_observatory[gui]"],     "python": "3.13"},
+    {"name": "vault",          "repo": "Conclave", "roots": ["conclave_infra_vault"],                "python": "3.13"},
+    {"name": "lens_roster",    "repo": "Conclave", "roots": ["conclave_integration_lens_roster"],    "python": "3.13", "test_env": {"list": "_test_env_lens_roster_py3.13.txt", "roots": ["conclave_integration_lens_roster[cpu-roster]", "conclave_infra_apexbridge", "conclave_integration_locutus_rulings", "conclave_integration_observatory_sink", "conclave_integration_locutus_pack"]}, "add": ["torch==2.6.0"]},
+    {"name": "symbolspotter",  "repo": "Conclave", "roots": ["conclave_infra_symbolspotter"],        "python": "3.13"},
+    {"name": "locutus",        "repo": "locutus",  "roots": [".[coupling,forge]"],                   "python": "3.13", "add_repos": ["obsidian"], "probe_skip": {"tools/": "coupling_run.py and split_probe_run.py run inside a Conclave spoke environment (their own docstrings); not part of the locutus package"}, "programs": ["tesseract"]},
+    {"name": "sequoia",        "repo": "sequoia",  "roots": [".[crosscheck]"],                       "python": "3.13", "add": ["pymupdf"],
+     "note": "pymupdf (fitz) is used by a manual-check tool only; included because it is referenced (Jake 11/22)"},
+    {"name": "sequoia_bridge", "repo": "Conclave", "roots": ["conclave_sequoia_bridge", "conclave_integration_locutus_rulings", "conclave_integration_observatory_sink", "conclave_integration_locutus_pack"],            "python": "3.13", "add_repos": ["sequoia"], "add": ["requests", "torch==2.6.0"],
+     "probe_ignore": {"paddle": "imported only to mock it in self-test mode; real reads use OcrPaddle's side env", "paddleocr": "same as paddle", "sync": "conclave_launcher/sync.py, put on the path at run time; installed by the launcher part"},
+     "note": "the Sequoia scoring GUI; without the sequoia package SEQUOIA_AVAILABLE quietly becomes False"},
+    {"name": "launcher",       "repo": "Conclave", "roots": ["conclave_launcher", "conclave_integration_locutus_rulings", "conclave_integration_observatory_triage", "conclave_integration_stage1_triage", "conclave_integration_observatory_sink", "conclave_integration_locutus_pack"],                   "python": "3.13", "add": ["keyring", "torch==2.6.0"], "programs": ["pdftoppm"], "no_caller": ["conclave_integration_observatory_triage", "conclave_integration_stage1_triage"],
+     "note": "keyring reads the RunPod key from Windows Credential Manager (package accounting item 14, PR #2893); Nestegg never reads the key itself"},
+    {"name": "obsidian",       "repo": "obsidian", "roots": [".[ui,ner]"],                           "python": "3.13", "add_repos": ["locutus"],
+     "models": [{"step": "spacy_model", "wheel": "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl", "name": "en_core_web_sm-3.8.0",
+                 "wheel_sha256": "1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85", "wheel_sha256_source": "measured 11/22/2026 (12,806,118 bytes); the model folder is also checked against Obsidian's own content pin"}]},
+    {"name": "atrium",         "repo": "atrium",   "roots": ["."],                                   "python": "3.13", "probe_skip": ["tools/nestegg/"],
+     "note": "tools/nestegg scripts run in the environments they build (htrlens_models.py runs in HtrLens's), so they are probed there"}
+  ]
+}

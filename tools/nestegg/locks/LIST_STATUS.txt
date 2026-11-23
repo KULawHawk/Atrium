@@ -1,0 +1,91 @@
+# Status of each list (11/22/2026). Only a list matched line for line to a pod freeze may be called MEASURED (known-good).
+# Built at Conclave main 0f03c13 with the calibration kit's own recipe (POD_CALIB_GPU_v5.sh): torch 2.6.0 + torchvision 0.21.0 for every
+# torch reader, torch 2.4.1 + torchvision 0.19.1 on Python 3.12 for HtrLens, the gate-3 pins for Docling and TableSurgeon, six 1.17.0 for
+# MarkerPdf and MinerU, the kit's engine pins. Packages the kit did not pin were resolved today.
+
+Adjudicator_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+ColPaliVerify_py3.13.txt: MATCHED to pod freeze pod2_20261121-151703__freeze_ColPaliVerify.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
+Docling_py3.13.txt: MATCHED to pod freeze 20261119-182018-quick__freeze_Docling.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
+FormFieldLens_py3.13.txt: MATCHED to pod freeze pod2_20261121-151703__freeze_FormFieldLens.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
+FormulaLens_py3.13.txt: KIT RECIPE, resolved today, NOT matched to a pod freeze (ran on pod 1, whose freezes were never copied home and are gone)
+GlmOcr_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly); numpy back to 2.5.5 as measured (no locutus code in this reader)
+GotOcrUnified_py3.13.txt: MATCHED to pod freeze pod2_20261121-151703__freeze_GotOcrUnified.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
+Hierarchy_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly)
+HtrHosted_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+HtrLens_py3.12.txt: MATCHED to pod freeze shard1_20261121-235751__freeze_HtrLens.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
+HtrQwen_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly); numpy back to 2.5.5 as measured (no locutus code in this reader)
+MarkerPdf_py3.13.txt: KIT RECIPE, resolved today, NOT matched to a pod freeze (ran on pod 1, whose freezes were never copied home and are gone)
+MinerU_py3.13.txt: MATCHED to pod freeze shard5_20261121-224430__freeze_MinerU.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
+NougatScience_py3.13.txt: KIT RECIPE, resolved today, NOT matched to a pod freeze (ran on pod 1, whose freezes were never copied home and are gone)
+OcrPaddle_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly); numpy back to 2.5.5 as measured (no locutus code in this reader)
+OcrPaddle_side_py3.12.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly)
+OcrTesseract_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly)
+PdfText_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly)
+StructuredHeuristic_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly)
+TableSurgeon_py3.13.txt: KIT RECIPE, resolved today, NOT matched to a pod freeze (ran on pod 1, whose freezes were never copied home and are gone)
+VisionClaude_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+VisionLocal_py3.13.txt: MATCHED to pod freeze pod2_20261121-151703__freeze_VisionLocal.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
+_marker_cli_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly)
+_mineru_cli_py3.12.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly)
+apexbridge_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+atrium_py3.13.txt: empty on purpose: atrium declares no dependencies
+documentprofiler_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+harness_adapters_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+launcher_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+lens_roster_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+locutus_py3.13.txt: RESOLVED TODAY, NOT MEASURED. Built from locutus main 5eb87e1 [coupling,forge] PLUS obsidian main c09a544 base packages (no ui or ner), because the Forge export refuses to run without Obsidian (src/locutus/forge/egress.py). Changed after the installer test run: needs a re-test.
+observatory_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+obsidian_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+reviewconsole_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+sequoia_bridge_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+sequoia_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+symbolspotter_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+vault_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+votingengine_beta_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+votingengine_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+workbench_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
+
+_test_tools_py3.13.txt: RESOLVED TODAY, NOT MEASURED. Test tools only (pytest, pytest-cov, pytest-json-report, hypothesis, pytest-benchmark, pytest-qt), read from the repos' dev/test extras and test code; no version conflicts with any part list. No non-reader runs on Python 3.12, so no _py3.12 list.
+Superseded lists (kept, not used): lists/superseded_2026-11-22/.
+
+Still kit recipe, not matched: TableSurgeon, MarkerPdf, NougatScience, FormulaLens, _marker_cli, _mineru_cli (proof run will give a fresh-resolve freeze only; it installs PyPI torch).
+Numpy: every list resolved today now carries numpy 2.5.4 (was 2.5.5), the version every measured pod freeze used and one of locutus's pinned golden sets (installer test run 11/22 2:23 AM CT). Each changed list passed an offline install + pip check from the saved files. Engine environments left as resolved.
+
+Proof run 20261122-shard3 (11/22 1:51-3:04 AM CT): readers that passed but whose list is NOT promoted, because the list follows the calibration kit (with torchvision / gate-3 pins / six) and the proof run installed declared-only: Docling, TableSurgeon, MarkerPdf, MinerU, NougatScience, HtrLens, FormFieldLens. Not passed: ColPaliVerify (test limit: no candidates), GotOcrUnified and FormulaLens (degraded on the synthetic page), VisionLocal (torchvision not declared; fix PR pending).
+
+11/22 3:45 AM CT: apexbridge, launcher, reviewconsole rebuilt with conclave_integration_locutus_rulings as a root (plus observatory_triage and stage1_triage in apexbridge and launcher), per the installer finding. Added: tabulate 0.10.0 (apexbridge, launcher); attrs, jsonschema 4.26.0, jsonschema-specifications, referencing, rpds-py (reviewconsole). harness_adapters, workbench, sequoia_bridge unchanged (their closure already held these). All six: uv pip check clean. Labels unchanged (resolved today, not measured). Old copies in lists/superseded_2026-11-22/before_rulings/. Every added wheel was already in the Linux and Windows SHA256SUMS.
+
+11/22 ~4:30 AM CT: whole-closure probe rulings (installer FINDING_whole_closure_probe_2026-11-22.md). Conclave source /home/user/Conclave at main bb0a712 + #2899.
+ADDED (real runtime use):
+- conclave_integration_observatory_sink -> apexbridge, launcher (Curator plugin imports it when an Observatory DB is set).
+- conclave_integration_locutus_pack -> apexbridge, launcher (votingengine atlas_flag/shape_veto import it lazily on the pack path).
+- conclave_infra_observatory -> workbench (Observatory page). Brings scikit-learn, scipy and friends.
+- anthropic 2.12.0 -> workbench (DocumentProfiler vlm.py live Layer-4 path, guarded import, used when a key is set).
+- torch 2.6.0 -> apexbridge, launcher, lens_roster. LensRunner._is_lens_runnable (lensrunner api.py:1359) imports torch in the HOST env to decide whether a requires_gpu lens may run. Without torch every GPU lens fails warmup in that env, even on a GPU machine. apexbridge's Curator plugin (plugin.py:220) and lens_roster (roster.py) construct a LensRunner. On Windows this is the PyPI CPU build (no NVIDIA on Jake's PC, so the answer there is the same).
+NOT PROBED, with reason:
+- Vendored locutus forge/coupling/observatory.coupling_corpus (numpy, pytesseract, reportlab, pikepdf) and obsidian kdf/store/unlock/sealed_runs (argon2): no shipped Conclave code imports them. An import of 28 shipped entry modules (rulings, Bridge, Console, Workbench, Observatory, profiler, locutus tags/atlas/packs/planner/firewall, obsidian.egress) in the built env: all OK. Vault, which does use obsidian's store, already carries argon2 and probes clean.
+- tomli: claimclassifier patterns.py:22, behind sys.version_info < (3,11); unreachable on 3.13.
+- betacal: stays HOLD (PA-3 class).
+- lens_roster test-only needs (reportlab in tests/conftest.py, conclave_bridge in 3 tests) belong in the test tools, not the runtime list.
+All four rebuilt lists pass uv pip check. Every added wheel was already saved (triton and nccl have no Windows build, as before). Old copies are in lists/superseded_2026-11-22/before_closure_probe/.
+
+11/22 ~5:15 AM CT: rulings on installer RESULTS_all_conclave_parts_probe_2026-11-22.md.
+1) py3.12 files: my backup script de-duplicated by name==version, so cp312 wheels were skipped wherever a cp313 file existed. Fixed: every py3.12 list (HtrLens, OcrPaddle_side, _mineru_cli; 211 unique) was re-fetched for cp312. 17 new Linux files and 13 new Windows files (markupsafe 3.0.3 cp312 among them). nvidia cu13 libraries are py3-none files and were already saved. Windows has no build for triton, nccl, cufile, nvshmem or coremltools (as before). SHA256SUMS regenerated. Saved total is now Linux 12,034,697,016 bytes and Windows 8,107,346,879 bytes (sandbox only).
+2) sequoia_bridge: + observatory_sink, locutus_pack, torch 2.6.0 (Bridge inside, same as apexbridge). conclave_observatory comes in with the sink.
+3) harness_adapters: + locutus_pack, PdfText and StructuredHeuristic as source roots. No package change: their packages were already present. Note: StructuredHeuristic runs here with pillow 10.4.0, but it was measured with 13.0.0, so in this environment it is not MATCHED. colpali_engine and peft are NOT added: ColPaliVerify runs in its own environment through colpali_subprocess_verifier_client.py, because colpali-engine's transformers 4.45-4.49 pin conflicts with this environment. Probe row = not probed, with that reason.
+4) betacal: HOLD in every part that carries votingengine. Agreed.
+5) torch in OcrTesseract, OcrPaddle, PdfText: not probed. None of them constructs a LensRunner (the import is only LensRunner._is_lens_runnable in the closure).
+6) pytesseract and im2latex: PA-3, expected.
+7) Test-only: a separate locked list per part, used only for the test run, never shipped. First one: lists/_test_env_lens_roster_py3.13.txt (84 packages). It is lens_roster[cpu-roster] + the Bridge closure + reportlab 5.1.0 + test tools minus pytest-qt, resolved with the Hierarchy list as constraint, because the runtime list's pypdf 7.1.1 conflicts with Hierarchy's pypdf<7. pip check clean, and lens_roster's own tests pass in it (1 skip, 1 xfail). pdfminer.six 20221105 saved for it.
+
+11/22 ~5:50 AM CT: workbench Run: no list change. The installer writes the harness.python setting (catalog.py:260; blank = the Workbench's own Python) to the harness_adapters part's python, and proves it at install time with "-m conclave_harness_adapters.pipeline_run --help". (a), carrying harness_adapters plus torch plus lenses inside workbench, was rejected: it imports the pillow/pypdf pin conflicts into the Qt environment.
+
+11/22 ~6:10 AM CT: lists/_test_env_workbench_py3.13.txt (105 packages, test-only, never shipped). Roots: workbench, documentprofiler, observatory, locutus_rulings, harness_adapters, observatory_sink, locutus_pack; torch 2.6.0 + torchvision 0.21.0. workbench and harness_adapters disagree on four pins: anthropic 2.12.0 vs 0.109.2, pillow 13.0.0 vs 10.4.0, pdfplumber 0.11.11 vs 0.10.3, pdfminer.six 20260107 vs 20221105. The test environment takes the harness_adapters side, because the child process it proves is the harness. pip check clean. The path_stripped acceptance test passes in it. The full suite did not finish inside my 9-minute window, so that result is the installer's.
+
+11/22 1:50 PM CT: added Windows-only engine pins found by re-resolving for win_amd64: colorama==0.4.6 (marker + mineru engine), win32-setctime==1.2.1 (mineru engine). win32_setctime wheel sha added to win_amd64 + linux sums. LISTS_SHA256.txt sha256 f9d8c83e71da0ee2c4c69a820560355f39702593e680e4bfe96c913ed8917462.
+11/22 3:45 PM CT: TableSurgeon_py3.13.txt adds pytesseract==0.3.13 (now a main dependency per PA-3, Conclave PR #2907; wheel sha 7a99c6c2... already in SHA256SUMS win/linux). Still kit recipe, not matched.
+11/22 4:10 PM CT: TableSurgeon_py3.13.txt pytesseract corrected 0.3.13 -> 0.3.10 to match OcrTesseract (shared run interpreter; pre-run check refused on the mismatch in CI, #2907 head 003f6d1b). Wheel 8f22cc98... already in SHA256SUMS win/linux. FormFieldLens, locutus and obsidian lists still show 0.3.13: in a shared environment with OcrTesseract they get 0.3.10 (their own ranges allow it).
+11/22 4:35 PM CT: votingengine_py3.13.txt now equals votingengine_beta_py3.13.txt (adds betacal==1.1.0; betacal required per PA-3, Conclave PR #2910). Wheel b7063c65... already in SHA256SUMS win/linux.
+11/22 4:40 PM CT: betacal==1.1.0 added to _test_env_lens_roster, _test_env_workbench, apexbridge, harness_adapters, launcher, sequoia_bridge (each installs votingengine; betacal required per PA-3, #2910). scikit-learn 1.9.1 / numpy already present in each.
+
+2026-11-22 5:20 PM CT: packaging==26.3 added to Adjudicator, Hierarchy, HtrHosted, MarkerPdf, OcrPaddle, PdfText, StructuredHeuristic, VisionClaude (installer request: the per-reader pre-run check needs it). Wheel already in the backup (packaging-26.3-py3-none-any.whl). These eight are HOLD until their tests pass on the new list.

@@ -1,0 +1,32 @@
+{
+  "_about": "Pinned model files for the HtrLens handwriting reader (Jake 11/21: every install includes them; a missing or changed file fails loudly). Read by htrlens_models.py.",
+  "kraken": {
+    "doi": "10.5281/zenodo.10592716",
+    "cache_name": "10.5281_zenodo.10592716",
+    "sha256": "1ed39e732b26ccdd0f14b9abd3edc66c4b04a02e3d827d7f9e96a7fe7b585b64",
+    "sha256_source": "the file HtrLens loaded and fingerprinted in the GPU acceptance runs of 2026-06-07 (Conclave runs/20260607T081441Z-*, T100836Z-*, T154903Z-*)",
+    "file_name": "catmus-print-fondue-large.mlmodel",
+    "bytes": 22874456,
+    "measured": "GitHub Windows runner 2026-11-22 (Atrium run 44991328111): name, size and sha256 match the pin",
+    "license": "cc-by-4.0",
+    "attribution": "Kraken model catmus-print-fondue-large, Zenodo 10.5281/zenodo.10592716, CC BY 4.0"
+  },
+  "trocr": {
+    "repo_id": "microsoft/trocr-base-handwritten",
+    "revision": "eaacaf452b06415df8f10bb6fad3a4c11e609406",
+    "revision_source": "Conclave docs/offline_store/needed_files.allowlist.json (offline load proven sufficient with these files)",
+    "license_expected": "mit",
+    "measured": "GitHub Windows runner 2026-11-22 (Atrium run 44991575042); every byte count matched the Hub listing; the verify job re-downloads on a fresh runner and must match",
+    "files": {
+      "README.md": {"bytes": 2999, "sha256": "9f808e1fc12dcb61c89a38f00303506dbc85db8ea988cec441a9324e0c8f2843"},
+      "config.json": {"bytes": 4165, "sha256": "4c779f24e063c437c3dafd5b2e6c9f59f2fa2bd1dbb4ae6a30153bbbbf19e647"},
+      "generation_config.json": {"bytes": 190, "sha256": "41149cdcffec4d657f32dfcddd9b208037f01286c9e07945c724908c58ed0193"},
+      "merges.txt": {"bytes": 456318, "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5"},
+      "model.safetensors": {"bytes": 1333384464, "sha256": "25a40cddc7e6120140a3d5b9e3dd3878a92ada7b4f312953ab22edc19c2a5acc"},
+      "preprocessor_config.json": {"bytes": 224, "sha256": "2fcc0da9466ee00be0403b26027373039e032820ebac409e207b32e52e52119d"},
+      "special_tokens_map.json": {"bytes": 772, "sha256": "c611b1f7d416eb001ee4f293d903ea8c88e703463f1d403f1866a0352743fd00"},
+      "tokenizer_config.json": {"bytes": 1118, "sha256": "5a1356884c6ae736a621841535264ba7c5bebd52f169258add2c48fcbb32d50a"},
+      "vocab.json": {"bytes": 898822, "sha256": "06b4d46c8e752d410213d9548eb27a54db70fda0319b6271fb8d59dead5e1cab"}
+    }
+  }
+}

@@ -1,0 +1,190 @@
+"""Build the private saved-copy release (Decision 30 A, Jake 11/23 12:40 AM CT). Runs on a GitHub runner INSIDE the
+private saved-copies repository (its own GITHUB_TOKEN publishes; no key is stored anywhere). Run with python -I.
+
+For each pinned file (packages: locks/SHA256SUMS_*.txt; models: models_pinned.json + htrlens_models.json) it downloads
+from the original site, refuses anything whose sha256 is not the pin, stores it content-addressed through
+saved_copies.split (parts under 2 GiB), uploads the pieces, then deletes its own local working copy so a runner's disk
+holds one file at a time. Assets already in the release are not uploaded again, so a stopped run resumes.
+INDEX.json is re-uploaded after every file.
+
+  python -I build_saved_release.py --repo OWNER/NAME --tag saved-copy-v1 --kind packages|models [--limit N] [--dry-run]
+Last line: SAVED-RELEASE: PASS n | FAIL n (n files)
+"""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import urllib.request
+from html.parser import HTMLParser
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+LOCKS = HERE / "locks"
+
+
+def _sc():
+    spec = importlib.util.spec_from_file_location("nestegg_saved_copies", HERE / "saved_copies.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+# ---- what to save ---------------------------------------------------------------------------------------------------
+
+def package_items() -> list[dict]:
+    items = {}
+    for f in sorted(LOCKS.glob("SHA256SUMS_*.txt")):
+        for ln in f.read_text(encoding="utf-8").splitlines():
+            if ln.strip():
+                h, fn = ln.split()
+                items[h] = {"sha256": h, "name": fn, "bytes": None, "source": "pypi"}
+    return list(items.values())
+
+
+def model_items() -> list[dict]:
+    out: dict[str, dict] = {}
+
+    def add_hf(repo: str, rev: str, files: dict) -> None:
+        for path, meta in files.items():
+            if meta.get("sha256"):
+                out[meta["sha256"]] = {"sha256": meta["sha256"], "name": f"{repo}@{rev[:12]}/{path}", "bytes": meta.get("bytes"),
+                                       "url": f"https://huggingface.co/{repo}/resolve/{rev}/{path}"}
+
+    for mf in (HERE / "htrlens_models.json", HERE / "models_pinned.json"):
+        if not mf.is_file():
+            continue
+        data = json.loads(mf.read_text(encoding="utf-8"))
+        stack = [data]
+        while stack:  # walk nested groups (reader -> model) without caring about grouping depth
+            node = stack.pop()
+            if not isinstance(node, dict):
+                continue
+            if node.get("repo_id") and node.get("revision") and isinstance(node.get("files"), dict):
+                add_hf(node["repo_id"], node["revision"], node["files"])
+            elif node.get("sha256") and (node.get("url") or node.get("doi")):
+                url = node.get("url") or ""
+                if url:
+                    out[node["sha256"]] = {"sha256": node["sha256"], "name": node.get("file_name") or url.rsplit("/", 1)[-1],
+                                           "bytes": node.get("bytes"), "url": url}
+            stack.extend(v for v in node.values() if isinstance(v, dict))
+    return list(out.values())
+
+
+# ---- where a package file comes from --------------------------------------------------------------------------------
+
+class _Links(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.hrefs: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "a":
+            self.hrefs += [v for k, v in attrs if k == "href" and v]
+
+
+def _dist(fn: str) -> tuple[str, str]:
+    if fn.endswith(".whl"):
+        d, v = fn.split("-")[:2]
+    else:
+        d, v = re.sub(r"\.(tar\.gz|zip)$", "", fn).rsplit("-", 1)
+    return d, v
+
+
+def package_url(fn: str) -> str | None:
+    d, v = _dist(fn)
+    m = re.search(r"\+(cu\d+)", v)
+    if m:  # +cu124 builds live only on PyTorch's own index
+        page = f"https://download.pytorch.org/whl/{m.group(1)}/{d.lower().replace('_', '-')}/"
+        p = _Links()
+        p.feed(urllib.request.urlopen(page, timeout=60).read().decode())
+        for h in p.hrefs:
+            if h.split("#")[0].rsplit("/", 1)[-1].replace("%2B", "+") == fn:
+                return urllib.request.urljoin(page, h.split("#")[0])
+        return None
+    meta = json.loads(urllib.request.urlopen(f"https://pypi.org/pypi/{d}/{v}/json", timeout=60).read())
+    for u in meta.get("urls", []):
+        if u["filename"] == fn:
+            return u["url"]
+    return None
+
+
+# ---- the release ----------------------------------------------------------------------------------------------------
+
+def gh(*args: str, check: bool = True) -> subprocess.CompletedProcess:
+    return subprocess.run(["gh", *args], capture_output=True, text=True, check=check)
+
+
+def release_assets(repo: str, tag: str) -> set[str]:
+    if gh("release", "view", tag, "-R", repo, check=False).returncode != 0:
+        gh("release", "create", tag, "-R", repo, "--title", tag, "--notes",
+           "Saved copies of every pinned package and model file (Decision 30 A). Content-addressed; see INDEX.json.")
+        return set()
+    r = gh("release", "view", tag, "-R", repo, "--json", "assets")
+    return {a["name"] for a in json.loads(r.stdout)["assets"]}
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--repo", required=True)
+    ap.add_argument("--tag", default="saved-copy-v1")
+    ap.add_argument("--kind", choices=["packages", "models"], required=True)
+    ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--dry-run", action="store_true")
+    a = ap.parse_args(argv)
+    sc = _sc()
+    cfg = sc.load_config()
+    items = package_items() if a.kind == "packages" else model_items()
+    total = sum(i["bytes"] or 0 for i in items)
+    print(f"{len(items)} {a.kind} files, {total:,} bytes known", flush=True)
+    if a.dry_run:
+        for i in items[: a.limit or None]:
+            print(f"TODO  {i['name']}")
+        print(f"SAVED-RELEASE: DRY RUN ({len(items)} files)")
+        return 0
+    have = release_assets(a.repo, a.tag)
+    work = Path(tempfile.mkdtemp(prefix="saved_release_"))
+    store = work / "store"
+    store.mkdir()
+    if "INDEX.json" in have:
+        gh("release", "download", a.tag, "-R", a.repo, "-p", "INDEX.json", "-D", str(store), "--clobber")
+    idx = json.loads((store / "INDEX.json").read_text()) if (store / "INDEX.json").exists() else {}
+    fails = done = 0
+    for i in items[: a.limit or None]:
+        sha = i["sha256"]
+        if sha in idx and all(n in have for n in sc.asset_names(sha, idx[sha])):
+            done += 1
+            continue
+        try:
+            url = i.get("url") or package_url(i["name"])
+            if not url:
+                raise RuntimeError("no download address found")
+            dl = work / "dl"
+            urllib.request.urlretrieve(url, dl)
+            got = sc.sha256_file(dl)
+            if got != sha:
+                raise RuntimeError(f"original site sent sha256 {got}, not the pin")
+            entry = sc.split(dl, store, int(cfg["max_part_bytes"]), i["name"])
+            dl.unlink()
+            for nm in sc.asset_names(sha, entry):
+                gh("release", "upload", a.tag, str(store / nm), "-R", a.repo, "--clobber")
+                (store / nm).unlink()  # our own working copy; the release now holds it
+            gh("release", "upload", a.tag, str(store / "INDEX.json"), "-R", a.repo, "--clobber")
+            done += 1
+            print(f"PASS  {i['name']}  {entry['bytes']:,} bytes  {len(entry['parts']) or 1} piece(s)", flush=True)
+        except Exception as exc:  # one bad file is a FAIL row; the rest still go
+            fails += 1
+            print(f"FAIL  {i['name']}  {exc}", flush=True)
+    shutil.rmtree(work, ignore_errors=True)  # the runner's temp folder only
+    print(f"SAVED-RELEASE: PASS {done}" if not fails else f"SAVED-RELEASE: FAIL {fails} ({done} saved)")
+    return 1 if fails else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
