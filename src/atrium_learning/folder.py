@@ -300,11 +300,11 @@ class LearningFolder:
              "added_by": by, "gate": row.get("gate"), "event": "held_aside", "reason": reason},
         )
 
-    def items_for_copy(self, gate: Gate | None = None) -> list[Path]:
-        """Every approved item, each re-checked against its gate and its sha256. Any failure stops the whole aim."""
+    def items_for_copy(self, gate: Gate | None = None, classes: tuple[str, ...] = CLASSES) -> list[Path]:
+        """Approved items of the given classes, each re-checked (sha256 + gate). Any failure stops the whole aim."""
         out = []
         for sha, row in sorted(self.state().items()):
-            if row["event"] != "added":
+            if row["event"] != "added" or row.get("class") not in classes:
                 continue
             path = self._file("approved", sha)
             if _sha256(path) != sha:
