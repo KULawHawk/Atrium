@@ -131,17 +131,8 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 		return nil, fmt.Errorf("launch: user lookup: %w", err)
 	}
 	userSID := tu.User.Sid.String()
-	sdD, err := windows.SecurityDescriptorFromString(defaultDACL(userSID))
-	if err != nil {
-		return nil, fmt.Errorf("launch: default rights: %w", err)
-	}
-	dacl, _, err := sdD.DACL()
-	if err != nil {
-		return nil, fmt.Errorf("launch: default rights: %w", err)
-	}
-	tdd := tokenDefaultDACL{DefaultDacl: dacl}
-	if err := windows.SetTokenInformation(tok, windows.TokenDefaultDacl, (*byte)(unsafe.Pointer(&tdd)), uint32(unsafe.Sizeof(tdd))); err != nil {
-		return nil, fmt.Errorf("launch: default rights: %w", err)
+	if err := applyLockdown(tok, userSID); err != nil {
+		return nil, err
 	}
 
 	inherit := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), InheritHandle: 1}
@@ -181,16 +172,10 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 	}
 	defer windows.CloseHandle(nul)
 
-	sdP, err := windows.SecurityDescriptorFromString(processSDDL(userSID))
+	saP, saT, err := lockdownAttrs(userSID)
 	if err != nil {
-		return nil, fmt.Errorf("launch: process rights: %w", err)
+		return nil, err
 	}
-	sdT, err := windows.SecurityDescriptorFromString(threadSDDL(userSID))
-	if err != nil {
-		return nil, fmt.Errorf("launch: thread rights: %w", err)
-	}
-	saP := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sdP}
-	saT := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sdT}
 
 	// Inherit exactly the pipe write end and NUL, nothing else the service holds.
 	attrs, err := windows.NewProcThreadAttributeList(1)
@@ -289,4 +274,36 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 		c.Err = os.NewFile(uintptr(er), "session-errors")
 	}
 	return c, nil
+}
+
+// applyLockdown sets the token's default rights, which every object the child
+// creates later (its threads above all) receives.
+func applyLockdown(tok windows.Token, userSID string) error {
+	sdD, err := windows.SecurityDescriptorFromString(defaultDACL(userSID))
+	if err != nil {
+		return fmt.Errorf("launch: default rights: %w", err)
+	}
+	dacl, _, err := sdD.DACL()
+	if err != nil {
+		return fmt.Errorf("launch: default rights: %w", err)
+	}
+	tdd := tokenDefaultDACL{DefaultDacl: dacl}
+	if err := windows.SetTokenInformation(tok, windows.TokenDefaultDacl, (*byte)(unsafe.Pointer(&tdd)), uint32(unsafe.Sizeof(tdd))); err != nil {
+		return fmt.Errorf("launch: default rights: %w", err)
+	}
+	return nil
+}
+
+// lockdownAttrs are the process and first-thread rights of a launched child.
+func lockdownAttrs(userSID string) (*windows.SecurityAttributes, *windows.SecurityAttributes, error) {
+	sdP, err := windows.SecurityDescriptorFromString(processSDDL(userSID))
+	if err != nil {
+		return nil, nil, fmt.Errorf("launch: process rights: %w", err)
+	}
+	sdT, err := windows.SecurityDescriptorFromString(threadSDDL(userSID))
+	if err != nil {
+		return nil, nil, fmt.Errorf("launch: thread rights: %w", err)
+	}
+	return &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sdP},
+		&windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sdT}, nil
 }
