@@ -165,13 +165,17 @@ Two builds give the same hashes. The service program is about 23 MB, over the PC
 
 ## Install at the desk (Jake, about 15–20 min, after the PC lane stages and checks the files)
 
-1. Copy both `.exe` files into `C:\Program Files\PhoneRunner\` (one Windows box).
-2. In an elevated window: `phonerunner-service install` → PASS lines.
-3. `phonerunner-service login` → open the Tailscale link it prints, approve → PASS with the page address.
-4. Open the page on the phone → "Not allowed" shows the phone's device ID and login.
-5. `phonerunner-service pair <device ID> <login>` → type `YES` → PASS.
-6. `sc start PhoneRunner`, reload the page on the phone.
+The one-command form is the T-20 desk script on the share (`PHONERUNNER_DESK_T20.ps1`, which does every step below and then the Run button test, printing PASS/FAIL). By hand, in this order (the page exists only while the service runs, so the service starts before the phone visits):
+
+1. Copy the four `.exe` files into `C:\Program Files\PhoneRunner\` (one Windows box).
+2. In an elevated window: `phonerunner-service install --user <your Windows user>` → PASS lines.
+3. `phonerunner-service login` → open the Tailscale link it prints, sign in yourself → PASS with the page address.
+4. `sc start PhoneRunner` (no phone is paired yet, so it refuses everyone).
+5. Open the page on the phone → "Not allowed" shows the phone's device name and device ID. The log line `gate.refused` has the same ID and a shortened login.
+6. `phonerunner-service pair <device ID> <your Tailscale login>` → type `YES` → PASS. Then `sc stop PhoneRunner` and `sc start PhoneRunner`, and reload the page on the phone.
 7. Run button (optional, when he wants it): `phonerunner-service passkey` → tap "Add this phone's passkey" on the phone → type the code → PASS. Then `phonerunner-service run-button on` → T-01C PASS → restart the service.
+
+T-06 (`phonerunner-check refused`) needs a device on the tailnet that is not the phone. Unless the PC also runs the Tailscale app, the PC itself is not on the tailnet (the service is its own Tailscale device and there is no localhost port), so from the PC the page simply does not load, which is also a refusal.
 
 ## Tests
 
