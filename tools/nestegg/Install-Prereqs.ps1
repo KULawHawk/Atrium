@@ -175,7 +175,7 @@ $TessSetupName = "tesseract-ocr-w64-setup-$TessVersion.exe"
 # never the signature (a "signature must be Valid" rule would refuse this official file forever).
 $TessSetupSha256 = 'c885fff6998e0608ba4bb8ab51436e1c6775c2bafc2559a19b423e18678b60c9'
 $TessExeSha256 = 'babb405f4366b480d02cd8ff2bac8d497170f6c1711ce6f3d5d8bf0fb7fa6ed9'  # tesseract.exe on Jake's PC, 11/22
-$TessMatchShown = ''  # '' = the kept installer is not yet shown to carry $TessExeSha256; it is not run
+$TessMatchShown = 'TESS-MATCH: PASS 2026-11-22 11:23 PM CT on Jake''s PC (Check-TesseractMatch.ps1 f6efba74...ee5c): unpacked tesseract.exe 1,585,024 bytes, sha256 babb405f4366b480d02cd8ff2bac8d497170f6c1711ce6f3d5d8bf0fb7fa6ed9, nothing run'  # '' = not shown; not run
 function Tesseract-Version([string]$Dir) {
     $line = Try-Cmd (Join-Path $Dir 'tesseract.exe') @('--version')
     if ($line -match 'v?(\d+\.\d+\.\d+(\.\d+)?)') { return $Matches[1] }
