@@ -1252,3 +1252,107 @@ def test_saved_copy_error_for_spacy_wheel_is_a_fail_row_then_the_pinned_url(tmp_
     assert "FAIL  en_core_web_sm-3.8.0 saved copy" in out and "OSError: disk unreadable" in out
     assert rep.fails >= 1
     assert calls[0][-1] == spec["wheel"] + "#sha256=" + spec["wheel_sha256"] and "--no-index" not in calls[0]
+
+
+def _reader_record(envs: Path, status: str = "PASS") -> Path:
+    rec = envs / "reader_envs.json"
+    rec.write_text(json.dumps({"schema": 1, "provisional": False, "readers": [{"part": "PdfText", "status": status}]}))
+    return rec
+
+
+def _wb_envs(tmp_path: Path, m) -> tuple[Path, list[dict]]:
+    envs = tmp_path / "envs"
+    for n in ("workbench", "harness_adapters"):
+        py = m.env_python(envs / n)
+        py.parent.mkdir(parents=True, exist_ok=True)
+        py.write_text("")
+    return envs, [{"name": "workbench", "harness_from": "harness_adapters"}]
+
+
+def test_reader_envs_turned_on_per_reader_gate_and_every_reader_named(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Go-live (coordinator ruling 11/23): on when >= 1 reader is PASS and this run's Run button passed; other
+    FAIL rows in the run do not block it; every reader is listed usable / not usable; otherwise LEFT OFF, loudly."""
+    import subprocess
+    m = _mod()
+    envs, parts = _wb_envs(tmp_path, m)
+    rec = envs / "reader_envs.json"
+    rec.write_text(json.dumps({"schema": 1, "provisional": False, "readers": [
+        {"part": "PdfText", "status": "PASS"}, {"part": "MinerU", "status": "FAIL"}]}))
+    calls = []
+
+    def fake(cmd, **k):
+        calls.append([str(c) for c in cmd])
+        return subprocess.CompletedProcess(cmd, 0, f"WORKBENCH-READER-ENVS: OK {rec} (written to x)\n", "")
+
+    monkeypatch.setattr(m.subprocess, "run", fake)
+    m.RUN_BUTTON.clear()
+    m.turn_on_reader_envs(m.Report(), rec, envs, parts, False)
+    out = capsys.readouterr().out
+    assert calls == [] and "LEFT OFF (the workbench Run button was not checked in this run)" in out
+    m.RUN_BUTTON["workbench"] = False
+    m.turn_on_reader_envs(m.Report(), rec, envs, parts, False)
+    assert calls == [] and "LEFT OFF (the workbench Run button row failed)" in capsys.readouterr().out
+    m.RUN_BUTTON["workbench"] = True
+    _reader_record(envs, "HOLD")
+    m.turn_on_reader_envs(m.Report(), rec, envs, parts, False)
+    assert calls == [] and "LEFT OFF (no reader environment passed)" in capsys.readouterr().out
+    rec.write_text(json.dumps({"schema": 1, "provisional": False, "readers": [
+        {"part": "PdfText", "status": "PASS"}, {"part": "MinerU", "status": "FAIL"}]}))
+    good = m.Report()
+    good.fails = 9  # unpinned model steps elsewhere in the run do not block a reader that is PASS
+    m.turn_on_reader_envs(good, rec, envs, parts, False)
+    out = capsys.readouterr().out
+    assert calls and calls[0][-3:] == ["--reader-envs", str(rec), str(m.env_python(envs / "harness_adapters"))]
+    assert "readers usable" in out and "1: PdfText" in out and "readers NOT usable" in out and "MinerU (FAIL)" in out
+    assert good.passes == 1 and "harness.reader_envs on: 1 readers usable (1 not usable, listed above)" in out
+    m.RUN_BUTTON.clear()
+
+
+def test_reader_envs_script_failure_is_a_fail_row(tmp_path: Path, monkeypatch, capsys) -> None:
+    import subprocess
+    m = _mod()
+    envs, parts = _wb_envs(tmp_path, m)
+    rec = _reader_record(envs)
+    monkeypatch.setattr(m.subprocess, "run", lambda cmd, **k: subprocess.CompletedProcess(
+        cmd, 1, "WORKBENCH-READER-ENVS: FAIL harness.reader_envs is already set to C:/other.json\n", ""))
+    rep = m.Report()
+    m.RUN_BUTTON["workbench"] = True
+    m.turn_on_reader_envs(rep, rec, envs, parts, False)
+    m.RUN_BUTTON.clear()
+    assert rep.fails == 1 and "already set to C:/other.json" in capsys.readouterr().out
+
+
+def test_workbench_reader_envs_writes_only_blank_and_puts_back_off_when_the_probe_fails(tmp_path: Path, monkeypatch) -> None:
+    """The Workbench side of the go-live switch, against stand-ins for the Workbench settings API."""
+    import importlib.util
+    import subprocess
+    import types
+    store: dict = {}
+    mods = {
+        "conclave_workbench": types.ModuleType("conclave_workbench"),
+        "conclave_workbench.pages": types.ModuleType("p"), "conclave_workbench.pages.settings": types.ModuleType("s"),
+        "conclave_workbench.pages.settings.catalog": types.SimpleNamespace(
+            HARNESS_READER_ENVS_KEY="harness.reader_envs", phase_a_defaults=lambda s, x: {}, workbench_schema=lambda x: None),
+        "conclave_workbench.pages.settings.provenance": types.SimpleNamespace(
+            Scope=types.SimpleNamespace(DEFAULT=0), ScopeLayer=lambda *a: None),
+        "conclave_workbench.pages.settings.user_layer": types.SimpleNamespace(
+            default_user_settings_path=lambda: tmp_path / "user.json", load_user_layer=lambda p: None,
+            save_user_value=lambda p, k, v: store.__setitem__(k, v)),
+        "conclave_workbench.seal": types.ModuleType("seal"),
+        "conclave_workbench.seal.wiring": types.SimpleNamespace(
+            harness_reader_envs_reader=lambda schema, layers: (lambda: store.get("harness.reader_envs") or None)),
+    }
+    for k, v in mods.items():
+        monkeypatch.setitem(sys.modules, k, v)
+    spec = importlib.util.spec_from_file_location("wbh", NESTEGG / "workbench_harness.py")
+    w = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(w)
+    rec = tmp_path / "reader_envs.json"
+    rec.write_text("{}")
+    monkeypatch.setattr(w.subprocess, "run", lambda cmd, **k: subprocess.CompletedProcess(cmd, 0, '{"presets": {}}\n', ""))
+    assert w.reader_envs(str(rec), "py") == 0 and store["harness.reader_envs"] == str(rec)
+    store["harness.reader_envs"] = "C:/chosen.json"  # a value the person chose is never overwritten
+    assert w.reader_envs(str(rec), "py") == 1 and store["harness.reader_envs"] == "C:/chosen.json"
+    store.clear()
+    monkeypatch.setattr(w.subprocess, "run", lambda cmd, **k: subprocess.CompletedProcess(cmd, 2, "", "boom\n"))
+    assert w.reader_envs(str(rec), "py") == 1 and store["harness.reader_envs"] == ""  # put back off
