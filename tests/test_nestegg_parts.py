@@ -1142,3 +1142,46 @@ def test_paddle_side_env_held_open_is_a_fail_row_and_the_old_one_stays(tmp_path:
     monkeypatch.setattr(Path, "rename", real)
     m.side_envs(rep2, part, tmp_path, tmp_path / "envs", tmp_path / "log.txt", Path("py"))
     assert "(unfinished build, left in place" in capsys.readouterr().out
+
+
+def test_spacy_model_wheel_comes_from_the_saved_copy_first(tmp_path: Path, monkeypatch) -> None:
+    """HR 14: en_core_web_sm installs from the saved copy (no internet), by its pinned sha256; else the URL."""
+    import hashlib
+    m = _mod()
+    sc = m._saved_copies()
+    body = b"spacy model wheel"
+    whl = tmp_path / "en_core_web_sm-3.8.0-py3-none-any.whl"
+    whl.write_bytes(body)
+    spec = {"wheel": "https://example.invalid/x/" + whl.name, "wheel_sha256": hashlib.sha256(body).hexdigest(),
+            "wheel_bytes": len(body), "name": "en_core_web_sm-3.8.0"}
+    envs = tmp_path / "root" / "envs"
+    envs.mkdir(parents=True)
+    log = envs / "spacy.txt"
+    m.INSTALL_ROOT["root"] = tmp_path / "root"
+    assert m.saved_model_wheel(spec, envs, log) is None  # no saved copy yet: the caller uses the URL
+    sc.split(whl, tmp_path / "root" / "saved", 2_000_000_000)
+    got = m.saved_model_wheel(spec, envs, log)
+    assert got == envs / "_wheelhouse" / whl.name and got.read_bytes() == body
+    other = dict(spec, wheel_sha256=hashlib.sha256(b"something else").hexdigest())
+    assert m.saved_model_wheel(other, envs / "other", log) is None  # only the pinned sha256 is ever taken
+    src = (NESTEGG / "install_parts.py").read_text(encoding="utf-8")
+    step = src[src.index('elif step == "spacy_model":'):src.index('unknown model step')]
+    assert step.index("saved_model_wheel(") < step.index('"--no-index", local') < step.index("#sha256=")
+
+
+def test_saved_copy_build_fails_loudly_when_a_model_list_is_missing(tmp_path: Path) -> None:
+    """No silent failure: a missing parts.json (or model list) must stop the build, not quietly drop its files."""
+    import importlib.util
+    import shutil
+
+    import pytest
+    for f in ("build_saved_release.py", "saved_copies.py", "saved_copies.json", "models_pinned.json", "htrlens_models.json"):
+        shutil.copy(NESTEGG / f, tmp_path / f)
+    spec = importlib.util.spec_from_file_location("bsr_missing", tmp_path / "build_saved_release.py")
+    b = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(b)
+    with pytest.raises(SystemExit, match="parts.json not found"):
+        b.model_items()
+    (tmp_path / "htrlens_models.json").unlink()
+    with pytest.raises(SystemExit, match="htrlens_models.json not found"):
+        b.model_items()

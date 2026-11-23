@@ -62,8 +62,8 @@ def model_items() -> list[dict]:
                                                "url": f"https://huggingface.co/{repo}/resolve/{rev}/{path}"}
 
     for mf in (HERE / "htrlens_models.json", HERE / "models_pinned.json"):
-        if not mf.is_file():
-            continue
+        if not mf.is_file():  # a missing list would silently drop its models from the saved copy
+            raise SystemExit(f"SAVED-RELEASE: FAIL {mf.name} not found next to {Path(__file__).name}")
         data = json.loads(mf.read_text(encoding="utf-8"))
         stack = [data]
         while stack:  # walk nested groups (reader -> model) without caring about grouping depth
@@ -80,17 +80,18 @@ def model_items() -> list[dict]:
             stack.extend(v for v in node.values() if isinstance(v, dict))
     # model wheels the installer itself fetches (parts.json "models": spaCy's en_core_web_sm), pinned there by sha256
     pf = HERE / "parts.json"
-    if pf.is_file():
-        stack = [json.loads(pf.read_text(encoding="utf-8"))]
-        while stack:
-            node = stack.pop()
-            if isinstance(node, list):
-                stack.extend(node)
-            elif isinstance(node, dict):
-                if node.get("wheel") and node.get("wheel_sha256"):
-                    out[node["wheel_sha256"]] = {"sha256": node["wheel_sha256"], "name": node["wheel"].rsplit("/", 1)[-1],
-                                                 "bytes": node.get("wheel_bytes"), "url": node["wheel"]}
-                stack.extend(node.values())
+    if not pf.is_file():  # never a silent gap: the en_core_web_sm wheel would simply not be saved
+        raise SystemExit(f"SAVED-RELEASE: FAIL {pf.name} not found next to {Path(__file__).name} (it names the model wheels to save)")
+    stack = [json.loads(pf.read_text(encoding="utf-8"))]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, list):
+            stack.extend(node)
+        elif isinstance(node, dict):
+            if node.get("wheel") and node.get("wheel_sha256"):
+                out[node["wheel_sha256"]] = {"sha256": node["wheel_sha256"], "name": node["wheel"].rsplit("/", 1)[-1],
+                                             "bytes": node.get("wheel_bytes"), "url": node["wheel"]}
+            stack.extend(node.values())
     return list(out.values())
 
 

@@ -913,6 +913,25 @@ def _place_local_dir(sc, m: dict, cfg: dict, root: Path, say) -> bool:
     return True
 
 
+def saved_model_wheel(m: dict, envs: Path, log: Path) -> Path | None:
+    """A model wheel the installer pip-installs (parts.json "models": spaCy's en_core_web_sm), taken from the saved
+    copies first by its pinned sha256 (every saved copy is re-hashed before use). None means not in any saved copy: the original URL is used,
+    still pinned by #sha256= (and Obsidian's own content pin is checked after either way)."""
+    sc = _saved_copies()
+    cfg = sc.load_config()
+    locs = [loc for loc in cfg["locations"] if loc["kind"] != "origin"]
+    root = INSTALL_ROOT.get("root") or envs.parent
+    if not sc.usable(locs, root):
+        return None
+    fn = m["wheel"].rsplit("/", 1)[-1]
+    dest = envs / "_wheelhouse" / fn
+    with log.open("a", encoding="utf-8") as fh:
+        src = sc.fetch(m["wheel_sha256"], m.get("wheel_bytes"), fn, dest, {"locations": locs}, root,
+                       say=lambda msg: _saved_say(msg, fh))
+        fh.write(f"saved copy: {fn} <- {src or 'not in any saved copy (original URL, hash-pinned)'}\n")
+    return dest if src else None
+
+
 def saved_models(rep: Report, part: dict, envs: Path) -> None:
     """Decision 30 A: put each pinned Hugging Face snapshot of this reader in place from the saved copies first.
     A snapshot is placed only when every one of its files matches a pin; otherwise the reader's own step below
@@ -978,7 +997,9 @@ def models(rep: Report, part: dict, src: Path, repo: Path, envs: Path, py: Path,
             rep.row("FAIL", label, "PDF-Extract-Kit fetched, but with no pinned revision or hash; not trusted until pinned"
                     if rc == 0 else f"PDF-Extract-Kit download failed (see {log})")
         elif step == "spacy_model":
-            rc = run([py, "-m", "pip", "install", "--no-deps", f"{m['wheel']}#sha256={m['wheel_sha256']}"], log)
+            local = saved_model_wheel(m, envs, log)  # Decision 30 A / HR 14: the saved copy first, so no internet is needed
+            rc = run([py, "-m", "pip", "install", "--no-deps", "--no-index", local], log) if local else \
+                run([py, "-m", "pip", "install", "--no-deps", f"{m['wheel']}#sha256={m['wheel_sha256']}"], log)
             chk = ("import sys, en_core_web_sm; from pathlib import Path; from obsidian.detect import PINNED_MODELS, model_sha256;"
                    "d = Path(en_core_web_sm.__file__).parent / sys.argv[1];"
                    "sys.exit(0 if model_sha256(d) == PINNED_MODELS[sys.argv[1]] else 3)")
