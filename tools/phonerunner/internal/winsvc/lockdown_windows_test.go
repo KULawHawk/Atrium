@@ -333,7 +333,9 @@ func TestItemProgramsUnderItemRights(t *testing.T) {
 // TestItemLaterThreads records the item trade: a program at the item's own level
 // with no special privileges (on the PC: any program Jake runs, agents
 // included) is refused the item's process and first thread, but may open
-// threads the item creates later. (Both run at Medium here.)
+// threads the item creates later for suspend + set-context, which is enough to
+// run code inside the item (read its memory, change its output). The process
+// lock therefore does not protect a running item. (Both run at Medium here.)
 func TestItemLaterThreads(t *testing.T) {
 	var procBad []string
 	var opened, total int
@@ -357,6 +359,84 @@ func TestItemLaterThreads(t *testing.T) {
 	if len(procBad) > 0 {
 		t.Fatalf("FAIL the item's process gave %v to a same-level program", procBad)
 	}
+}
+
+// TestNarrowerDefaults: does any default narrower than full rights let a plain
+// program (cmd.exe) start? Logged, not failed: evidence for the decision.
+func TestNarrowerDefaults(t *testing.T) {
+	sys, _ := windows.GetSystemDirectory()
+	argv := []string{sys + `\cmd.exe`, "/c", "exit 0"}
+	const (
+		del, rc, wdac, wown, syn = 0x10000, 0x20000, 0x40000, 0x80000, 0x100000
+		gr, gw, gx               = windows.GENERIC_READ, windows.GENERIC_WRITE, windows.GENERIC_EXECUTE
+	)
+	for _, c := range []struct {
+		name string
+		mask uint32
+	}{
+		{"DELETE alone", del},
+		{"READ_CONTROL alone", rc},
+		{"WRITE_DAC alone", wdac},
+		{"WRITE_OWNER alone", wown},
+		{"SYNCHRONIZE alone", syn},
+		{"read+execute+DELETE", gr | gx | del},
+		{"read+execute+WRITE_DAC", gr | gx | wdac},
+		{"read+execute+WRITE_OWNER", gr | gx | wown},
+		{"read+write+execute+DELETE+WRITE_DAC+WRITE_OWNER", gr | gw | gx | del | wdac | wown},
+		{"all standard + all specific rights (0x1FFFFF)", 0x1FFFFF},
+		{"all specific rights + SYNCHRONIZE + READ_CONTROL", 0xFFFF | syn | rc},
+	} {
+		code, _ := startOpt(t, opt{procSD: true, threadSD: true, defMask: c.mask, argv: argv})
+		t.Logf("NARROW %s (0x%X): cmd.exe exit 0x%X", c.name, c.mask, code)
+	}
+}
+
+// TestItemChildOpen records the second item trade: a program an item starts gets
+// no locked rights at all (its process and every thread take the full default),
+// so a same-level program running as Jake is granted every T-16 right on it.
+func TestItemChildOpen(t *testing.T) {
+	sys, _ := windows.GetSystemDirectory()
+	argv := []string{sys + `\cmd.exe`, "/c", "ping -n 5 127.0.0.1 >nul"}
+	var granted []string
+	var childPID uint32
+	code, _ := startOpt(t, opt{procSD: true, threadSD: true, item: true, argv: argv, probe: func(pid uint32) {
+		childPID = childOf(pid)
+		if childPID == 0 {
+			return
+		}
+		asLevel(t, testChildLevel, func() {
+			for _, d := range pccheck.Dangerous {
+				if h, err := windows.OpenProcess(d.Mask, false, childPID); err == nil {
+					windows.CloseHandle(h)
+					granted = append(granted, d.Name)
+				}
+			}
+		})
+	}})
+	if code != 0 {
+		t.Fatalf("item exit 0x%X", code)
+	}
+	if childPID == 0 {
+		t.Fatal("the item's child (ping) was not found; the probe proves nothing")
+	}
+	t.Logf("ITEM CHILD same level granted %d of %d rights: %v", len(granted), len(pccheck.Dangerous), granted)
+}
+
+// childOf returns the first process whose parent is pid, or 0.
+func childOf(pid uint32) uint32 {
+	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return 0
+	}
+	defer windows.CloseHandle(snap)
+	var pe windows.ProcessEntry32
+	pe.Size = uint32(unsafe.Sizeof(pe))
+	for err := windows.Process32First(snap, &pe); err == nil; err = windows.Process32Next(snap, &pe) {
+		if pe.ParentProcessID == pid {
+			return pe.ProcessID
+		}
+	}
+	return 0
 }
 
 // TestSetLevelRaisesOnly: setLevel never lowers a token.
