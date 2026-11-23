@@ -16,6 +16,7 @@ type Child struct {
 	Process windows.Handle
 	PID     uint32
 	Out     *os.File       // read end of the pipe; only the child holds the write end
+	Err     *os.File       // read end of the child's own error pipe (ErrPipe only), else nil
 	Job     windows.Handle // 0 unless launched with Job: the whole process tree
 }
 
@@ -23,6 +24,9 @@ type Child struct {
 // (kill-on-close), so an item never outlives the service.
 func (c *Child) Close() {
 	c.Out.Close()
+	if c.Err != nil {
+		c.Err.Close()
+	}
 	windows.CloseHandle(c.Process)
 	if c.Job != 0 {
 		windows.CloseHandle(c.Job)
@@ -37,12 +41,17 @@ func (c *Child) Stop() error {
 	return windows.TerminateProcess(c.Process, 1)
 }
 
-// Opts adjusts a launch. The zero value is the session part's launch.
+// Opts adjusts a launch.
 type Opts struct {
 	Dir         string   // working folder ("" = inherit)
 	Env         []string // the whole environment ("" = the user's own block)
 	StderrToOut bool     // send stderr down the same pipe as stdout
 	Job         bool     // put the child in a kill-on-close job object
+	ErrPipe     bool     // give stderr its own pipe (Child.Err), so a startup failure can be logged
+	// Session marks the session part (the desktop watcher): it runs at High
+	// integrity. Everything else (Run button items) stays at Jake's own level,
+	// so a running item cannot touch the watcher.
+	Session bool
 }
 
 // envBlock builds a Windows environment block.
@@ -86,20 +95,35 @@ func threadSDDL(userSID string) string {
 	return fmt.Sprintf("D:P(A;;GA;;;SY)(A;;0x0801;;;%s)(A;;0x0801;;;OW)", userSID)
 }
 
-// defaultDACL is set as the session token's default DACL, so every object the
-// session part creates later (Go runtime threads above all) gets SYSTEM full
-// control and Jake only read-permissions + wait: no suspend, context, or
-// impersonation rights on any later thread (reviewer point on #53). OWNER RIGHTS
-// is listed so the owner's implicit permission-change right is removed too.
+// defaultDACL is the token default DACL of every launched child, which every
+// object it creates later (threads above all) gets. Jake must have full rights:
+// with anything less no program starts at all, not Go, cmd.exe or PowerShell
+// (STATUS_DLL_INIT_FAILED, 0xC0000142 — the T-20 desk failure, reproduced on a
+// Windows runner by TestLockdownParts and TestItemProgramsUnderItemRights).
+// The process and first thread stay locked (processSDDL, threadSDDL). Later
+// threads of the session part are protected by its integrity level
+// (ChildLevel); later threads of an item are open to Jake's other programs at
+// his level, the trade recorded in TestItemLaterThreads.
 func defaultDACL(userSID string) string {
-	return fmt.Sprintf("D:P(A;;GA;;;SY)(A;;0x120000;;;%s)(A;;0x120000;;;OW)", userSID)
+	return fmt.Sprintf("D:P(A;;GA;;;SY)(A;;GA;;;%s)(A;;GA;;;OW)", userSID)
 }
+
+// ChildLevel is the integrity level of the session part only: High, one step
+// above Jake's ordinary programs, agents and Run button items (Medium under UAC),
+// so none of them can suspend, read or rewrite its threads or memory. The
+// service, as SYSTEM, raises a private copy of Jake's token; Jake's own token is
+// never changed. Items are never raised: a High item could drive elevated
+// windows and would run anything it loads from Jake-writable folders at High.
+const ChildLevel = "S-1-16-12288"
 
 // tokenDefaultDACL is TOKEN_DEFAULT_DACL.
 type tokenDefaultDACL struct{ DefaultDacl *windows.ACL }
 
 // LaunchSession starts exe in the active console session as the signed-in user.
-func LaunchSession(exe string, args []string) (*Child, error) { return Launch(exe, args, Opts{}) }
+// Its error output gets its own pipe, so the service can log why it stopped.
+func LaunchSession(exe string, args []string) (*Child, error) {
+	return Launch(exe, args, Opts{ErrPipe: true, Session: true})
+}
 
 // Launch is LaunchSession with options (used for approved items).
 func Launch(exe string, args []string, o Opts) (*Child, error) {
@@ -123,17 +147,8 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 		return nil, fmt.Errorf("launch: user lookup: %w", err)
 	}
 	userSID := tu.User.Sid.String()
-	sdD, err := windows.SecurityDescriptorFromString(defaultDACL(userSID))
-	if err != nil {
-		return nil, fmt.Errorf("launch: default rights: %w", err)
-	}
-	dacl, _, err := sdD.DACL()
-	if err != nil {
-		return nil, fmt.Errorf("launch: default rights: %w", err)
-	}
-	tdd := tokenDefaultDACL{DefaultDacl: dacl}
-	if err := windows.SetTokenInformation(tok, windows.TokenDefaultDacl, (*byte)(unsafe.Pointer(&tdd)), uint32(unsafe.Sizeof(tdd))); err != nil {
-		return nil, fmt.Errorf("launch: default rights: %w", err)
+	if err := applyLockdown(tok, userSID, o.Session); err != nil {
+		return nil, err
 	}
 
 	inherit := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), InheritHandle: 1}
@@ -151,6 +166,21 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 	if err := windows.SetHandleInformation(r, windows.HANDLE_FLAG_INHERIT, 0); err != nil {
 		return nil, fmt.Errorf("launch: pipe: %w", err)
 	}
+	var er, ew windows.Handle
+	if o.ErrPipe {
+		if err := windows.CreatePipe(&er, &ew, inherit, 0); err != nil {
+			return nil, fmt.Errorf("launch: error pipe: %w", err)
+		}
+		defer func() {
+			windows.CloseHandle(ew)
+			if !ok {
+				windows.CloseHandle(er)
+			}
+		}()
+		if err := windows.SetHandleInformation(er, windows.HANDLE_FLAG_INHERIT, 0); err != nil {
+			return nil, fmt.Errorf("launch: error pipe: %w", err)
+		}
+	}
 	nulName, _ := windows.UTF16PtrFromString("NUL")
 	nul, err := windows.CreateFile(nulName, windows.GENERIC_READ|windows.GENERIC_WRITE, 0, inherit, windows.OPEN_EXISTING, 0, 0)
 	if err != nil {
@@ -158,16 +188,10 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 	}
 	defer windows.CloseHandle(nul)
 
-	sdP, err := windows.SecurityDescriptorFromString(processSDDL(userSID))
+	saP, saT, err := lockdownAttrs(userSID)
 	if err != nil {
-		return nil, fmt.Errorf("launch: process rights: %w", err)
+		return nil, err
 	}
-	sdT, err := windows.SecurityDescriptorFromString(threadSDDL(userSID))
-	if err != nil {
-		return nil, fmt.Errorf("launch: thread rights: %w", err)
-	}
-	saP := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sdP}
-	saT := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sdT}
 
 	// Inherit exactly the pipe write end and NUL, nothing else the service holds.
 	attrs, err := windows.NewProcThreadAttributeList(1)
@@ -176,12 +200,18 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 	}
 	defer attrs.Delete()
 	handles := []windows.Handle{w, nul}
+	if o.ErrPipe {
+		handles = append(handles, ew)
+	}
 	if err := attrs.Update(windows.PROC_THREAD_ATTRIBUTE_HANDLE_LIST, unsafe.Pointer(&handles[0]), uintptr(len(handles))*unsafe.Sizeof(handles[0])); err != nil {
 		return nil, fmt.Errorf("launch: attributes: %w", err)
 	}
 
 	errOut := nul
-	if o.StderrToOut {
+	switch {
+	case o.ErrPipe:
+		errOut = ew
+	case o.StderrToOut:
 		errOut = w
 	}
 	desktop, _ := windows.UTF16PtrFromString(`winsta0\default`)
@@ -255,5 +285,79 @@ func Launch(exe string, args []string, o Opts) (*Child, error) {
 	}
 	windows.CloseHandle(pi.Thread)
 	ok = true
-	return &Child{Process: pi.Process, PID: pi.ProcessId, Out: os.NewFile(uintptr(r), "session-pipe"), Job: job}, nil
+	c := &Child{Process: pi.Process, PID: pi.ProcessId, Out: os.NewFile(uintptr(r), "session-pipe"), Job: job}
+	if o.ErrPipe {
+		c.Err = os.NewFile(uintptr(er), "session-errors")
+	}
+	return c, nil
+}
+
+// applyLockdown sets the token's default rights, which every object the child
+// creates later (its threads above all) receives; for the session part it also
+// raises the integrity level to ChildLevel (never lowers it).
+func applyLockdown(tok windows.Token, userSID string, session bool) error {
+	sdD, err := windows.SecurityDescriptorFromString(defaultDACL(userSID))
+	if err != nil {
+		return fmt.Errorf("launch: default rights: %w", err)
+	}
+	dacl, _, err := sdD.DACL()
+	if err != nil {
+		return fmt.Errorf("launch: default rights: %w", err)
+	}
+	tdd := tokenDefaultDACL{DefaultDacl: dacl}
+	if err := windows.SetTokenInformation(tok, windows.TokenDefaultDacl, (*byte)(unsafe.Pointer(&tdd)), uint32(unsafe.Sizeof(tdd))); err != nil {
+		return fmt.Errorf("launch: default rights: %w", err)
+	}
+	if !session {
+		return nil
+	}
+	return setLevel(tok, ChildLevel)
+}
+
+// setLevel raises tok's integrity level to level (a S-1-16-N string) if lower.
+func setLevel(tok windows.Token, level string) error {
+	want, err := windows.StringToSid(level)
+	if err != nil {
+		return fmt.Errorf("launch: integrity level: %w", err)
+	}
+	if cur, err := levelOf(tok); err == nil && cur >= rid(want) {
+		return nil
+	}
+	tml := windows.Tokenmandatorylabel{Label: windows.SIDAndAttributes{Sid: want, Attributes: windows.SE_GROUP_INTEGRITY}}
+	if err := windows.SetTokenInformation(tok, windows.TokenIntegrityLevel, (*byte)(unsafe.Pointer(&tml)), tml.Size()); err != nil {
+		return fmt.Errorf("launch: integrity level: %w", err)
+	}
+	if cur, err := levelOf(tok); err != nil || cur < rid(want) {
+		return fmt.Errorf("launch: integrity level did not take (now %d, want %d)", cur, rid(want))
+	}
+	return nil
+}
+
+func levelOf(tok windows.Token) (uint32, error) {
+	var n uint32
+	windows.GetTokenInformation(tok, windows.TokenIntegrityLevel, nil, 0, &n)
+	if n == 0 {
+		return 0, errors.New("no integrity level")
+	}
+	buf := make([]byte, n)
+	if err := windows.GetTokenInformation(tok, windows.TokenIntegrityLevel, &buf[0], n, &n); err != nil {
+		return 0, err
+	}
+	return rid((*windows.Tokenmandatorylabel)(unsafe.Pointer(&buf[0])).Label.Sid), nil
+}
+
+func rid(s *windows.SID) uint32 { return s.SubAuthority(uint32(s.SubAuthorityCount()) - 1) }
+
+// lockdownAttrs are the process and first-thread rights of a launched child.
+func lockdownAttrs(userSID string) (*windows.SecurityAttributes, *windows.SecurityAttributes, error) {
+	sdP, err := windows.SecurityDescriptorFromString(processSDDL(userSID))
+	if err != nil {
+		return nil, nil, fmt.Errorf("launch: process rights: %w", err)
+	}
+	sdT, err := windows.SecurityDescriptorFromString(threadSDDL(userSID))
+	if err != nil {
+		return nil, nil, fmt.Errorf("launch: thread rights: %w", err)
+	}
+	return &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sdP},
+		&windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sdT}, nil
 }
