@@ -1155,6 +1155,38 @@ def write_reader_envs(envs: Path, entries: list[dict]) -> Path:
     return out
 
 
+def turn_on_reader_envs(rep: Report, record: Path, envs: Path, parts: list[dict], dry: bool) -> None:
+    """Go-live: point the Workbench's harness.reader_envs setting at the record, so each reader runs from its own
+    environment (otherwise the installed app runs only what the harness environment carries: the Fast preset).
+    Only after a run with no FAIL; on any failure it is left off, loudly. Undo: clear it in Settings > Harness."""
+    label = "workbench reader environments"
+    wb = next((p for p in parts if p.get("harness_from")), None) or next(
+        (p for p in json.loads((HERE / "parts.json").read_text(encoding="utf-8"))["parts"] if p.get("harness_from")), None)
+    if dry or wb is None:
+        return
+    wpy, hpy = env_python(envs / wb["name"]), env_python(envs / wb["harness_from"])
+    try:
+        passed = [e["part"] for e in json.loads(record.read_text(encoding="utf-8"))["readers"] if e.get("status") == "PASS"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        rep.row("FAIL", label, f"harness.reader_envs left off: the record {record} could not be read back ({exc})")
+        return
+    why = (f"{rep.fails} FAIL row(s) in this run" if rep.fails else
+           "no reader environment passed" if not passed else
+           f"the {wb['name']} environment is not built" if not wpy.exists() else
+           f"the {wb['harness_from']} environment is not built" if not hpy.exists() else "")
+    if why:
+        rep.row("WARN", label, f"harness.reader_envs LEFT OFF ({why}); the installed app runs only what the "
+                               f"{wb['harness_from']} environment carries until a run passes")
+        return
+    r = subprocess.run([wpy, "-I", HERE / "workbench_harness.py", "--reader-envs", str(record), str(hpy)],
+                       capture_output=True, text=True)
+    out = (r.stdout.strip().splitlines() or [r.stderr.strip()[-200:]])[-1]
+    if r.returncode == 0 and out.startswith("WORKBENCH-READER-ENVS: OK"):
+        rep.row("PASS", label, f"harness.reader_envs on ({len(passed)} readers PASS): " + out.removeprefix("WORKBENCH-READER-ENVS: OK "))
+    else:
+        rep.row("FAIL", label, out.removeprefix("WORKBENCH-READER-ENVS: "))
+
+
 def learning_folders(rep: Report, cfg: dict, root: Path, dry: bool) -> None:
     """<root>/learning/<aim>/ with inbox, approved, held-aside, feedback, an empty manifest.jsonl and a README.md.
     Create-only: anything already there is left exactly as it is (SEC-8), so upgrade and repair are safe."""
@@ -1229,7 +1261,9 @@ def main(argv: list[str] | None = None) -> int:
         learning_folders(rep, cfg, a.root or a.envs.parent, a.dry_run)
     if readers:
         host_selftest(rep, readers, a.envs)
-        rep.row("INFO", "reader record", f"{write_reader_envs(a.envs, readers)}: {len(readers)} reader environments")
+        record = write_reader_envs(a.envs, readers)
+        rep.row("INFO", "reader record", f"{record}: {len(readers)} reader environments")
+        turn_on_reader_envs(rep, record, a.envs, parts, a.dry_run)
     counts = f"HOLD {rep.holds}, PASS {rep.passes}"
     if rep.fails:
         print(f"NESTEGG-PARTS: FAIL {rep.fails}, {counts}")
