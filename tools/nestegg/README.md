@@ -17,6 +17,7 @@ Plan: project share `installer/PLAN_installer_2026-11-20.md`.
 | `saved_copies.py` + `saved_copies.json` | 2, saved copies | Decision 30 A (Jake 11/23). Every package and model file is looked for in this order: the home copy `<InstallRoot>\saved`, then the private saved-copy release, then the original site. Each file is hash-checked whichever copy it came from. Files are stored under their sha256, in parts under 2 GiB. A home-network disk can be added as one more folder entry. `check <folder>` re-hashes a copy. |
 | `Pull Saved Copies.cmd` | home copy | Double-click: fills `%USERPROFILE%\AdAstra\saved` from the private release, checking free disk first and hash-checking every piece. Uses your own `gh` sign-in. Ends `SAVED-COPIES: PASS` or `FAIL n`. |
 | `build_saved_release.py` + `release/build-saved-copy.yml` | release build | Runs only in the private saved-copies repository (Atrium is public). It downloads each pinned file, refuses a wrong hash, uploads it in parts, and keeps only one file on disk at a time. It can resume after a stop. |
+| `release/source_pin.py` | release build | Pins the saved-copies repository's tools to one Atrium commit on main. `make` writes SOURCE.txt (the commit plus a sha256 for every tool file at that commit). The build job runs `verify` (fetched from that commit) and stops before uploading anything if a file differs or an unpinned file is present. |
 
 Still to come: release download of the five repos (I2 = C), core start-up, Settings switches, shortcuts and inventory, the doctor.
 

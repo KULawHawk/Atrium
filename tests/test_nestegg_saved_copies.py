@@ -18,7 +18,8 @@ def _cfg(*locs: dict) -> dict:
 
 def test_shipped_config_is_ordered_home_release_origin_and_under_github_limit() -> None:
     cfg = sc.load_config()
-    assert [loc["kind"] for loc in cfg["locations"]] == ["folder", "github_release", "origin"]
+    assert [loc["kind"] for loc in cfg["locations"]] == ["folder", "github_release", "github_release", "origin"]
+    assert {loc["repo"] for loc in cfg["locations"] if loc["kind"] == "github_release"} == {"KULawHawk/adastra-saved-copies"}
     assert cfg["max_part_bytes"] < sc.GH_MAX_ASSET
 
 
@@ -85,9 +86,8 @@ def test_install_root_placeholder_expands(tmp_path: Path) -> None:
     json.dumps(sc.load_config())
 
 
-def test_release_repo_left_empty_until_jake_picks_a_private_one(tmp_path: Path) -> None:
-    rel = [loc for loc in sc.load_config()["locations"] if loc["kind"] == "github_release"][0]
-    assert rel["repo"] == ""  # Atrium is public; never point the saved copies at it
+def test_release_with_no_repo_is_skipped(tmp_path: Path) -> None:
+    rel = {"name": "GitHub release", "kind": "github_release", "repo": "", "tag": "t"}
     rows: list[str] = []
     assert sc.fetch("0" * 64, 5, "f", tmp_path / "d", _cfg(rel), tmp_path, say=rows.append) is None
     assert "not chosen yet" in rows[0]
@@ -135,3 +135,86 @@ def test_hf_snapshot_placed_from_saved_copy_only_when_every_file_matches(tmp_pat
     assert sc.place_hf_snapshot("org/m", "b" * 40, files, hub, cfg, tmp_path / "root", say=lambda *_: None) is None
     files["extra.bin"] = {"bytes": 1, "sha256": None}  # unpinned file is never taken from a saved copy
     assert sc.place_hf_snapshot("org/m", "c" * 40, files, hub, cfg, tmp_path / "root", say=lambda *_: None) is None
+
+
+def test_replaced_single_piece_file_is_refused(tmp_path: Path) -> None:
+    """Reviewer 3 on #54: a whole (one-piece) file has no per-part hash, so only the joined-file check protects it.
+    Removing that check must fail this test."""
+    f = tmp_path / "model.bin"
+    f.write_bytes(b"real weights")
+    store = tmp_path / "store"
+    e = sc.split(f, store, 1000)
+    (store / e["sha256"]).write_bytes(b"fake weights")  # same size, different bytes
+    rows: list[str] = []
+    dest = tmp_path / "out.bin"
+    cfg = _cfg({"name": "home", "kind": "folder", "path": str(store)})
+    assert sc.fetch(e["sha256"], len(b"real weights"), "model.bin", dest, cfg, tmp_path, say=rows.append) is None
+    assert not dest.exists() and "not the pinned" in rows[0]
+
+
+def test_missing_copy_is_skip_but_changed_copy_is_warn(tmp_path: Path) -> None:
+    """A copy that is simply absent is a SKIP row; one that is there with different bytes is a WARN row."""
+    f = tmp_path / "a.bin"
+    f.write_bytes(b"abc")
+    e = sc.split(f, tmp_path / "home", 2_000_000_000)
+    cfg = {"locations": [{"name": "home", "kind": "folder", "path": str(tmp_path / "home")}]}
+    rows: list[str] = []
+    (tmp_path / "home" / e["sha256"]).unlink()
+    assert sc.fetch(e["sha256"], 3, "a.bin", tmp_path / "out" / "a.bin", cfg, tmp_path, say=rows.append) is None
+    assert rows and rows[0].startswith("SKIP") and not any(r.startswith("WARN") for r in rows)
+    (tmp_path / "home" / e["sha256"]).write_bytes(b"abd")
+    rows.clear()
+    assert sc.fetch(e["sha256"], 3, "a.bin", tmp_path / "out" / "a.bin", cfg, tmp_path, say=rows.append) is None
+    assert rows and rows[0].startswith("WARN") and "a.bin" in rows[0] and "home" in rows[0]
+
+
+def _source_pin():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("nestegg_source_pin", NESTEGG / "release" / "source_pin.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_source_pin_passes_only_when_tools_equal_the_pinned_atrium_commit(tmp_path: Path, capsys) -> None:
+    """Reviewer 3 on #67: the saved-copies repository publishes only what a reviewed Atrium commit decided."""
+    import shutil
+    import subprocess
+    sp = _source_pin()
+    atr = tmp_path / "atrium"
+    for src in sp.FILES:
+        (atr / src).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(NESTEGG.parent.parent / src, atr / src)
+    git = ["git", "-C", str(atr), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(["git", "init", "-q", str(atr)], check=True)
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["commit", "-qm", "pin"], check=True)
+    sc_root = tmp_path / "saved-copies"
+    for src, dst in sp.FILES.items():
+        (sc_root / dst).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(atr / src, sc_root / dst)
+    source = sc_root / "nestegg" / "SOURCE.txt"
+    (atr / "tools" / "nestegg" / "release" / "build-saved-copy.yml").write_text("changed after the commit\n")
+    assert sp.main(["make", "--commit", "HEAD", "--out", str(source), "--repo-dir", str(atr)]) == 0  # reads the commit, not the tree
+    subprocess.run(git + ["checkout", "-q", "--", "."], check=True)
+    verify = ["verify", "--source", str(source), "--root", str(sc_root), "--offline-from", str(atr)]
+    assert sp.main(verify) == 0 and capsys.readouterr().out.strip().endswith(f"SOURCE-PIN: PASS {len(sp.FILES)}")
+
+    (sc_root / "nestegg" / "saved_copies.json").write_text("{}")  # a tool changed on the saved-copies branch
+    assert sp.main(verify) == 1 and "nestegg/saved_copies.json sha256" in capsys.readouterr().out
+    shutil.copy(atr / "tools" / "nestegg" / "saved_copies.json", sc_root / "nestegg" / "saved_copies.json")
+
+    (sc_root / "nestegg" / "extra.py").write_text("print(1)")  # an unpinned file the job could run
+    assert sp.main(verify) == 1 and "nestegg/extra.py is in nestegg/ but not pinned" in capsys.readouterr().out
+    (sc_root / "nestegg" / "extra.py").unlink()
+
+    (atr / "tools" / "nestegg" / "saved_copies.py").write_text("# not what the commit holds\n")  # pin names other bytes
+    assert sp.main(verify) == 1 and "tools/nestegg/saved_copies.py at Atrium" in capsys.readouterr().out
+
+
+def test_release_job_refuses_to_publish_before_the_source_pin_passes() -> None:
+    wf = (NESTEGG / "release" / "build-saved-copy.yml").read_text(encoding="utf-8")
+    assert "compare/main...$c" in wf and "identical|behind)" in wf  # the pinned commit must be on Atrium main
+    assert "raw.githubusercontent.com/KULawHawk/Atrium/$c/tools/nestegg/release/source_pin.py" in wf  # checker from the commit
+    assert "needs: source-pin" in wf and "needs.source-pin.result == 'success'" in wf
+    assert "--kind packages --source nestegg/SOURCE.txt" in wf and "--kind models --source nestegg/SOURCE.txt" in wf

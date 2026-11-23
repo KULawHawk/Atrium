@@ -1,27 +1,57 @@
-# Template for the PRIVATE saved-copies repository (Decision 30 A). Copy to .github/workflows/ THERE, never in Atrium
-# (Atrium is public). It checks out Atrium's Nestegg tools, then saves one kind of file per job, one file at a time,
-# into the release of the repository it runs in, using that repository's own GITHUB_TOKEN (no stored key).
+# Builds the private saved-copy releases (Jake's Decision 30 A, 11/23/2026): every pinned package file (release
+# packages-v1) and every pinned model file (release models-v1), each downloaded from its original site, refused unless
+# its sha256 is the pin, stored under its sha256 in parts under 2 GiB, one file on disk at a time. Uses this
+# repository's own token (no stored key). Resumes: files already in a release are not uploaded again.
+# What is published is decided by a REVIEWED Atrium commit (reviewer 3 on Atrium #67): nestegg/SOURCE.txt names an
+# Atrium commit that must be on Atrium main, and every tool file here (this workflow included) must have the sha256
+# that file has at that commit. The checker is fetched from that commit, not taken from this repository. Any
+# mismatch stops the run before anything is uploaded.
 name: build-saved-copy
 on:
+  push:
+    branches: [claude/project-thread-msdpr6]
+    paths: ["nestegg/**", ".github/workflows/build-saved-copy.yml"]
   workflow_dispatch:
-    inputs:
-      atrium_ref: {description: "Atrium commit or branch holding the pins", required: true, default: main}
-      tag: {description: "release tag", required: true, default: saved-copy-v1}
 permissions:
   contents: write
 concurrency: {group: build-saved-copy, cancel-in-progress: false}
 jobs:
-  save:
-    strategy:
-      max-parallel: 1   # both jobs write the same INDEX.json; one at a time
-      matrix: {kind: [packages, models]}
+  source-pin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools must equal a reviewed Atrium commit on main (nestegg/SOURCE.txt)
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: |
+          set -euo pipefail
+          c=$(sed -n 's/^atrium_commit \([0-9a-f]\{40\}\)$/\1/p' nestegg/SOURCE.txt)
+          if [ -z "$c" ]; then echo "SOURCE-PIN: FAIL 1 (no full atrium_commit line in nestegg/SOURCE.txt)"; exit 1; fi
+          st=$(gh api "repos/KULawHawk/Atrium/compare/main...$c" --jq .status)
+          case "$st" in
+            identical|behind) echo "PASS  Atrium $c is on main ($st)" ;;
+            *) echo "SOURCE-PIN: FAIL 1 (Atrium $c is not on main; compare status: $st)"; exit 1 ;;
+          esac
+          curl -fsSL "https://raw.githubusercontent.com/KULawHawk/Atrium/$c/tools/nestegg/release/source_pin.py" -o "$RUNNER_TEMP/source_pin.py"
+          python3 -I "$RUNNER_TEMP/source_pin.py" verify --source nestegg/SOURCE.txt --root .
+  packages:
+    needs: source-pin
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
-        with: {repository: KULawHawk/atrium, ref: "${{ inputs.atrium_ref }}", path: atrium}
-      - name: Free disk (one file at a time, but the largest model file is ~5 GB)
-        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc && df -h /
-      - name: Save ${{ matrix.kind }}
+      - name: Save every pinned package file
         env: {GH_TOKEN: "${{ github.token }}"}
-        run: python3 -I atrium/tools/nestegg/build_saved_release.py --repo "${{ github.repository }}" --tag "${{ inputs.tag }}" --kind ${{ matrix.kind }}
+        run: python3 -I nestegg/build_saved_release.py --repo "${{ github.repository }}" --kind packages --source nestegg/SOURCE.txt
+  models:
+    needs: [source-pin, packages]
+    if: always() && needs.source-pin.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk (one file at a time; the largest model file is about 5 GB)
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
+      - name: Save every pinned model file
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: python3 -I nestegg/build_saved_release.py --repo "${{ github.repository }}" --kind models --source nestegg/SOURCE.txt

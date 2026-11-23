@@ -147,7 +147,8 @@ def fetch_trocr(rep: Report, man: dict, dry: bool, measure: bool) -> None:
         root = Path(json.loads(marker.read_text(encoding="utf-8"))["install_root"]) if marker.is_file() \
             else Path(os.environ.get("ADASTRA_INSTALL_ROOT") or Path.home() / "AdAstra")
         snap = sc.place_hf_snapshot(t["repo_id"], t["revision"], t["files"], Path(constants.HF_HUB_CACHE),
-                                    sc.load_config(), root, say=lambda m: None)
+                                    sc.load_config(), root,
+                                    say=lambda m: m.startswith("WARN") and rep.row("WARN", "TrOCR saved copy changed", m[6:].strip()))
         if snap:
             rep.row("INFO", "TrOCR source", "saved copy")
     if snap is None:

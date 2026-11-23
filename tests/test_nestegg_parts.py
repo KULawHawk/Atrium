@@ -709,3 +709,123 @@ def test_no_saved_copy_means_plain_hash_checked_install(tmp_path: Path, monkeypa
     (tmp_path / "envs" / "_logs").mkdir(parents=True)
     m.locked_install(Path("py"), ["demo==1.0 --hash=sha256:" + "0" * 64], tmp_path / "envs" / "_logs" / "l.txt", tmp_path / "envs" / "_logs" / "o.txt")
     assert "--no-index" not in calls[0] and "--find-links" not in calls[0]
+
+
+def test_reader_models_placed_from_saved_copy_when_every_file_is_pinned(tmp_path: Path, monkeypatch) -> None:
+    m = _mod()
+    sc = m._saved_copies()
+    f = tmp_path / "w.safetensors"
+    f.write_bytes(b"weights")
+    e = sc.split(f, tmp_path / "root" / "saved", 2_000_000_000)
+    man = {"readers": {"TableSurgeon": {"models": {
+        "ok": {"source": "huggingface", "repo_id": "o/ok", "revision": "a" * 40, "files": {"w.safetensors": {"bytes": 7, "sha256": e["sha256"]}}},
+        "unpinned_file": {"source": "huggingface", "repo_id": "o/no", "revision": "b" * 40, "files": {"config.json": {"bytes": 2, "sha256": None}}}}}}}
+    (tmp_path / "nest").mkdir()
+    (tmp_path / "nest" / "models_pinned.json").write_text(json.dumps(man))
+    monkeypatch.setattr(m, "HERE", tmp_path / "nest")
+    monkeypatch.setattr(m, "_saved_copies", lambda: sc)
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hub"))
+    m.INSTALL_ROOT["root"] = tmp_path / "root"
+    rows = []
+    rep = type("R", (), {"row": lambda self, s, w, d: rows.append((s, w, d))})()
+    m.saved_models(rep, {"name": "TableSurgeon"}, tmp_path / "root" / "envs")
+    assert (tmp_path / "hub" / "models--o--ok" / "snapshots" / ("a" * 40) / "w.safetensors").read_bytes() == b"weights"
+    assert rows == [("INFO", "TableSurgeon saved models", "1 of 2 Hugging Face models placed from a saved copy: o/ok")]
+
+
+def test_learning_folder_adders_carry_atrium_learning() -> None:
+    """Learning-folders thread (Atrium #64 merged e53727a): workbench and obsidian add to learning folders (SET-9)."""
+    by = {p["name"]: p for p in PARTS["parts"]}
+    for n in ("workbench", "obsidian"):
+        assert "atrium" in by[n].get("add_repos", []) and "atrium_learning" in by[n].get("must_import", [])
+
+
+def _corrupt_home_copy(tmp_path: Path, sc, data: bytes) -> tuple[Path, str]:
+    """Save `data` in the home copy, then change the stored bytes (same name): the saved copy no longer matches."""
+    import hashlib
+    f = tmp_path / "src.bin"
+    f.write_bytes(data)
+    h = hashlib.sha256(data).hexdigest()
+    sc.split(f, tmp_path / "root" / "saved", 2_000_000_000)
+    (tmp_path / "root" / "saved" / h).write_bytes(b"tampered " + data)
+    return f, h
+
+
+def test_changed_saved_package_copy_is_a_warn_row_on_screen(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Reviewer 3 on #67 (no silent failure): a saved wheel whose bytes changed is a WARN row naming it, not only a
+    log line; the install still goes on from the original index under --require-hashes."""
+    m = _mod()
+    sc = m._saved_copies()
+    _, h = _corrupt_home_copy(tmp_path, sc, b"wheel bytes")
+    m.INSTALL_ROOT["root"] = tmp_path / "root"
+    monkeypatch.setattr(m, "saved_file_names", lambda: {h: "demo-1.0-py3-none-any.whl"})
+    envs = tmp_path / "root" / "envs"
+    (envs / "_logs").mkdir(parents=True)
+    calls = []
+    monkeypatch.setattr(m, "run", lambda cmd, log, **k: calls.append([str(c) for c in cmd]) or 0)
+    m.locked_install(Path("py"), [f"demo==1.0 --hash=sha256:{h}"], envs / "_logs" / "x.lock.txt", envs / "_logs" / "x.txt")
+    out = capsys.readouterr().out
+    assert any(ln.startswith("WARN") and "saved copy changed" in ln and "demo-1.0-py3-none-any.whl" in ln
+               and "home copy" in ln for ln in out.splitlines()), out
+    assert "--no-index" not in calls[0] and not (envs / "_wheelhouse" / "demo-1.0-py3-none-any.whl").exists()
+
+
+def test_changed_saved_model_copy_is_a_warn_row(tmp_path: Path, monkeypatch) -> None:
+    """Reviewer 3 on #67: the model path used to throw the refusal away and show only 'INFO 0 of 1 placed'."""
+    m = _mod()
+    sc = m._saved_copies()
+    _, h = _corrupt_home_copy(tmp_path, sc, b"weights")
+    man = {"readers": {"TableSurgeon": {"models": {"ok": {"source": "huggingface", "repo_id": "o/ok", "revision": "a" * 40,
+                                                          "files": {"w.safetensors": {"bytes": 7, "sha256": h}}}}}}}
+    (tmp_path / "nest").mkdir()
+    (tmp_path / "nest" / "models_pinned.json").write_text(json.dumps(man))
+    monkeypatch.setattr(m, "HERE", tmp_path / "nest")
+    monkeypatch.setattr(m, "_saved_copies", lambda: sc)
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hub"))
+    m.INSTALL_ROOT["root"] = tmp_path / "root"
+    rows = []
+    rep = type("R", (), {"row": lambda self, s, w, d: rows.append((s, w, d))})()
+    m.saved_models(rep, {"name": "TableSurgeon"}, tmp_path / "root" / "envs")
+    warns = [r for r in rows if r[0] == "WARN"]
+    assert len(warns) == 1 and warns[0][1] == "TableSurgeon saved copy changed"
+    assert "o/ok/w.safetensors" in warns[0][2] and "home copy" in warns[0][2] and "not the pinned" in warns[0][2]
+    assert rows[-1][0] == "INFO" and "0 of 1" in rows[-1][2]
+
+
+def test_trocr_saved_copy_refusal_is_not_thrown_away() -> None:
+    src = (Path(__file__).resolve().parent.parent / "tools" / "nestegg" / "htrlens_models.py").read_text(encoding="utf-8")
+    assert "say=lambda m: None" not in src and '"TrOCR saved copy changed"' in src
+
+
+def test_reader_with_its_own_model_folder_gets_files_there(tmp_path: Path, monkeypatch) -> None:
+    """im2latex loads from CONCLAVE_IM2LATEX_MODEL_DIR (else ~/.conclave/...), not the Hugging Face cache."""
+    m = _mod()
+    sc = m._saved_copies()
+    f = tmp_path / "model.safetensors"
+    f.write_bytes(b"im2latex weights")
+    e = sc.split(f, tmp_path / "root" / "saved", 2_000_000_000)
+    man = {"readers": {"FormulaLens": {"models": {"im2latex": {
+        "source": "huggingface", "repo_id": "o/im2latex", "revision": "c" * 40,
+        "local_dir": {"env": "TEST_IM2LATEX_DIR", "default": "~/never-used"},
+        "files": {"model.safetensors": {"bytes": 16, "sha256": e["sha256"]}}}}}}}
+    (tmp_path / "nest").mkdir()
+    (tmp_path / "nest" / "models_pinned.json").write_text(json.dumps(man))
+    monkeypatch.setattr(m, "HERE", tmp_path / "nest")
+    monkeypatch.setattr(m, "_saved_copies", lambda: sc)
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hub"))
+    monkeypatch.setenv("TEST_IM2LATEX_DIR", str(tmp_path / "im2latex"))
+    m.INSTALL_ROOT["root"] = tmp_path / "root"
+    rows = []
+    rep = type("R", (), {"row": lambda self, s, w, d: rows.append((s, w, d))})()
+    m.saved_models(rep, {"name": "FormulaLens"}, tmp_path / "root" / "envs")
+    assert (tmp_path / "im2latex" / "model.safetensors").read_bytes() == b"im2latex weights"
+    assert not (tmp_path / "hub").exists()
+    assert rows == [("INFO", "FormulaLens saved models", "1 of 1 Hugging Face models placed from a saved copy: o/im2latex")]
+
+
+def test_im2latex_pin_matches_the_package_lane_totals() -> None:
+    man = json.loads((Path(__file__).resolve().parent.parent / "tools" / "nestegg" / "models_pinned.json").read_text(encoding="utf-8"))
+    im = man["readers"]["FormulaLens"]["models"]["im2latex"]
+    assert im["repo_id"] == "DGurgurov/im2latex" and im["revision"] == "6f28142d4d8358b6166c36d733e98ddea5862426"
+    assert len(im["files"]) == 9 and sum(f["bytes"] for f in im["files"].values()) == 967_016_497
+    assert all(len(f["sha256"]) == 64 for f in im["files"].values())
