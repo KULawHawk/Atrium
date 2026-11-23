@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -134,7 +135,23 @@ def fetch_trocr(rep: Report, man: dict, dry: bool, measure: bool) -> None:
         rep.row("FAIL", "TrOCR licence", f"model card licence is {lic!r}, expected {t['license_expected']!r}; stopping")
         return
     rep.row("PASS", "TrOCR licence", str(lic))
-    snap = Path(snapshot_download(t["repo_id"], revision=t["revision"], allow_patterns=names))
+    snap = None
+    if not measure:  # Decision 30 A: the saved copies first (home, then the private release); each file hash-checked
+        import importlib.util
+        from huggingface_hub import constants
+
+        spec = importlib.util.spec_from_file_location("nestegg_saved_copies", HERE / "saved_copies.py")
+        sc = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sc)
+        marker = Path(sys.prefix) / "adastra.json"  # written into every part's environment by install_parts.py
+        root = Path(json.loads(marker.read_text(encoding="utf-8"))["install_root"]) if marker.is_file() \
+            else Path(os.environ.get("ADASTRA_INSTALL_ROOT") or Path.home() / "AdAstra")
+        snap = sc.place_hf_snapshot(t["repo_id"], t["revision"], t["files"], Path(constants.HF_HUB_CACHE),
+                                    sc.load_config(), root, say=lambda m: None)
+        if snap:
+            rep.row("INFO", "TrOCR source", "saved copy")
+    if snap is None:
+        snap = Path(snapshot_download(t["repo_id"], revision=t["revision"], allow_patterns=names))
     if measure:
         for n in names:
             print(f"MEASURED {n} {(snap / n).stat().st_size} {sha256_file(snap / n)}")

@@ -209,6 +209,28 @@ def fetch(sha: str, size: int | None, name: str, dest: Path, cfg: dict, install_
     return None
 
 
+def place_hf_snapshot(repo_id: str, revision: str, files: dict, hub_cache: Path, cfg: dict, install_root: Path,
+                      say=print) -> Path | None:
+    """Put a pinned Hugging Face snapshot into the standard hub cache from the saved copies (no origin here: the
+    caller's own downloader is the original-site step). Files are written as plain files under
+    snapshots/<revision>/ (as huggingface_hub itself does on Windows without symlinks), and refs/main points at the
+    pinned revision. Returns the snapshot folder only when EVERY file matched its pin, else None."""
+    locs = {"locations": [loc for loc in cfg["locations"] if loc["kind"] != "origin"]}
+    if not usable(locs["locations"], install_root):
+        return None
+    repo_dir = hub_cache / ("models--" + repo_id.replace("/", "--"))
+    snap = repo_dir / "snapshots" / revision
+    for path, meta in sorted(files.items()):
+        if not meta.get("sha256"):
+            say(f"SKIP  {repo_id}/{path}: no pinned sha256, so not taken from a saved copy")
+            return None
+        if fetch(meta["sha256"], meta.get("bytes"), f"{repo_id}/{path}", snap / path, locs, install_root, say=say) is None:
+            return None
+    (repo_dir / "refs").mkdir(parents=True, exist_ok=True)
+    (repo_dir / "refs" / "main").write_text(revision, encoding="utf-8")
+    return snap
+
+
 def usable(locations: list[dict], install_root: Path) -> list[str]:
     """Names of the copy locations that can be read right now (a folder with an index, or a chosen, signed-in release)."""
     out = []

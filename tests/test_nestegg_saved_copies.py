@@ -115,3 +115,23 @@ def test_release_job_template_lives_outside_atrium_workflows() -> None:
     assert (NESTEGG / "release" / "build-saved-copy.yml").is_file()
     wf = (NESTEGG.parents[1] / ".github" / "workflows")
     assert not any("saved" in p.name for p in wf.iterdir())  # Atrium is public: never build the release here
+
+
+def test_hf_snapshot_placed_from_saved_copy_only_when_every_file_matches(tmp_path: Path) -> None:
+    store = tmp_path / "root" / "saved"
+    files = {}
+    for nm, data in (("config.json", b"{}"), ("model.safetensors", b"w" * 23)):
+        f = tmp_path / nm
+        f.write_bytes(data)
+        e = sc.split(f, store, 10)
+        files[nm] = {"bytes": len(data), "sha256": e["sha256"]}
+    cfg = _cfg({"name": "home", "kind": "folder", "path": "{install_root}/saved"}, {"name": "o", "kind": "origin"})
+    hub = tmp_path / "hub"
+    snap = sc.place_hf_snapshot("org/m", "a" * 40, files, hub, cfg, tmp_path / "root", say=lambda *_: None)
+    assert snap == hub / "models--org--m" / "snapshots" / ("a" * 40)
+    assert (snap / "model.safetensors").read_bytes() == b"w" * 23
+    assert (hub / "models--org--m" / "refs" / "main").read_text() == "a" * 40
+    files["extra.bin"] = {"bytes": 1, "sha256": "f" * 64}  # not in any saved copy -> caller downloads instead
+    assert sc.place_hf_snapshot("org/m", "b" * 40, files, hub, cfg, tmp_path / "root", say=lambda *_: None) is None
+    files["extra.bin"] = {"bytes": 1, "sha256": None}  # unpinned file is never taken from a saved copy
+    assert sc.place_hf_snapshot("org/m", "c" * 40, files, hub, cfg, tmp_path / "root", say=lambda *_: None) is None
