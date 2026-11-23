@@ -7,10 +7,11 @@
 # that file has at that commit. The checker is fetched from that commit, not taken from this repository. Any
 # mismatch stops the run before anything is uploaded. No compiled Python may be in the checkout, and the build runs
 # with -B and a pycache_prefix outside the checkout, so it never reads a __pycache__ .pyc in place of pinned source.
+# It publishes only from main (Decision 48 A): a change reaches main only through a PR under the branch ruleset.
 name: build-saved-copy
 on:
   push:
-    branches: [claude/project-thread-msdpr6]
+    branches: [main]  # publishes only after a reviewed PR merges into main (Jake, Decision 48 A, 7:40 AM CT 11/23)
     paths: ["nestegg/**", ".github/workflows/build-saved-copy.yml"]
   workflow_dispatch:
 permissions:
@@ -18,6 +19,7 @@ permissions:
 concurrency: {group: build-saved-copy, cancel-in-progress: false}
 jobs:
   source-pin:
+    if: github.ref == 'refs/heads/main'  # a manual run from any other branch publishes nothing
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
