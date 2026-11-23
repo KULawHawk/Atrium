@@ -944,3 +944,78 @@ def test_paddle_side_env_without_the_spokes_table_still_fails_as_not_locked(tmp_
     part = {"name": "OcrPaddle", "repo": "Conclave", "roots": ["conclave_lens_ocrpaddle"], "spoke_side_env": {"python": "3.12"}}
     m.side_envs(rep, part, tmp_path, tmp_path / "envs", tmp_path / "log.txt", Path("py"))
     assert rep.fails == 1 and "side env not locked" in capsys.readouterr().out
+
+
+def _swap_setup(tmp_path: Path, monkeypatch, ok: bool):
+    m = _mod()
+    src = tmp_path / "src"
+    (src / "atrium").mkdir(parents=True)
+    env = tmp_path / "envs" / "atrium"
+    env.mkdir(parents=True)
+    (env / "old.txt").write_text("working copy")
+    monkeypatch.setattr(m, "base_python", lambda v: ["py"])
+
+    def fake_build(rep, part, src_, envs, env_, log, base, lines, repo, local):
+        env_.mkdir(parents=True, exist_ok=True)
+        (env_ / "new.txt").write_text("new build")
+        return ok
+    monkeypatch.setattr(m, "_build_env", fake_build)
+    part = {"name": "atrium", "repo": "atrium", "roots": ["."], "python": "3.13"}
+    return m, part, src, env
+
+
+def test_main_env_rebuild_keeps_the_working_copy_when_the_new_one_passes(tmp_path: Path, monkeypatch, capsys) -> None:
+    """SET-11: the previous environment is kept under a dated name, never deleted."""
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=True)
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    kept = list(env.parent.glob("atrium.kept-*"))
+    assert len(kept) == 1 and (kept[0] / "old.txt").read_text() == "working copy" and (env / "new.txt").is_file()
+    assert "previous environment is kept at" in capsys.readouterr().out
+    rep2 = m.Report()  # a later run names the kept copy again (reviewer 3 on #70)
+    m.build_part(rep2, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    out = capsys.readouterr().out
+    assert f"{kept[0]} (previous working copy, kept" in out
+
+
+def test_main_env_failed_rebuild_puts_the_working_copy_back(tmp_path: Path, monkeypatch, capsys) -> None:
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=False)
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    failed = list(env.parent.glob("atrium.failed-*"))
+    assert (env / "old.txt").read_text() == "working copy" and not (env / "new.txt").exists()
+    assert len(failed) == 1 and (failed[0] / "new.txt").is_file() and not list(env.parent.glob("atrium.kept-*"))
+    assert "previous environment is back in use" in capsys.readouterr().out
+
+
+def test_main_env_held_open_is_a_fail_row_not_a_crash(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Windows refuses to rename a folder a running program holds; that is a FAIL row and nothing changes."""
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=True)
+    real = Path.rename
+    monkeypatch.setattr(Path, "rename", lambda self, t: (_ for _ in ()).throw(PermissionError(32, "in use")) if self == env else real(self, t))
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    assert rep.fails == 1 and "could not set the working environment aside" in capsys.readouterr().out
+    assert (env / "old.txt").is_file() and not (env / "new.txt").exists()
+
+
+def test_paddle_side_env_held_open_is_a_fail_row_and_the_old_one_stays(tmp_path: Path, monkeypatch, capsys) -> None:
+    m = _mod()
+    repo, part = _paddle_spoke(tmp_path)
+    target = tmp_path / "home" / "ocrpaddle-side"
+    target.mkdir(parents=True)
+    (target / "adastra.json").write_text("{}")
+    (target / "old.txt").write_text("working copy")
+    calls, fake = _fake_side_run()
+    monkeypatch.setattr(m, "run", fake)
+    monkeypatch.setattr(m, "base_python", lambda v: ["python3.12"])
+    real = Path.rename
+    monkeypatch.setattr(Path, "rename", lambda self, t: (_ for _ in ()).throw(PermissionError(32, "in use")) if self == target else real(self, t))
+    rep = m.Report()
+    m.side_envs(rep, part, tmp_path, tmp_path / "envs", tmp_path / "log.txt", Path("py"))
+    out = capsys.readouterr().out
+    assert rep.fails == 1 and "could not switch the new build in" in out and (target / "old.txt").is_file()
+    rep2 = m.Report()  # the unfinished build beside it is named on the next run
+    monkeypatch.setattr(Path, "rename", real)
+    m.side_envs(rep2, part, tmp_path, tmp_path / "envs", tmp_path / "log.txt", Path("py"))
+    assert "(unfinished build, left in place" in capsys.readouterr().out
