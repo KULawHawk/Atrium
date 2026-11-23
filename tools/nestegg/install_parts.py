@@ -627,9 +627,70 @@ def side_envs(rep: Report, part: dict, src: Path, envs: Path, log: Path, py: Pat
         else:
             rep.row("HOLD", label, f"{se['check'][0]} runs ({len(lines)} locked packages); locked, not measured: {st}")
     if part.get("spoke_side_env"):
-        rep.row("FAIL", f"{part['name']} side env not locked",
-                "the spoke's own script installs from the open index without hashes (a known-good list exists in locks/lists "
-                "but the script cannot take it yet); needs a hashed install in the spoke (Conclave PR)")
+        needs = runtime_side_env(src / part["repo"], part)
+        if needs is None:
+            rep.row("FAIL", f"{part['name']} side env not locked",
+                    "the spoke's own script installs from the open index without hashes (a known-good list exists in locks/lists "
+                    "but the script cannot take it yet); needs a hashed install in the spoke (Conclave PR)")
+        else:
+            build_runtime_side_env(rep, part, src / part["repo"], needs, log)
+
+
+def runtime_side_env(repo: Path, part: dict) -> tuple[Path, dict] | None:
+    """The spoke's own [side_env] table (conclave_runtime_needs.toml, read by the INSTALLER; Conclave #2941 for
+    OcrPaddle): where the lens looks for its side environment and the hash-locked list to build it from."""
+    for root in part["roots"]:
+        for f in sorted((repo / root / "src").glob("*/conclave_runtime_needs.toml")):
+            table = tomllib.loads(f.read_text(encoding="utf-8")).get("side_env")
+            if table:
+                return f, table
+    return None
+
+
+def build_runtime_side_env(rep: Report, part: dict, repo: Path, needs: tuple[Path, dict], log: Path) -> None:
+    """Build the side environment exactly as the spoke declares: a fresh CPython venv at its default folder, the
+    packaged list installed with --require-hashes --no-deps, then the spoke's warmup. Never reuses a folder this
+    installer did not build, and never deletes one: an old folder is named with what to do about it."""
+    f, se = needs
+    label = f"{part['name']} side env"
+    req = f.parent / se["requirements"]
+    target = Path(se["default_dir"]).expanduser()
+    for old in sorted(repo / r / ".paddle-env" for r in part["roots"]):
+        if old.is_dir():  # built by the spoke's old script from the unhashed list; the lens refuses it since #2941
+            rep.row("INFO", f"{label} old folder", f"{old} was built from the old list without hashes; {part['name']} "
+                    f"refuses it now and uses {target} instead. Left in place: delete it yourself if you want the space")
+    if not req.is_file():
+        rep.row("FAIL", label, f"{f.name} names {se['requirements']}, which is not in {f.parent}")
+        return
+    if target.exists() and not (target / "adastra.json").is_file():
+        rep.row("FAIL", label, f"{target} already exists and was not built by this installer, so it is not reused or "
+                "removed. Move or delete it yourself, then run again (the lens checks it against the locked list "
+                "and refuses a mismatch)")
+        return
+    base = base_python(se["python"])
+    if base is None:
+        rep.row("FAIL", label, f"Python {se['python']} not found (phase 1 installs it)")
+        return
+    if target.exists():
+        shutil.rmtree(target)  # only a folder this installer built itself (it carries our adastra.json)
+    vpy = env_python(target)
+    if run(base + ["-m", "venv", target], log) or \
+            run([vpy, "-m", "pip", "install", "--require-hashes", "--no-deps", "-r", req], log):
+        rep.row("FAIL", label, f"could not build it from {se['requirements']} with --require-hashes (see {log})")
+        return
+    (target / "adastra.json").write_text(json.dumps({"built_by": "nestegg install_parts.py", "part": part["name"],
+                                                     "from": str(req)}, indent=1) + "\n", encoding="utf-8")
+    resp = target / "warmup_response.json"
+    worker = f.parent / se["worker"]
+    if run([vpy, "-I", worker, "--op", "warmup", "--allow-network", "--response", resp], log):
+        rep.row("FAIL", label, f"built from {se['requirements']} (hash-checked) but the warmup failed (see {log})")
+        return
+    pins = sum(1 for ln in req.read_text(encoding="utf-8").splitlines() if "==" in ln and not ln.lstrip().startswith("#"))
+    rep.row("PASS", label, f"built at {target} from {se['requirements']} ({pins} exact pins, --require-hashes --no-deps); "
+            "warmup passed (paddle imports, run_check, engine built)")
+    if se.get("gpu_swap"):
+        rep.row("INFO", f"{label} GPU", f"CPU build. The GPU swap to {se['gpu_swap']['add']} is not done here and has no "
+                "recorded hash yet")
 
 
 def probe(rep: Report, part: dict, repo: Path, py: Path, local: set[str], log: Path) -> None:
