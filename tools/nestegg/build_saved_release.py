@@ -121,8 +121,23 @@ def package_url(fn: str) -> str | None:
 
 # ---- the release ----------------------------------------------------------------------------------------------------
 
+# anything shaped like a credential is masked before gh's own error text is printed (reporting only)
+_SECRET = re.compile(r"(gh[opsur]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|(?i:authorization|bearer|token)[\s:=]+\S+)")
+
+
+def _gh_error(stderr: str) -> str:
+    """gh's own words on a failure, so a FAIL row says why (run 45174686732 had 35 bare 'exit status 1' rows).
+    Credential-shaped text is masked; at most the last 3 lines and 300 characters are kept."""
+    lines = [ln.strip() for ln in (stderr or "").splitlines() if ln.strip()][-3:]
+    text = _SECRET.sub("[masked]", " | ".join(lines))
+    return (text[:300] + "...") if len(text) > 300 else (text or "no error text from gh")
+
+
 def gh(*args: str, check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(["gh", *args], capture_output=True, text=True, check=check)
+    r = subprocess.run(["gh", *args], capture_output=True, text=True, check=False)
+    if check and r.returncode:
+        raise RuntimeError(f"gh {' '.join(args)} failed (exit {r.returncode}): {_gh_error(r.stderr)}")
+    return r
 
 
 def release_assets(repo: str, tag: str) -> set[str]:

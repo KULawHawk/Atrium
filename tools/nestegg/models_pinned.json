@@ -22,13 +22,13 @@
           "files": {
             "README.md": {
               "bytes": 1174,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "c91e7f8199313c4d24b09e73a2f6df3141268666969346cb7b94ccb59900f5dd",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "config.json": {
               "bytes": 1228,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "ed5b93df2c3a59d473ddea853553a6d545d52bd4e9f8f72bf40b8a974aba4c1d",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "model.safetensors": {
               "bytes": 115317516,
@@ -36,8 +36,8 @@
             },
             "preprocessor_config.json": {
               "bytes": 273,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "86a8837ae440456b0a9aef788b064921df29c20f0b67040954ce5c2fbd352c4f",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
           }
         },
@@ -53,13 +53,13 @@
           "files": {
             "README.md": {
               "bytes": 1203,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "75ccc86265a2ca9f3e50adbbc07c0a7433c5bd380ead2ccc61c3c5c612c183c0",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "config.json": {
               "bytes": 1469,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "9fa1108c9fbfac69086d23bdd26b9a2242a56a72766fed98c6dfaeaae59ebf76",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "model.safetensors": {
               "bytes": 115434268,
@@ -67,8 +67,8 @@
             },
             "preprocessor_config.json": {
               "bytes": 274,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "4bd6700976c66662678a521e529b06dca36df041c9d411884cb92e81bc5a6818",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
           }
         }
@@ -91,18 +91,18 @@
           "files": {
             "README.md": {
               "bytes": 1672,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "a16e24acb9cf8f602b27135a7a24d0a95c1388f522234e26222fa2a6438cf4ba",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "config.json": {
               "bytes": 856,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "2b044b1aeff1cfc9fb2fb0bf5259debff2e4b771f89482deaa0119ee452c22f7",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "merges.txt": {
               "bytes": 456318,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "model.safetensors": {
               "bytes": 501338056,
@@ -110,18 +110,18 @@
             },
             "preprocessor_config.json": {
               "bytes": 275,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "35fa599126fa2221fefecbc5c5f9e6d095122435d00d5313cb8f4d81d8e80220",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "tokenizer_config.json": {
               "bytes": 1144,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "6266256590b6f4a770d28f37c7d8476e7b1647fa1bc75ab138dd3f4a7fbaa8e3",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "vocab.json": {
               "bytes": 898822,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "06b4d46c8e752d410213d9548eb27a54db70fda0319b6271fb8d59dead5e1cab",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
           }
         },
@@ -137,23 +137,23 @@
           "files": {
             "README.md": {
               "bytes": 2391,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "3bf79cdada257dc5aaea7af5f61210844f2b2dd620625cf892528ff9d08c7752",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "added_tokens.json": {
               "bytes": 229,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "e33bb16eedbab857dcf04cf3210c92d7dc74ed56dbecb3da9e586691009e80f1",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "config.json": {
               "bytes": 4741,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "e757c6c971dfe3816e63cd387f42d698043013ac37995f2a4c14cb3631bf54c0",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "preprocessor_config.json": {
               "bytes": 359,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "d21c97e33d4a3b60c3426f9163d2ebf0fd8b567b0cef28683bad7ea12a73b70d",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "pytorch_model.bin": {
               "bytes": 803430203,
@@ -165,18 +165,18 @@
             },
             "special_tokens_map.json": {
               "bytes": 478,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "cd87865fbf8d188ac33b827b7136fb4b5fa4df7bca9e93795ca32b781f32e233",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "tokenizer.json": {
               "bytes": 4012330,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "841e14f8c65021955553ad84f2fe2c85d1e9a960d71781f18a3514fdfdff7bf4",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "tokenizer_config.json": {
               "bytes": 535,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "58be2d9a4238bc308f8e44209a0916655b6a4b8262ed3799b73728c4b3e5676a",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
           }
         }
@@ -199,18 +199,18 @@
           "files": {
             "README.md": {
               "bytes": 1984,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "ff69521cb5eedd2c9b2d709a03787e6e55203c0f4289ef18def4c71eaa73e4b2",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "config.json": {
               "bytes": 4769,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "8815658b3a01e6d1b256e31361d676cd51a447672e4f29f9842a4bd62a25fa97",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "generation_config.json": {
               "bytes": 165,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "1391e25be2ec036d70536dbb78513ff95aa2b626880f42fb8f54b612db98ce09",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "model.safetensors": {
               "bytes": 1395219256,
@@ -218,23 +218,23 @@
             },
             "preprocessor_config.json": {
               "bytes": 479,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "e5d10fb098168614cb65a17760e133b110c0b25844508da5ceb73981e5fc7e94",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "special_tokens_map.json": {
               "bytes": 96,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "9046da57c270c8e74d0f38832b4adce269c9d914ef21d2a0925e7772152dd793",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "tokenizer.json": {
               "bytes": 2140013,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "02c318d9cfa95bf323371762b8f838a82709530274d36dba6eca880f0add6cc4",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "tokenizer_config.json": {
               "bytes": 4485,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "2ebd87c4a8e59ae8f2d96872d2c0888b1823ea8c0d88eb10c0709cbaacd34b1e",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
           }
         }
@@ -257,18 +257,18 @@
           "files": {
             "README.md": {
               "bytes": 12077,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "706d6fe217d2f047ca68f47bdcf44ace4a0832491da396972c2c917944e84c18",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "config.json": {
               "bytes": 608,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "cbe8aacd6cd84a2d58eafcd0045c6ac40e02e3a448f24b8cee51cc81d8bdccf2",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "generation_config.json": {
               "bytes": 74,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "31915c5a692f43c5765a20cfc5f9403bcd250f5721a0d931bb703169c08993b4",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "model.safetensors": {
               "bytes": 1121114488,
@@ -276,13 +276,13 @@
             },
             "preprocessor_config.json": {
               "bytes": 439,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "ef9a0dc0935cac11f4230ca30d00a52bedfa52b6633e409e9fbd2ea56373aa7e",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "special_tokens_map.json": {
               "bytes": 213,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "7c2368a3889fdfb37c24cabeb031b53f47934f357b54e56e8e389909a338ea47",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "tokenizer.json": {
               "bytes": 18702549,
@@ -290,8 +290,8 @@
             },
             "tokenizer_config.json": {
               "bytes": 39228,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "8b0542937d32a67da8ea2d1288b870e325be383a962c65d201864299560a2b8e",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
           }
         }
@@ -314,13 +314,13 @@
           "files": {
             ".gitattributes": {
               "bytes": 1570,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "34448b82c17d60fec9b65b1f093c115ddbaadc04beb1b0140b6bfed2e012a930",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "1_Dense/config.json": {
               "bytes": 251,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "5c8057233f6ae4e996c4ae53beb80e0aa9af3190f720f341273963f80b196c10",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "1_Dense/model.safetensors": {
               "bytes": 1049248,
@@ -328,23 +328,23 @@
             },
             "2_Normalize/config.json": {
               "bytes": 94,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "6d5d8f9c53fc983daed09cbfd278701b293a629a6906630ee6ae18f5d07cfe2a",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "3_MultiVectorMask/config.json": {
               "bytes": 29,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "2cee71b59d303d7779fe6a866f30fc5a4024b6ccd0c22c375b27c3bb0d55a898",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "README.md": {
               "bytes": 8755,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "5489ed30b1e742998894f9ba38d07954fec09204c028f904faba9d8ef54eddf1",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "adapter_config.json": {
               "bytes": 750,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "2a73ddbe21c1a3fd7ab190fa3ebecbfcac820061cab9d953b8edcbdd5cc274e2",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "adapter_model.safetensors": {
               "bytes": 78625112,
@@ -352,18 +352,18 @@
             },
             "chat_template.jinja": {
               "bytes": 455,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "f1891fbe06e05a8f1222a91aa5541da1570eb6c5a6fcdb0681328e14b556a74c",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "checkpoint-18000/README.md": {
               "bytes": 5110,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "750d93e1d4817a2f29760583e974f12c9aa81400f78d7f87823e36c799d45f00",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "checkpoint-18000/adapter_config.json": {
               "bytes": 752,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "d736d6a08103e9cacb2297439204db9e34bd65a68d94b118c07e7f2d36a11a40",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "checkpoint-18000/adapter_model.safetensors": {
               "bytes": 78625112,
@@ -379,48 +379,48 @@
             },
             "checkpoint-18000/trainer_state.json": {
               "bytes": 373041,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "37269add515c1e7ab918377613ec3614469d96e29c92351cb1af34c72fc8a9b4",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "config_sentence_transformers.json": {
               "bytes": 455,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "c3a2a1df7c1c887e66d617d8eeb96c125df47d73d189068b9b4ee74d728ff6b2",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "git_hash.txt": {
               "bytes": 40,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "5f18fa9adaec6588e7cea551c28cdf3de451041d55fa9cb3de62d88b7351ca3d",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "modules.json": {
               "bytes": 580,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "2b09d169b37950de5f82f835269c17883c6773d5325e6d8c6546ecf86dcc4477",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "preprocessor_config.json": {
               "bytes": 700,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "90299f8d8315526f40c6ea71373d64e56898115c7e7db641075eb23b34f7ceb9",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "results.json": {
               "bytes": 38027,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "524fe2943c9bb4b863306d85b61f96bd380a8bc59f672769ddaaa74a0f0d94ab",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "results_old.json": {
               "bytes": 17972,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "5249540b6de5d26195303fe3551c2bdf1a74f56848ace56cf681517e49e0aef0",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "sentence_bert_config.json": {
               "bytes": 764,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "035f0576d918a5cd3deb169b5b519e7f6ee7b19e6c0053e33b3a08112a7a7a25",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "special_tokens_map.json": {
               "bytes": 733,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "c87885c12d55c60133110a234291db5ac952e99e83d9735099d304cb4d45914d",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "tokenizer.json": {
               "bytes": 17763459,
@@ -428,13 +428,13 @@
             },
             "tokenizer_config.json": {
               "bytes": 242676,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "0cb2ab43ebeffbea539d87642e5e00bcfa090bd6bac4c9d9d25c4ac39f3ce17b",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "training_config.yml": {
               "bytes": 2166,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "a9797e1c988ce855be16a45761f887a74c30e5885c61c96d37c9d450e8ca6b48",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
           }
         },
@@ -450,18 +450,18 @@
           "files": {
             ".gitattributes": {
               "bytes": 1570,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "34448b82c17d60fec9b65b1f093c115ddbaadc04beb1b0140b6bfed2e012a930",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "README.md": {
               "bytes": 4117,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "adfcf9148e9726ab11af98d375dedbe281c9ac08497a67cf0f2ec87460dcadef",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "config.json": {
               "bytes": 1015,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "e19df159cf65ebc8483bac5276e34b910676c8225bc8a56808ea4de3b596d9fe",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "model-00001-of-00002.safetensors": {
               "bytes": 4986817288,
@@ -473,18 +473,18 @@
             },
             "model.safetensors.index.json": {
               "bytes": 66301,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "4e5df353aaefc5ed9b2f6407cea6d127dfad2b3b8f6fa0c8132f6bb8395dc966",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "preprocessor_config.json": {
               "bytes": 425,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "6a95b351c016da050e0821591357e732cce182681a8c079ecf196c4943cabdfa",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "special_tokens_map.json": {
               "bytes": 733,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "c87885c12d55c60133110a234291db5ac952e99e83d9735099d304cb4d45914d",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "tokenizer.json": {
               "bytes": 17763459,
@@ -492,8 +492,8 @@
             },
             "tokenizer_config.json": {
               "bytes": 242696,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "d5e95b5ab863693113e65e4899e1db28c09d892fa84243c7dfe6ce7f727f1888",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
           }
         }
@@ -516,38 +516,38 @@
           "files": {
             ".gitattributes": {
               "bytes": 1519,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "LICENSE": {
               "bytes": 11343,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "README.md": {
               "bytes": 17731,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "9d30300f11d64f1b424c3d07d85139c24d5382e18ba6a3705739e9a36fe0b651",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "chat_template.json": {
               "bytes": 1050,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "ad60d90252ed0b0705ba14e2d0ad0fec0beac1ea955642b54059b36052d8bc96",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "config.json": {
               "bytes": 1197,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "4745aaba24756172765cb804b86512792202df6c65ac28989355971bbb27649c",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "generation_config.json": {
               "bytes": 244,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "85fb0349cef993fe7d1cab4baa61c81a42326c3a549dc220fcecb43e6eea3413",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "merges.txt": {
               "bytes": 1671839,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "model-00001-of-00005.safetensors": {
               "bytes": 3898649896,
@@ -571,28 +571,28 @@
             },
             "model.safetensors.index.json": {
               "bytes": 56470,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "4cb1cbc47a33f4b18226b5d938127227cbdcb21bf0448f78aa665e3dbe7f15d6",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "preprocessor_config.json": {
               "bytes": 347,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "b5eaad0c2815f07631535dcc58f3c462b0d73693638ad21d19f3c50820eae1cc",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "tokenizer.json": {
               "bytes": 7029741,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "cb63a0a23eef3d5b01063a9880a1925a65aaf4d1591d519910ee3527852950a0",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "tokenizer_config.json": {
               "bytes": 4190,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "ff5c4fd898fe8c39591eb70e5d39d2782802d4204d6ae9ba1223252f354842a0",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "vocab.json": {
               "bytes": 2776833,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
           }
         }
@@ -615,33 +615,33 @@
           "files": {
             ".gitattributes": {
               "bytes": 1519,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "README.md": {
               "bytes": 7133,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "6d5d06e0c3f069097002445d30dce9ee107db3afaf15563f09e6df49b8dcb4d7",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "chat_template.json": {
               "bytes": 5499,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "5c72a170d2a4a1a3bc5adad2e689ae28138a9700e5b8c96c0266331e86c0acce",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "config.json": {
               "bytes": 1474,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "5cd452860dc1e9c29dd71cc3cef7f39b338b7a40793f7a260655c2d3568f3661",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "generation_config.json": {
               "bytes": 269,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "8469742d1fce0de951c8909b26a2c0c0d8490837ce476efb114da9e0cefc4d44",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "merges.txt": {
               "bytes": 1671839,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "model-00001-of-00004.safetensors": {
               "bytes": 4902275944,
@@ -661,33 +661,33 @@
             },
             "model.safetensors.index.json": {
               "bytes": 67759,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "520b2e05079402e9468a8701d03d1154d14b2599593afb6effa7fb60c1bff070",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "preprocessor_config.json": {
               "bytes": 390,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "tokenizer.json": {
               "bytes": 7032403,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "a5d85b6dcc535e6b93115a9ef287e6132fdbf30270da6218194ba742261173c7",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "tokenizer_config.json": {
               "bytes": 10868,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "c2da771801886ad9ae98181793ffd3dfb7f1af30f6f7c6a4e15d7dbba52e2399",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "video_preprocessor_config.json": {
               "bytes": 385,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "vocab.json": {
               "bytes": 2776833,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
           }
         }
@@ -710,38 +710,38 @@
           "files": {
             ".eval_results/mdpbench.yaml": {
               "bytes": 4784,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "6af5662f7f0d49f3a8fcfebdec58b145dff4d863a268bf09510b8b34ea2f743d",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             ".eval_results/olmocrbench.yaml": {
               "bytes": 1765,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "98be79ad75636313d534737ad2488ba5c41ec4a38dc00139384f6dc8dce02939",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             ".gitattributes": {
               "bytes": 1519,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "README.md": {
               "bytes": 6795,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "172334449c3df98650bc9a42781c254c64c9d466b440e2ca8ce31f99829212b2",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "chat_template.jinja": {
               "bytes": 4606,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "062e7ee4cc8defa88a5938b5d456dc60366ffd80647f918946ee747bf09ddc7c",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "config.json": {
               "bytes": 1737,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "ad537817b2becde827cbb23569a1dd83a352ee64cc34ce751a4ef000ecce4b5f",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "generation_config.json": {
               "bytes": 165,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "4e2a3412f65b2a21d315d928986c55723d3e60dfb92c3982a5b9fd56835b0aa5",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "model.safetensors": {
               "bytes": 2650579464,
@@ -749,23 +749,23 @@
             },
             "preprocessor_config.json": {
               "bytes": 367,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "02cc50c36240882ae35e8cd4077a25a379664108185d728d261cb785aefeccff",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "processor_config.json": {
               "bytes": 1334,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "a56fbd559186fefd6c22a3acc6a393a18a9fe52c264692a122a143d24042112b",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "tokenizer.json": {
               "bytes": 6838609,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "aa0fd058c73a5718bb191f6672dc16d122ee0147b20c123d1726514298f9968a",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "tokenizer_config.json": {
               "bytes": 1138,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "95abd49942be9cdc6e2653528aed7b4c1cb9e180828421d3488ab38da3057016",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
           }
         }
@@ -788,23 +788,23 @@
           "files": {
             ".gitattributes": {
               "bytes": 1519,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "README.md": {
               "bytes": 3219,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "175700839bc7808eac6af1d0c23e4f483606ab2276fe01122f4093e61a1a65b6",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "config.json": {
               "bytes": 3268,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "fdea30805ce2f5666b147fca941dcdd27ad468e27d6ed21902207d3da056a97d",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "docling_heron_400.png": {
               "bytes": 96925,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "e7f78610372b32a7938e480d2c7fa1c3037ee170bd82282a5bd026232f6e6f9e",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "model.safetensors": {
               "bytes": 171658996,
@@ -812,8 +812,8 @@
             },
             "preprocessor_config.json": {
               "bytes": 444,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "cd38cd59999e7a95d68e487fbe5132df3d4e5c32a0836add57e6126ba0c4eaf1",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
           }
         },
@@ -829,23 +829,23 @@
           "files": {
             ".gitattributes": {
               "bytes": 1905,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "360aba3ff7ce75396f13f0a77925fe9e79997e8d4bac064595ebb00c82700386",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             ".gitignore": {
               "bytes": 5180,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "b44b404189eaff3631c470946e7350c2e88cead304d332a8ad50325e6f56e95d",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "README.md": {
               "bytes": 3413,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "d17f233378eff1240b623b36da76ee8b40afcca05d505949713bf03f7e00822a",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "config.json": {
               "bytes": 41,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "9c34024dc28ff47b75818f415e769809798c29bf9bde6f2ccc63a4acb62396d9",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "model_artifacts/tableformer/accurate/tableformer_accurate.safetensors": {
               "bytes": 212758388,
@@ -853,8 +853,8 @@
             },
             "model_artifacts/tableformer/accurate/tm_config.json": {
               "bytes": 7060,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "984e122ceb8ccf84d84c9d2882f6f2302a44b4f1e577babd6289892c36f3cffd",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "model_artifacts/tableformer/fast/tableformer_fast.safetensors": {
               "bytes": 145453276,
@@ -862,8 +862,8 @@
             },
             "model_artifacts/tableformer/fast/tm_config.json": {
               "bytes": 7060,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "dca6762508dddfae6d57d6cb4ef822c6000119dff0f3b6489db7413118c2622a",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
           }
         },
@@ -879,8 +879,8 @@
           "files": {
             ".gitattributes": {
               "bytes": 1641,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "578ac51c49a4dc3bb76753773665a312894ace5cbbc9db61eb522eba28fc893e",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "ConfusionMatrix_v2_0.png": {
               "bytes": 107975,
@@ -892,13 +892,13 @@
             },
             "README.md": {
               "bytes": 7493,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "df8d868e8a850ae0edd585a21eaf42d6ec00cd07374465e8e98a3a73df429e43",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "config.json": {
               "bytes": 2522,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "dbed0349fb8b12fad95d8ff7f43b062c40971e06d9d957b25e90d91dfd3bd77e",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "model.onnx": {
               "bytes": 16940439,
@@ -910,8 +910,8 @@
             },
             "preprocessor_config.json": {
               "bytes": 377,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "118dc069572036346fbacc3e15586089d3f8a9aaf9036c0c54b4666236a28032",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
           }
         },
@@ -927,33 +927,33 @@
           "files": {
             ".gitattributes": {
               "bytes": 1519,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "README.md": {
               "bytes": 1511,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "684604c08aa8cc32b3d65049bc9794b57f3fc510953148ad3ba61d35f60bef9a",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "added_tokens.json": {
               "bytes": 975,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "002686b2efb9535c359458cd1121de8e1b58e67426a46e2bd4425843766a3a5e",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "chat_template.json": {
               "bytes": 422,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "c9d21553af689882ac89ad8e8412164662d1605f6595119664e85626df7be421",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "config.json": {
               "bytes": 2638,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "98f55cfe07dd168f9fab1f1eec35f754b23631ea1a9a7c9759b1b7cb41ab76b1",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "generation_config.json": {
               "bytes": 169,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "b17f1890b2b2baf172761c9c4d6eb956482ffa05964f357e67544ec998c9851f",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "model.safetensors": {
               "bytes": 630993616,
@@ -961,33 +961,33 @@
             },
             "preprocessor_config.json": {
               "bytes": 486,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "6cb6e36d6fcb88ca1502c4a26750715dc3e7dedddc9a8f17b27d8d167d1457e7",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "processor_config.json": {
               "bytes": 68,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "e7bff42da73ae9eec9042ef20e066e11f1ee20f025358ff79131e3c0fb549b46",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "special_tokens_map.json": {
               "bytes": 1071,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "1b17e900a73384d256db6f1a7591fd0d95c09e6aede680022b047386b97afcba",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "tokenizer.json": {
               "bytes": 7160031,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "5ec5d3780a2e01b140cf34f023eb600263855a99aacdc3eb0f2600d7b1b4ac96",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "tokenizer_config.json": {
               "bytes": 24952,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "37a0e94be9c9ab5197b2188e61cf764bbc015f45261013881fe37bd2fe8599e6",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "vocab.json": {
               "bytes": 1612747,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "8922f7e91084b9862d270c16ce1027071214aa252a1567a4b410f952101005fc",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
           }
         },
@@ -1079,8 +1079,8 @@
           "files": {
             "models/Layout/PP-DocLayoutV2/config.json": {
               "bytes": 3787,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "18a696b54c64c4fa582afcd3a41407c4b65a99dc7ab187ad2fed8af8e4128ad8",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "models/Layout/PP-DocLayoutV2/model.safetensors": {
               "bytes": 214798436,
@@ -1088,23 +1088,23 @@
             },
             "models/Layout/PP-DocLayoutV2/preprocessor_config.json": {
               "bytes": 575,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "56281a70c931a291dcaf653605fb4df713fd823f65e939aecd6005c26346a103",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "models/MFR/unimernet_hf_small_2503/README.md": {
               "bytes": 1657,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "96574f3857e919353024edc423b9165dbf46e902cfe97b5b7ec552283bd744f6",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "models/MFR/unimernet_hf_small_2503/config.json": {
               "bytes": 5094,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "64c02e9897410658f7668c6a334a8b306276e4697656cbe06f86d8c4f01fc040",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "models/MFR/unimernet_hf_small_2503/generation_config.json": {
               "bytes": 191,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "d56ca9d5c5efa4283a2565ae42771bafd02910b56ef9c53e9b441c9c4c896d09",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "models/MFR/unimernet_hf_small_2503/model.safetensors": {
               "bytes": 810036696,
@@ -1112,18 +1112,18 @@
             },
             "models/MFR/unimernet_hf_small_2503/special_tokens_map.json": {
               "bytes": 552,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "358c249e2fb29060c6b73157d428853b0c48710deffc8ee670ab1013880946c9",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "models/MFR/unimernet_hf_small_2503/tokenizer.json": {
               "bytes": 3581950,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "f8e29e3c3a8017f067b62a3d2d9211bb4cebc08a25afe58d3a6069981e3684d6",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "models/MFR/unimernet_hf_small_2503/tokenizer_config.json": {
               "bytes": 4522,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "28b99e33895e06389c26c139b1333b82b7f5d8ed5f4fd14998acfd7c20989338",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "models/MFR/pp_formulanet_plus_m/PP-FormulaNet_plus-M.pth": {
               "bytes": 617338934,
@@ -1131,8 +1131,8 @@
             },
             "models/MFR/pp_formulanet_plus_m/PP-FormulaNet_plus-M_inference.yml": {
               "bytes": 2244564,
-              "sha256": null,
-              "unmeasured_reason": "small non-LFS file; measured at release build"
+              "sha256": "87b5f3d7f2b2fe553627d77b37f496608ca150ebd0ef62d362591edca47b5538",
+              "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             },
             "models/TabRec/SlanetPlus/slanet-plus.onnx": {
               "bytes": 7758305,

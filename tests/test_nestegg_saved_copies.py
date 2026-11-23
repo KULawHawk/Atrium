@@ -101,6 +101,39 @@ def _build():
     return m
 
 
+def test_failed_gh_call_says_why_and_masks_anything_secret(monkeypatch) -> None:
+    """Run 45174686732 printed 35 bare 'exit status 1' rows; a FAIL row now carries gh's own words, never a token."""
+    import subprocess
+    m = _build()
+    tok = "ghs_" + "A" * 36
+    err = f"uploading x\nHTTP 502: Bad Gateway (https://uploads.github.com/x)\nAuthorization: token {tok}\n"
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a[0], 1, "", err))
+    try:
+        m.gh("release", "upload", "models-v1", "f")
+        raise AssertionError("gh did not raise")
+    except RuntimeError as exc:
+        msg = str(exc)
+    assert "HTTP 502: Bad Gateway" in msg and "exit 1" in msg and tok not in msg and "[masked]" in msg
+    assert "github_pat_" not in m._gh_error("github_pat_" + "b" * 40) and len(m._gh_error("x" * 900)) <= 303
+    assert m._gh_error("") == "no error text from gh"
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a[0], 1, "", "nope"))
+    assert m.gh("release", "view", "t", check=False).returncode == 1  # check=False still returns, as before
+
+
+def test_measured_small_files_are_pinned_with_their_second_check() -> None:
+    import json
+    man = json.loads((NESTEGG / "models_pinned.json").read_text(encoding="utf-8"))
+    pinned, stack = [], [man]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            if "sha256_source" in node:
+                pinned.append(node)
+            assert node.get("unmeasured_reason", "").find("small non-LFS") < 0  # every small HF file now has a pin
+            stack.extend(v for v in node.values() if isinstance(v, dict))
+    assert len(pinned) == 130 and all(len(p["sha256"]) == 64 and "git blob oid" in p["sha256_source"] for p in pinned)
+
+
 def test_release_build_lists_every_locked_package_and_pinned_model() -> None:
     m = _build()
     pk = m.package_items()
