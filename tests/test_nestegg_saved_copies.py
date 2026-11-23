@@ -208,6 +208,26 @@ def test_source_pin_passes_only_when_tools_equal_the_pinned_atrium_commit(tmp_pa
     assert sp.main(verify) == 1 and "nestegg/extra.py is in nestegg/ but not pinned" in capsys.readouterr().out
     (sc_root / "nestegg" / "extra.py").unlink()
 
+    for extra in (".github/workflows/other.yml", ".github/actions/x/action.yml", ".github/dependabot.yml"):
+        (sc_root / extra).parent.mkdir(parents=True, exist_ok=True)
+        (sc_root / extra).write_text("on: push\n")  # reviewer 3's probe: a second workflow outside the pin
+        assert sp.main(verify) == 1 and f"{extra} is in .github/ but not pinned" in capsys.readouterr().out
+        (sc_root / extra).unlink()
+    assert sp.main(verify) == 0
+    capsys.readouterr()
+
+    for planted in ("nestegg/__pycache__/saved_copies.cpython-313.pyc", "stray.pyc", "nestegg/__pycache__/x.opt-1.pyo"):
+        (sc_root / planted).parent.mkdir(parents=True, exist_ok=True)
+        (sc_root / planted).write_bytes(b"\x00planted")  # reviewer 3 on #68: Python would run this instead of the source
+        assert sp.main(verify) == 1 and f"{planted} is compiled Python" in capsys.readouterr().out
+        (sc_root / planted).unlink()
+    (sc_root / "nestegg" / "__pycache__").rmdir()
+    (sc_root / "tools_cache" / "__pycache__").mkdir(parents=True)  # even an empty cache folder is refused
+    assert sp.main(verify) == 1 and "tools_cache/__pycache__ is compiled Python" in capsys.readouterr().out
+    (sc_root / "tools_cache" / "__pycache__").rmdir()
+    assert sp.main(verify) == 0
+    capsys.readouterr()
+
     (atr / "tools" / "nestegg" / "saved_copies.py").write_text("# not what the commit holds\n")  # pin names other bytes
     assert sp.main(verify) == 1 and "tools/nestegg/saved_copies.py at Atrium" in capsys.readouterr().out
 
@@ -217,4 +237,5 @@ def test_release_job_refuses_to_publish_before_the_source_pin_passes() -> None:
     assert "compare/main...$c" in wf and "identical|behind)" in wf  # the pinned commit must be on Atrium main
     assert "raw.githubusercontent.com/KULawHawk/Atrium/$c/tools/nestegg/release/source_pin.py" in wf  # checker from the commit
     assert "needs: source-pin" in wf and "needs.source-pin.result == 'success'" in wf
+    assert wf.count('python3 -I -B -X pycache_prefix="$RUNNER_TEMP/no-pyc" nestegg/build_saved_release.py') == 2
     assert "--kind packages --source nestegg/SOURCE.txt" in wf and "--kind models --source nestegg/SOURCE.txt" in wf

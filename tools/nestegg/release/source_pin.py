@@ -6,7 +6,8 @@ copy of the tools sits on a branch of the saved-copies repository. So:
   make    writes SOURCE.txt from an Atrium commit: the commit id and the sha256 of every tool file AT THAT COMMIT
           (read with `git show`, never from the working tree).
   verify  run by the build job before anything is published. FAIL unless every listed file in the saved-copies
-          checkout has exactly the listed sha256, no unlisted file sits in nestegg/, and every listed file at that
+          checkout has exactly the listed sha256, no unlisted file sits in nestegg/ or .github/, no __pycache__ or .pyc
+          is anywhere in the checkout, and every listed file at that
           commit on github.com (Atrium is public) has the same sha256. The job checks separately, in its own
           workflow step, that the commit is on Atrium main; this script is fetched from that commit, not from the
           saved-copies copy.
@@ -112,10 +113,20 @@ def verify(source: Path, root: Path, offline_from: Path | None = None) -> int:
             fail(f"{src} at Atrium {commit[:12]} has sha256 {sha256_bytes(remote)}, not the pinned {want}")
             continue
         print(f"PASS  {dst}  = Atrium {commit[:12]}:{src}")
-    for p in sorted((root / "nestegg").rglob("*")):
-        rel = p.relative_to(root).as_posix()
-        if p.is_file() and rel != source.relative_to(root).as_posix() and "__pycache__" not in p.parts and rel not in listed:
-            fail(f"{rel} is in nestegg/ but not pinned in SOURCE.txt")
+    # no compiled Python anywhere in the checkout: Python can run a __pycache__ .pyc in place of the pinned source
+    # (an unchecked-hash .pyc is never compared with the source, and -I does not stop it; reviewer 3 on #68)
+    for p in sorted(root.rglob("*")):
+        if ".git" in p.relative_to(root).parts[:1]:
+            continue
+        if p.name == "__pycache__" or (p.is_file() and p.suffix in (".pyc", ".pyo")):
+            fail(f"{p.relative_to(root).as_posix()} is compiled Python; the build runs only pinned source")
+    # nothing unpinned may sit where the job reads tools (nestegg/) or where GitHub reads workflows and actions
+    # (.github/: a second workflow file would run with this repository's token outside the pin; reviewer 3 on #67)
+    for top in ("nestegg", ".github"):
+        for p in sorted((root / top).rglob("*")):
+            rel = p.relative_to(root).as_posix()
+            if p.is_file() and rel != source.relative_to(root).as_posix() and rel not in listed:
+                fail(f"{rel} is in {top}/ but not pinned in SOURCE.txt")
     print(f"SOURCE-PIN: PASS {len(rows)}" if not fails else f"SOURCE-PIN: FAIL {fails}")
     return 1 if fails else 0
 
