@@ -6,9 +6,11 @@ recomputed here and a mismatch is a FAIL) it downloads
 from the original site, refuses anything whose sha256 is not the pin, stores it content-addressed through
 saved_copies.split (parts under 2 GiB), uploads the pieces, then deletes its own local working copy so a runner's disk
 holds one file at a time. Assets already in the release are not uploaded again, so a stopped run resumes.
-INDEX.json is re-uploaded after every file.
+INDEX.json is re-uploaded after every file. With --source, SOURCE.txt (the reviewed Atrium commit and the sha256 of
+every tool file; checked by release/source_pin.py before this runs) is uploaded into the release first.
 
   python -I build_saved_release.py --repo OWNER/NAME --kind packages|models [--tag packages-v1] [--limit N] [--dry-run]
+                                   [--source nestegg/SOURCE.txt]
 Last line: SAVED-RELEASE: PASS n | FAIL n (n files)
 """
 
@@ -139,6 +141,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--kind", choices=["packages", "models"], required=True)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--source", type=Path, default=None,
+                    help="SOURCE.txt (Atrium commit + sha256 of every tool file); uploaded into the release first")
     a = ap.parse_args(argv)
     a.tag = a.tag or f"{a.kind}-v1"  # packages-v1 / models-v1: each under GitHub's 1,000 files per release
     sc = _sc()
@@ -152,6 +156,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"SAVED-RELEASE: DRY RUN ({len(items)} files)")
         return 0
     have = release_assets(a.repo, a.tag)
+    if a.source:  # every release says which reviewed Atrium commit decided what is in it
+        gh("release", "upload", a.tag, str(a.source), "-R", a.repo, "--clobber")
+        print(f"SOURCE {a.source.name} uploaded to {a.tag}", flush=True)
     work = Path(tempfile.mkdtemp(prefix="saved_release_"))
     store = work / "store"
     store.mkdir()

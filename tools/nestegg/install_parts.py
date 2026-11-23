@@ -373,6 +373,14 @@ def saved_file_names() -> dict[str, str]:
     return out
 
 
+def _saved_say(m: str, fh) -> None:
+    """Every saved-copy line goes to the part's log; a copy whose bytes changed is also a WARN row on screen
+    (Jake's no-silent-failure rule): the install still goes on from the next copy, but nobody misses it."""
+    fh.write(m + "\n")
+    if m.startswith("WARN"):
+        print(f"{'WARN':<5} {'saved copy changed':<30} {m[6:].strip()}", flush=True)
+
+
 def saved_wheelhouse(lines: list[str], wheelhouse: Path, log: Path) -> tuple[Path | None, bool]:
     """Decision 30 A: take each locked file from the saved copies first (home, then the private release), into a
     wheelhouse with its real name. Returns (wheelhouse or None, every file found). Files not found come from the
@@ -393,7 +401,7 @@ def saved_wheelhouse(lines: list[str], wheelhouse: Path, log: Path) -> tuple[Pat
     found = 0
     with log.open("a", encoding="utf-8") as fh:
         for h, fn in sorted(want.items()):
-            src = sc.fetch(h, None, fn, wheelhouse / fn, {"locations": locs}, root, say=lambda m: fh.write(m + "\n"))
+            src = sc.fetch(h, None, fn, wheelhouse / fn, {"locations": locs}, root, say=lambda m: _saved_say(m, fh))
             found += src is not None
             fh.write(f"saved copy: {fn} <- {src or 'not in any saved copy (original index, hash-checked)'}\n")
     req_lines = [ln for ln in lines if not ln.startswith("--")]
@@ -691,6 +699,19 @@ def hf_hub_cache() -> Path:
     return home / "hub"
 
 
+def _place_local_dir(sc, m: dict, cfg: dict, root: Path, say) -> bool:
+    """A reader that loads from its own folder (its env-variable override, else its default): every file must be
+    pinned and match, or nothing is claimed; the reader's own fetch script then downloads and checks as before."""
+    ld = m["local_dir"]
+    target = Path(os.environ.get(ld["env"]) or Path(ld["default"]).expanduser())
+    locs = {"locations": [loc for loc in cfg["locations"] if loc["kind"] != "origin"]}
+    for path, meta in sorted(m["files"].items()):
+        if not meta.get("sha256") or sc.fetch(meta["sha256"], meta.get("bytes"), f"{m['repo_id']}/{path}", target / path,
+                                              locs, root, say=say) is None:
+            return False
+    return True
+
+
 def saved_models(rep: Report, part: dict, envs: Path) -> None:
     """Decision 30 A: put each pinned Hugging Face snapshot of this reader in place from the saved copies first.
     A snapshot is placed only when every one of its files matches a pin; otherwise the reader's own step below
@@ -706,10 +727,18 @@ def saved_models(rep: Report, part: dict, envs: Path) -> None:
     root = INSTALL_ROOT.get("root") or envs.parent
     if not sc.usable([loc for loc in cfg["locations"] if loc["kind"] != "origin"], root):
         return
-    hf = [m for m in reader.get("models", {}).values() if m.get("source") == "huggingface" and m.get("files")]
+    every = [m for m in reader.get("models", {}).values() if m.get("source") == "huggingface" and m.get("files")]
+    hf = [m for m in every if not m.get("local_dir")]
+    def say(msg: str) -> None:  # a changed saved copy is a WARN row; plain "not in this copy" stays quiet
+        if msg.startswith("WARN"):
+            rep.row("WARN", f"{part['name']} saved copy changed", msg[6:].strip())
+
     placed = [m["repo_id"] for m in hf
-              if sc.place_hf_snapshot(m["repo_id"], m["revision"], m["files"], hf_hub_cache(), cfg, root, say=lambda _m: None)]
-    rep.row("INFO", f"{part['name']} saved models", f"{len(placed)} of {len(hf)} Hugging Face models placed from a saved copy"
+              if sc.place_hf_snapshot(m["repo_id"], m["revision"], m["files"], hf_hub_cache(), cfg, root, say=say)]
+    for m in every:  # readers that load from their own folder (im2latex): each pinned file straight into that folder
+        if m.get("local_dir"):
+            placed += [m["repo_id"]] if _place_local_dir(sc, m, cfg, root, say) else []
+    rep.row("INFO", f"{part['name']} saved models", f"{len(placed)} of {len(every)} Hugging Face models placed from a saved copy"
             + (f": {', '.join(placed)}" if placed else " (the rest download from the original site, hash-pinned where pinned)"))
 
 

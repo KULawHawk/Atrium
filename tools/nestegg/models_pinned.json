@@ -1287,6 +1287,58 @@
               "unmeasured_reason": "the GitHub API for lukas-blecher/LaTeX-OCR is not reachable from this session (repo not enabled), so the release asset size/digest could not be read"
             }
           }
+        },
+        "im2latex": {
+          "source": "huggingface",
+          "repo_id": "DGurgurov/im2latex",
+          "revision": "6f28142d4d8358b6166c36d733e98ddea5862426",
+          "license": "mit",
+          "pinned_in_code": true,
+          "revision_source": "KULawHawk/Conclave #2933 conclave_lens_formula/src/conclave_lens_formula/im2latex_crosscheck.py IM2LATEX_REVISION / IM2LATEX_FILES (PA-4 A, Jake 11/23); hashed on Jake's PC 11/23 (PC_ITEMS\\IM2LATEX_PIN_RESULT.txt)",
+          "where_loaded": "its own folder, not the Hugging Face cache: CONCLAVE_IM2LATEX_MODEL_DIR, else ~/.conclave/models/im2latex/DGurgurov-im2latex (conclave_lens_formula/scripts/fetch_im2latex.py)",
+          "local_dir": {
+            "env": "CONCLAVE_IM2LATEX_MODEL_DIR",
+            "default": "~/.conclave/models/im2latex/DGurgurov-im2latex"
+          },
+          "bytes_total": 967016497,
+          "files": {
+            "config.json": {
+              "bytes": 1757274,
+              "sha256": "ee3485745781d43be8020a1b538cd3006cbbd62f6a7abe94db021f179cfd30ec"
+            },
+            "generation_config.json": {
+              "bytes": 298,
+              "sha256": "498668ffa7a85ada4ec2af022ef96c82966596ed48c415404ba980c4b90d6897"
+            },
+            "merges.txt": {
+              "bytes": 456318,
+              "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5"
+            },
+            "model.safetensors": {
+              "bytes": 961895704,
+              "sha256": "8d70180aecea01e6e63a19b5351ede33cecd28d2e5d6c132564b33a763019f96"
+            },
+            "preprocessor_config.json": {
+              "bytes": 390,
+              "sha256": "8c49e9b9f82ff239cd37f8096bd975eae58ec0eccf9d3604b82c862566198c56"
+            },
+            "special_tokens_map.json": {
+              "bytes": 131,
+              "sha256": "8bcf4e58d0970bbcb3b111a4c1e297c082fbf61253b14b3c0c8f2972ccb61ba4"
+            },
+            "tokenizer.json": {
+              "bytes": 2107750,
+              "sha256": "70f5490b3a5293b6e5fffad2d59a05275d946da17535a63d2db0963b64a56105"
+            },
+            "tokenizer_config.json": {
+              "bytes": 476,
+              "sha256": "f7cd5e1168079212fdf834ed8113826afe1384b42c39024753c09d3eac9335c0"
+            },
+            "vocab.json": {
+              "bytes": 798156,
+              "sha256": "3ba3c3109ff33976c4bd966589c11ee14fcaa1f4c9e5e154c2ed7f99d80709e7"
+            }
+          }
         }
       }
     },

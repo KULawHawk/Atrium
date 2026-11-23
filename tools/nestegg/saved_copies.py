@@ -92,6 +92,9 @@ def split(src: Path, out: Path, max_part_bytes: int, name: str | None = None) ->
     return {"sha256": whole, **entry}
 
 
+CHANGED = "copy changed: "  # prefix of a refusal where bytes WERE there but did not match the pin (said as WARN)
+
+
 def asset_names(sha: str, entry: dict) -> list[str]:
     return [f"{sha}.p{i:03d}" for i in range(1, len(entry["parts"]) + 1)] if entry["parts"] else [sha]
 
@@ -113,12 +116,12 @@ def _join_verified(sha: str, entry: dict, getpart, dest: Path) -> str | None:
                     want = entry["parts"][i]
                     got = sha256_file(piece)
                     if got != want["sha256"] or piece.stat().st_size != want["bytes"]:
-                        return f"part {nm} changed (sha256 {got})"
+                        return f"{CHANGED}part {nm} changed (sha256 {got})"
                 with piece.open("rb") as fh:
                     shutil.copyfileobj(fh, out, 1 << 20)
         got = sha256_file(tmp)
         if got != sha or tmp.stat().st_size != entry["bytes"]:
-            return f"assembled file sha256 {got} is not the pinned {sha}"
+            return f"{CHANGED}assembled file sha256 {got} is not the pinned {sha}"
         tmp.replace(dest)
         return None
     finally:
@@ -192,7 +195,7 @@ def fetch(sha: str, size: int | None, name: str, dest: Path, cfg: dict, install_
             try:
                 urllib.request.urlretrieve(origin_url, tmp)
                 got = sha256_file(tmp)
-                why = None if got == sha and size in (None, tmp.stat().st_size) else f"original site sent sha256 {got}"
+                why = None if got == sha and size in (None, tmp.stat().st_size) else f"{CHANGED}original site sent sha256 {got}"
                 if why is None:
                     tmp.replace(dest)
             except OSError as exc:
@@ -205,7 +208,10 @@ def fetch(sha: str, size: int | None, name: str, dest: Path, cfg: dict, install_
             continue
         if why is None:
             return label
-        say(f"SKIP  {name:<28} {label}: {why}")
+        if why.startswith(CHANGED):  # a copy that is there but not the pinned bytes is never a quiet skip
+            say(f"WARN  {name:<28} {label}: {why}")
+        else:
+            say(f"SKIP  {name:<28} {label}: {why}")
     return None
 
 
