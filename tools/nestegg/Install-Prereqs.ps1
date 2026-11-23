@@ -14,6 +14,8 @@
 #   - winget's "do you agree" question for its package sources and package licences: winget asks
 #     the person in this window. -AssumeYes answers it and exists ONLY for the clean-Windows test
 #     machine; "Install AdAstra.cmd" never passes it.
+#   - the Tesseract setup wizard (UB Mannheim's installer): the person clicks through it. Only behind
+#     -AssumeYes (the test machine) is it run silently with /S.
 # It never deletes anything, never changes a Windows setting (no permanent PATH or environment
 # change: winget's own installers manage their PATH entries), and never reads a key or secret.
 # Log: <InstallRoot>\.adastra\install_log\prereqs_<timestamp>.log, written line by line.
@@ -202,7 +204,8 @@ function Ensure-Tesseract {
     $got = (Get-FileHash -LiteralPath $kept -Algorithm SHA256).Hash.ToLower()
     if ($got -ne $TessSetupSha256) { Row 'FAIL' 'Tesseract OCR' "kept installer's sha256 $got is not the measured $TessSetupSha256; not run"; return }
     Say ("....  {0,-20} running {1} (sha256 checked; one Windows security box)" -f 'Tesseract OCR', $TessSetupName)
-    $proc = Start-Process -FilePath $kept -Wait -PassThru
+    if ($AssumeYes) { $proc = Start-Process -FilePath $kept -ArgumentList '/S' -Wait -PassThru }  # test machine only
+    else { $proc = Start-Process -FilePath $kept -Wait -PassThru }  # the person clicks through the setup wizard
     Refresh-Path
     $have = Find-Tesseract
     $v = if ($have) { Tesseract-Version $have } else { $null }

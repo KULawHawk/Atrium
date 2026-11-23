@@ -160,3 +160,18 @@ def test_tesseract_is_locked_to_the_proven_version_and_never_downloaded() -> Non
     assert code.index("if ($TessMatchShown -eq '')") < code.index("Start-Process -FilePath $kept")
     assert code.index("Start-Process -FilePath $kept") < code.index("if ($exe -ne $TessExeSha256)")
     assert "Get-AuthenticodeSignature" not in code  # fingerprints, never the (expired) signature
+    # The setup wizard is the person's clicks; it runs silently (/S) only behind -AssumeYes (the test machine).
+    assert "if ($AssumeYes) { $proc = Start-Process -FilePath $kept -ArgumentList '/S' -Wait -PassThru }" in code
+    assert "else { $proc = Start-Process -FilePath $kept -Wait -PassThru }" in code
+
+
+def test_windows_ci_fetches_the_tesseract_installer_and_checks_the_recorded_fingerprint() -> None:
+    """Jake 11/23 12:17 AM, A: the test job downloads the official release file, checks it against the fingerprint
+    written in Install-Prereqs.ps1, places it where the installer looks; a mismatch fails the job."""
+    wf = (NESTEGG.parent.parent / ".github" / "workflows" / "nestegg-windows.yml").read_text(encoding="utf-8")
+    assert "https://github.com/UB-Mannheim/tesseract/releases/download/v$tver/$tname" in wf
+    assert "$TessSetupSha256 = '([0-9a-f]{64})'" in wf  # reads the one recorded fingerprint, no second copy
+    assert 'if ($tgot -ne $tsha) {' in wf and "exit 1 }" in wf
+    assert "'.adastra\\kept\\tesseract'" in wf
+    # placed after the dry run (which must create nothing) and before the real install
+    assert wf.index("the dry run created the install folder") < wf.index("Invoke-WebRequest -Uri") < wf.index("-AssumeYes *>&1")

@@ -74,6 +74,20 @@ jobs:
           if ($bad) { Write-Host "FAIL: $bad pinned version(s) no longer offered by winget"; exit 1 }
           $dry = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -DryRun *>&1 | Tee-Object -Variable d
           if (Test-Path $root) { Write-Host 'FAIL: the dry run created the install folder'; exit 1 }
+          # Tesseract (Jake 11/23 12:17 AM, A): fetch UB Mannheim's official release file, check it against the
+          # fingerprint written in Install-Prereqs.ps1, and place it where the installer looks. A mismatch fails the job.
+          $src = Get-Content $f -Raw
+          $tver = [regex]::Match($src, "(?m)^\`$TessVersion = '([^']+)'").Groups[1].Value
+          $tsha = [regex]::Match($src, "(?m)^\`$TessSetupSha256 = '([0-9a-f]{64})'").Groups[1].Value
+          if (-not $tver -or -not $tsha) { Write-Host 'FAIL: Tesseract version or fingerprint not found in Install-Prereqs.ps1'; exit 1 }
+          $tname = "tesseract-ocr-w64-setup-$tver.exe"
+          $tdir = Join-Path $root '.adastra\kept\tesseract'
+          New-Item -ItemType Directory -Force -Path $tdir | Out-Null
+          $tdest = Join-Path $tdir $tname
+          Invoke-WebRequest -Uri "https://github.com/UB-Mannheim/tesseract/releases/download/v$tver/$tname" -OutFile $tdest -UseBasicParsing
+          $tgot = (Get-FileHash -LiteralPath $tdest -Algorithm SHA256).Hash.ToLower()
+          if ($tgot -ne $tsha) { Write-Host "FAIL: downloaded $tname sha256 $tgot is not the recorded $tsha"; exit 1 }
+          Write-Host "  Tesseract installer fetched and matches the recorded sha256 $tsha"
           $one = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -AssumeYes *>&1 | Tee-Object -Variable o
           $v1 = ($o | Where-Object { "$_" -match '^NESTEGG-PREREQS: ' } | Select-Object -Last 1)
           Write-Host "first run: $v1"
