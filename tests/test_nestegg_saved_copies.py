@@ -236,6 +236,8 @@ def test_release_job_refuses_to_publish_before_the_source_pin_passes() -> None:
     wf = (NESTEGG / "release" / "build-saved-copy.yml").read_text(encoding="utf-8")
     assert "compare/main...$c" in wf and "identical|behind)" in wf  # the pinned commit must be on Atrium main
     assert "raw.githubusercontent.com/KULawHawk/Atrium/$c/tools/nestegg/release/source_pin.py" in wf  # checker from the commit
+    assert "branches: [main]" in wf and "claude/" not in wf  # Decision 48 A: publish only from main after a merge
+    assert "if: github.ref == 'refs/heads/main'" in wf  # a manual run from another branch publishes nothing
     assert "needs: source-pin" in wf and "needs.source-pin.result == 'success'" in wf
     assert wf.count('python3 -I -B -X pycache_prefix="$RUNNER_TEMP/no-pyc" nestegg/build_saved_release.py') == 2
     assert "--kind packages --source nestegg/SOURCE.txt" in wf and "--kind models --source nestegg/SOURCE.txt" in wf
