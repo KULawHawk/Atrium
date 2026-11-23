@@ -172,7 +172,7 @@ The one-command form is the T-20 desk script on the share (`PHONERUNNER_DESK_T20
 3. `phonerunner-service login` → open the Tailscale link it prints, sign in yourself → PASS with the page address.
 4. `sc start PhoneRunner` (no phone is paired yet, so it refuses everyone).
 5. Open the page on the phone → "Not allowed" shows the phone's device name and device ID. The log line `gate.refused` has the same ID and a shortened login.
-6. `phonerunner-service pair <device ID> <your Tailscale login>` → type `YES` → PASS. Then `sc stop PhoneRunner` and `sc start PhoneRunner`, and reload the page on the phone.
+6. `phonerunner-service pair <device ID> <your Tailscale login>` → type `YES` → PASS. Then `sc.exe stop PhoneRunner` and `sc.exe start PhoneRunner` (in PowerShell, plain `sc` is Set-Content), and reload the page on the phone.
 7. Run button (optional, when he wants it): `phonerunner-service passkey` → tap "Add this phone's passkey" on the phone → type the code → PASS. Then `phonerunner-service run-button on` → T-01C PASS → restart the service.
 
 T-06 (`phonerunner-check refused`) needs a device on the tailnet that is not the phone. Unless the PC also runs the Tailscale app, the PC itself is not on the tailnet (the service is its own Tailscale device and there is no localhost port), so from the PC the page simply does not load, which is also a refusal.
