@@ -356,9 +356,10 @@ class LearningFolder:
             removed = datetime.fromisoformat(str(row.get("added_at")))
         except ValueError:
             return 0  # an unreadable removal time proves nothing: the window counts as closed
-        if removed.tzinfo is None:
-            return 0
-        left = removed + timedelta(days=ADD_BACK_DAYS) - (now or datetime.now(timezone.utc))
+        now = now or datetime.now(timezone.utc)
+        if removed.tzinfo is None or removed > now:
+            return 0  # no time zone, or a removal "in the future" (clock ahead, edited manifest): closed
+        left = removed + timedelta(days=ADD_BACK_DAYS) - now
         if left <= timedelta(0):
             return 0
         return -(-int(left.total_seconds()) // 86400)

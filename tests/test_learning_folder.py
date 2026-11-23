@@ -414,8 +414,8 @@ def test_days_left_none_unless_jake_removed_it(root, tmp_path):
     assert g.add_back_days_left(s2) is None
 
 
-@pytest.mark.parametrize("stamp", ["not a time", "2026-11-23T10:00:00"])
-def test_unreadable_or_zoneless_removal_time_counts_as_closed(root, tmp_path, stamp):
+@pytest.mark.parametrize("stamp", ["not a time", "2026-11-23T10:00:00", "2099-01-01T00:00:00+00:00"])
+def test_unreadable_zoneless_or_future_removal_time_counts_as_closed(root, tmp_path, stamp):
     f, sha = removed(root, tmp_path)
     m = root / "learning" / "obsidian" / "manifest.jsonl"
     rows = [json.loads(x) for x in m.read_text().splitlines()]
@@ -519,3 +519,10 @@ def test_automatic_adding_never_puts_back_a_held_aside_item(root, tmp_path):
 def test_warning_words():
     assert "1 more day;" in add_back_warning(1)
     assert "12 more days;" in add_back_warning(12)
+
+
+def test_days_left_never_exceeds_thirty(root, tmp_path):
+    f, sha = removed(root, tmp_path)
+    t = removal_time(root, sha)
+    assert f.add_back_days_left(sha, t - timedelta(seconds=1)) == 0  # removal one second "in the future"
+    assert all(0 <= f.add_back_days_left(sha, t + timedelta(hours=h)) <= 30 for h in range(0, 800, 7))
