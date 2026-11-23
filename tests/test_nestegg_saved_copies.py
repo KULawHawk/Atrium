@@ -18,7 +18,8 @@ def _cfg(*locs: dict) -> dict:
 
 def test_shipped_config_is_ordered_home_release_origin_and_under_github_limit() -> None:
     cfg = sc.load_config()
-    assert [loc["kind"] for loc in cfg["locations"]] == ["folder", "github_release", "origin"]
+    assert [loc["kind"] for loc in cfg["locations"]] == ["folder", "github_release", "github_release", "origin"]
+    assert {loc["repo"] for loc in cfg["locations"] if loc["kind"] == "github_release"} == {"KULawHawk/adastra-saved-copies"}
     assert cfg["max_part_bytes"] < sc.GH_MAX_ASSET
 
 
@@ -85,9 +86,8 @@ def test_install_root_placeholder_expands(tmp_path: Path) -> None:
     json.dumps(sc.load_config())
 
 
-def test_release_repo_left_empty_until_jake_picks_a_private_one(tmp_path: Path) -> None:
-    rel = [loc for loc in sc.load_config()["locations"] if loc["kind"] == "github_release"][0]
-    assert rel["repo"] == ""  # Atrium is public; never point the saved copies at it
+def test_release_with_no_repo_is_skipped(tmp_path: Path) -> None:
+    rel = {"name": "GitHub release", "kind": "github_release", "repo": "", "tag": "t"}
     rows: list[str] = []
     assert sc.fetch("0" * 64, 5, "f", tmp_path / "d", _cfg(rel), tmp_path, say=rows.append) is None
     assert "not chosen yet" in rows[0]

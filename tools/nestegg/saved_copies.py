@@ -261,26 +261,32 @@ def check_folder(folder: Path, say=print) -> int:
 
 def pull(to: Path, cfg: dict, only: set[str] | None = None, say=print) -> int:
     """Fill a home folder from the release: same names, same INDEX.json, each piece hash-checked."""
-    rel = next((loc for loc in cfg["locations"] if loc["kind"] == "github_release"), None)
-    if not rel or not rel.get("repo"):
+    rels = [loc for loc in cfg["locations"] if loc["kind"] == "github_release" and loc.get("repo")]
+    if not rels:
         say("SAVED-COPIES: FAIL 1 (no private release repository chosen in saved_copies.json yet)")
         return 1
     if not _gh_ok():
         say("SAVED-COPIES: FAIL 1 (GitHub CLI not signed in; run 'gh auth login' yourself, then this again)")
         return 1
     to.mkdir(parents=True, exist_ok=True)
-    get = _release_get(rel["repo"], rel["tag"], to)
-    idx_file = get(INDEX)
-    if not idx_file:
-        say(f"SAVED-COPIES: FAIL 1 (no {INDEX} in release {rel['repo']}@{rel['tag']})")
-        return 1
-    idx = json.loads(idx_file.read_text(encoding="utf-8"))
+    idx: dict = {}
+    getters: dict = {}
+    for rel in rels:  # one home folder and one merged INDEX.json for every release
+        get = _release_get(rel["repo"], rel["tag"], Path(tempfile.mkdtemp(prefix="saved_idx_")))
+        idx_file = get(INDEX)
+        if not idx_file:
+            say(f"SAVED-COPIES: FAIL 1 (no {INDEX} in release {rel['repo']}@{rel['tag']})")
+            return 1
+        part = json.loads(idx_file.read_text(encoding="utf-8"))
+        idx.update(part)
+        getters.update({s: _release_get(rel["repo"], rel["tag"], to) for s in part})
     need = sum(e["bytes"] for s, e in idx.items() if not only or s in only)
     free = shutil.disk_usage(to).free
     if free < need + 2 * 1024**3:
         say(f"SAVED-COPIES: FAIL 1 (needs {need / 1e9:.1f} GB plus 2 GB spare on {to}; {free / 1e9:.1f} GB free)")
         return 1
     fails = 0
+    ok: set[str] = set()
     for sha, entry in sorted(idx.items()):
         if only and sha not in only:
             continue
@@ -289,13 +295,18 @@ def pull(to: Path, cfg: dict, only: set[str] | None = None, say=print) -> int:
             p = to / nm
             if p.is_file() and p.stat().st_size == want["bytes"] and sha256_file(p) == want["sha256"]:
                 continue
-            got = get(nm)
+            got = getters[sha](nm)
             if not got or sha256_file(got) != want["sha256"]:
                 fails += 1
                 say(f"FAIL  {entry['name']:<28} {nm} missing or changed in the release")
                 break
         else:
+            ok.add(sha)
             say(f"PASS  {entry['name']:<28} {entry['bytes']:,} bytes")
+    merged = to / INDEX
+    old = json.loads(merged.read_text(encoding="utf-8")) if merged.is_file() else {}
+    old.update({s: e for s, e in idx.items() if s in ok})
+    merged.write_text(json.dumps(old, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     say("SAVED-COPIES: PASS" if not fails else f"SAVED-COPIES: FAIL {fails}")
     return 1 if fails else 0
 

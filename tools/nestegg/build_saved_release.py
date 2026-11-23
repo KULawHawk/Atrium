@@ -8,7 +8,7 @@ saved_copies.split (parts under 2 GiB), uploads the pieces, then deletes its own
 holds one file at a time. Assets already in the release are not uploaded again, so a stopped run resumes.
 INDEX.json is re-uploaded after every file.
 
-  python -I build_saved_release.py --repo OWNER/NAME --tag saved-copy-v1 --kind packages|models [--limit N] [--dry-run]
+  python -I build_saved_release.py --repo OWNER/NAME --kind packages|models [--tag packages-v1] [--limit N] [--dry-run]
 Last line: SAVED-RELEASE: PASS n | FAIL n (n files)
 """
 
@@ -135,11 +135,12 @@ def release_assets(repo: str, tag: str) -> set[str]:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", required=True)
-    ap.add_argument("--tag", default="saved-copy-v1")
+    ap.add_argument("--tag", default="")
     ap.add_argument("--kind", choices=["packages", "models"], required=True)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
+    a.tag = a.tag or f"{a.kind}-v1"  # packages-v1 / models-v1: each under GitHub's 1,000 files per release
     sc = _sc()
     cfg = sc.load_config()
     items = package_items() if a.kind == "packages" else model_items()
