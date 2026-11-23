@@ -678,7 +678,38 @@ def harness(rep: Report, part: dict, envs: Path, py: Path, log: Path) -> None:
         rep.row("FAIL", label, out.removeprefix("WORKBENCH-HARNESS: "))
 
 
+def hf_hub_cache() -> Path:
+    """The cache the readers' from_pretrained reads (huggingface_hub's own default order; no setting is changed)."""
+    if os.environ.get("HF_HUB_CACHE"):
+        return Path(os.environ["HF_HUB_CACHE"])
+    home = Path(os.environ.get("HF_HOME") or Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "huggingface")
+    return home / "hub"
+
+
+def saved_models(rep: Report, part: dict, envs: Path) -> None:
+    """Decision 30 A: put each pinned Hugging Face snapshot of this reader in place from the saved copies first.
+    A snapshot is placed only when every one of its files matches a pin; otherwise the reader's own step below
+    downloads it as before. Nothing here marks a model PASS: the model steps below still decide."""
+    man = HERE / "models_pinned.json"
+    if not man.is_file():
+        return
+    reader = json.loads(man.read_text(encoding="utf-8")).get("readers", {}).get(part["name"])
+    if not reader:
+        return
+    sc = _saved_copies()
+    cfg = sc.load_config()
+    root = INSTALL_ROOT.get("root") or envs.parent
+    if not sc.usable([loc for loc in cfg["locations"] if loc["kind"] != "origin"], root):
+        return
+    hf = [m for m in reader.get("models", {}).values() if m.get("source") == "huggingface" and m.get("files")]
+    placed = [m["repo_id"] for m in hf
+              if sc.place_hf_snapshot(m["repo_id"], m["revision"], m["files"], hf_hub_cache(), cfg, root, say=lambda _m: None)]
+    rep.row("INFO", f"{part['name']} saved models", f"{len(placed)} of {len(hf)} Hugging Face models placed from a saved copy"
+            + (f": {', '.join(placed)}" if placed else " (the rest download from the original site, hash-pinned where pinned)"))
+
+
 def models(rep: Report, part: dict, src: Path, repo: Path, envs: Path, py: Path, log: Path) -> None:
+    saved_models(rep, part, envs)
     mdir = envs / "_models"
     for m in part.get("models", []):
         label = f"{part['name']} model"

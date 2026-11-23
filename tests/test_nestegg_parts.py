@@ -709,3 +709,25 @@ def test_no_saved_copy_means_plain_hash_checked_install(tmp_path: Path, monkeypa
     (tmp_path / "envs" / "_logs").mkdir(parents=True)
     m.locked_install(Path("py"), ["demo==1.0 --hash=sha256:" + "0" * 64], tmp_path / "envs" / "_logs" / "l.txt", tmp_path / "envs" / "_logs" / "o.txt")
     assert "--no-index" not in calls[0] and "--find-links" not in calls[0]
+
+
+def test_reader_models_placed_from_saved_copy_when_every_file_is_pinned(tmp_path: Path, monkeypatch) -> None:
+    m = _mod()
+    sc = m._saved_copies()
+    f = tmp_path / "w.safetensors"
+    f.write_bytes(b"weights")
+    e = sc.split(f, tmp_path / "root" / "saved", 2_000_000_000)
+    man = {"readers": {"TableSurgeon": {"models": {
+        "ok": {"source": "huggingface", "repo_id": "o/ok", "revision": "a" * 40, "files": {"w.safetensors": {"bytes": 7, "sha256": e["sha256"]}}},
+        "unpinned_file": {"source": "huggingface", "repo_id": "o/no", "revision": "b" * 40, "files": {"config.json": {"bytes": 2, "sha256": None}}}}}}}
+    (tmp_path / "nest").mkdir()
+    (tmp_path / "nest" / "models_pinned.json").write_text(json.dumps(man))
+    monkeypatch.setattr(m, "HERE", tmp_path / "nest")
+    monkeypatch.setattr(m, "_saved_copies", lambda: sc)
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hub"))
+    m.INSTALL_ROOT["root"] = tmp_path / "root"
+    rows = []
+    rep = type("R", (), {"row": lambda self, s, w, d: rows.append((s, w, d))})()
+    m.saved_models(rep, {"name": "TableSurgeon"}, tmp_path / "root" / "envs")
+    assert (tmp_path / "hub" / "models--o--ok" / "snapshots" / ("a" * 40) / "w.safetensors").read_bytes() == b"weights"
+    assert rows == [("INFO", "TableSurgeon saved models", "1 of 2 Hugging Face models placed from a saved copy: o/ok")]

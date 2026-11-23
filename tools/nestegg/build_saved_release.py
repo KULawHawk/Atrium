@@ -1,7 +1,8 @@
 """Build the private saved-copy release (Decision 30 A, Jake 11/23 12:40 AM CT). Runs on a GitHub runner INSIDE the
 private saved-copies repository (its own GITHUB_TOKEN publishes; no key is stored anywhere). Run with python -I.
 
-For each pinned file (packages: locks/SHA256SUMS_*.txt; models: models_pinned.json + htrlens_models.json) it downloads
+For each pinned file (packages: locks/SHA256SUMS_*.txt; models: models_pinned.json + htrlens_models.json; hashes there were transcribed from the Hub listing, so each is
+recomputed here and a mismatch is a FAIL) it downloads
 from the original site, refuses anything whose sha256 is not the pin, stores it content-addressed through
 saved_copies.split (parts under 2 GiB), uploads the pieces, then deletes its own local working copy so a runner's disk
 holds one file at a time. Assets already in the release are not uploaded again, so a stopped run resumes.
@@ -53,9 +54,10 @@ def model_items() -> list[dict]:
 
     def add_hf(repo: str, rev: str, files: dict) -> None:
         for path, meta in files.items():
-            if meta.get("sha256"):
-                out[meta["sha256"]] = {"sha256": meta["sha256"], "name": f"{repo}@{rev[:12]}/{path}", "bytes": meta.get("bytes"),
-                                       "url": f"https://huggingface.co/{repo}/resolve/{rev}/{path}"}
+            name = f"{repo}@{rev[:12]}/{path}"
+            # a file with no pin yet (small non-LFS files) is measured here, at an immutable commit, and reported
+            out[meta.get("sha256") or name] = {"sha256": meta.get("sha256"), "name": name, "bytes": meta.get("bytes"),
+                                               "url": f"https://huggingface.co/{repo}/resolve/{rev}/{path}"}
 
     for mf in (HERE / "htrlens_models.json", HERE / "models_pinned.json"):
         if not mf.is_file():
@@ -156,9 +158,13 @@ def main(argv: list[str] | None = None) -> int:
         gh("release", "download", a.tag, "-R", a.repo, "-p", "INDEX.json", "-D", str(store), "--clobber")
     idx = json.loads((store / "INDEX.json").read_text()) if (store / "INDEX.json").exists() else {}
     fails = done = 0
+    measured: dict[str, str] = {}
+    by_name = {e["name"]: s for s, e in idx.items()}
     for i in items[: a.limit or None]:
-        sha = i["sha256"]
-        if sha in idx and all(n in have for n in sc.asset_names(sha, idx[sha])):
+        sha = i["sha256"] or by_name.get(i["name"])
+        if sha and sha in idx and all(n in have for n in sc.asset_names(sha, idx[sha])):
+            if not i["sha256"]:
+                measured[i["name"]] = sha
             done += 1
             continue
         try:
@@ -168,8 +174,12 @@ def main(argv: list[str] | None = None) -> int:
             dl = work / "dl"
             urllib.request.urlretrieve(url, dl)
             got = sc.sha256_file(dl)
-            if got != sha:
+            if i["sha256"] is None:  # measured at the pinned commit; becomes a pin only by a reviewed commit
+                measured[i["name"]] = sha = got
+            elif got != sha:
                 raise RuntimeError(f"original site sent sha256 {got}, not the pin")
+            if i.get("bytes") and dl.stat().st_size != i["bytes"]:
+                raise RuntimeError(f"original site sent {dl.stat().st_size} bytes, pinned {i['bytes']}")
             entry = sc.split(dl, store, int(cfg["max_part_bytes"]), i["name"])
             dl.unlink()
             for nm in sc.asset_names(sha, entry):
@@ -181,6 +191,11 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:  # one bad file is a FAIL row; the rest still go
             fails += 1
             print(f"FAIL  {i['name']}  {exc}", flush=True)
+    if measured:  # reported for a reviewed pin commit; the installer never trusts these until they are in the manifest
+        mp = work / "measured_pins.json"
+        mp.write_text(json.dumps(measured, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        gh("release", "upload", a.tag, str(mp), "-R", a.repo, "--clobber")
+        print(f"MEASURED {len(measured)} files with no pin yet (release asset measured_pins.json)")
     shutil.rmtree(work, ignore_errors=True)  # the runner's temp folder only
     print(f"SAVED-RELEASE: PASS {done}" if not fails else f"SAVED-RELEASE: FAIL {fails} ({done} saved)")
     return 1 if fails else 0
