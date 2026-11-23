@@ -78,6 +78,19 @@ def model_items() -> list[dict]:
                     out[node["sha256"]] = {"sha256": node["sha256"], "name": node.get("file_name") or url.rsplit("/", 1)[-1],
                                            "bytes": node.get("bytes"), "url": url}
             stack.extend(v for v in node.values() if isinstance(v, dict))
+    # model wheels the installer itself fetches (parts.json "models": spaCy's en_core_web_sm), pinned there by sha256
+    pf = HERE / "parts.json"
+    if pf.is_file():
+        stack = [json.loads(pf.read_text(encoding="utf-8"))]
+        while stack:
+            node = stack.pop()
+            if isinstance(node, list):
+                stack.extend(node)
+            elif isinstance(node, dict):
+                if node.get("wheel") and node.get("wheel_sha256"):
+                    out[node["wheel_sha256"]] = {"sha256": node["wheel_sha256"], "name": node["wheel"].rsplit("/", 1)[-1],
+                                                 "bytes": node.get("wheel_bytes"), "url": node["wheel"]}
+                stack.extend(node.values())
     return list(out.values())
 
 

@@ -286,3 +286,15 @@ def test_release_job_refuses_to_publish_before_the_source_pin_passes() -> None:
     assert "needs: source-pin" in wf and "needs.source-pin.result == 'success'" in wf
     assert wf.count('python3 -I -B -X pycache_prefix="$RUNNER_TEMP/no-pyc" nestegg/build_saved_release.py') == 2
     assert "--kind packages --source nestegg/SOURCE.txt" in wf and "--kind models --source nestegg/SOURCE.txt" in wf
+
+
+def test_installer_model_wheels_from_parts_json_are_saved() -> None:
+    """en_core_web_sm is pinned only in parts.json; the models release must carry it (package-accounting check 11/23)."""
+    m = _build()
+    items = {i["sha256"]: i for i in m.model_items()}
+    en = items["1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85"]
+    assert en["name"] == "en_core_web_sm-3.8.0-py3-none-any.whl"
+    assert en["bytes"] == 12806118
+    assert en["url"].startswith("https://github.com/explosion/spacy-models/releases/download/")
+    src = (NESTEGG / "release" / "source_pin.py").read_text(encoding="utf-8")
+    assert '"tools/nestegg/parts.json": "nestegg/parts.json"' in src

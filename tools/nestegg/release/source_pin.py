@@ -35,6 +35,7 @@ FILES = {
     "tools/nestegg/saved_copies.json": "nestegg/saved_copies.json",
     "tools/nestegg/models_pinned.json": "nestegg/models_pinned.json",
     "tools/nestegg/htrlens_models.json": "nestegg/htrlens_models.json",
+    "tools/nestegg/parts.json": "nestegg/parts.json",
     "tools/nestegg/locks/SHA256SUMS_cu124_linux.txt": "nestegg/locks/SHA256SUMS_cu124_linux.txt",
     "tools/nestegg/locks/SHA256SUMS_linux_x86_64.txt": "nestegg/locks/SHA256SUMS_linux_x86_64.txt",
     "tools/nestegg/locks/SHA256SUMS_sdist.txt": "nestegg/locks/SHA256SUMS_sdist.txt",
