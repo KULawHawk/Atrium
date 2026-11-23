@@ -12,8 +12,10 @@ for identifiers. For real-report (class P) items the identifier screen is the ai
 check (Decision 38 = A); the gate, which confirms his checked mark, is re-run in step 1. The staged manifest holds only the rows of items actually
 copied, and an aim FAILs if the connector's folder holds any file this run would not send (nothing is deleted).
 
-Class M (manual-derived) items are NOT copied unless ``--include-manual`` is given: LF-3 is not decided, so the
-copy carries synthetic, public and approved de-identified items only (LF-3 option D, coordinator 11/23).
+Class M (manual-derived) items are copied: Jake approved every manual in use as of 11/23/2026 (Decision 41 =
+LF-3, revisit about 2027-04-23), and an item can only be class M if its manual's OK is on record; withdrawing an OK
+moves that manual's items aside, and the next copy-out then FAILs that aim until a person takes the stale file off
+the share. ``--exclude-manual`` leaves class M out of a run.
 
 Any failure stops that aim, loudly; the other aims still run, and the final line is FAIL. Nothing is deleted
 (staging stays for the record). Standard library only.
@@ -96,7 +98,7 @@ def copy_out(
     gates: Mapping[str, Gate],
     aims: Sequence[str] | None = None,
     run_id: str | None = None,
-    include_manual: bool = False,
+    include_manual: bool = True,
 ) -> dict[str, str]:
     """Returns ``{aim: "PASS n=<items>" | "FAIL <why>"}``."""
     learning = Path(root) / "learning"
@@ -139,7 +141,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--root", type=Path, help="install root (default: from adastra.json)")
     ap.add_argument("--gate", action="append", default=[], help="aim=module:function for an aim's own gate")
     ap.add_argument("--aim", action="append", help="only these aims (default: every aim folder)")
-    ap.add_argument("--include-manual", action="store_true", help="also copy class M items (only after Jake's LF-3)")
+    ap.add_argument("--exclude-manual", action="store_true", help="leave class M (manual-derived) items out of this run")
     args = ap.parse_args(argv)
     try:
         if not args.guard.is_file():
@@ -151,7 +153,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise LearningFolderError(f"--gate {spec!r} is not aim=module:function")
             gates[aim] = load_gate(target)
         root = args.root or find_install_root()
-        result = copy_out(root, args.dest, run_guard(args.guard), gates, args.aim, include_manual=args.include_manual)
+        result = copy_out(root, args.dest, run_guard(args.guard), gates, args.aim, include_manual=not args.exclude_manual)
     except LearningFolderError as exc:
         print(str(exc))
         print("LEARNING-COPY: FAIL")

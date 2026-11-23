@@ -126,15 +126,19 @@ def test_gateresult_reexported():
     assert GateResult(True, "x").human_checked is False
 
 
-def test_manual_items_stay_unless_included(root, tmp_path):
+def test_manual_items_go_unless_excluded(root, tmp_path, capsys):
     from atrium_learning.folder import record_manual_ok
 
     record_manual_ok(root, "WISC-V 2014", "jake")
     LearningFolder(root, "readers-print").add(item(tmp_path, body="m1"), "M", "WISC-V 2014", "jake")
-    assert copy_out(root, tmp_path / "a", ok_guard, {}, ["readers-print"], "r1")["readers-print"] == "PASS n=1"
-    assert copy_out(root, tmp_path / "b", ok_guard, {}, ["readers-print"], "r2", include_manual=True)[
+    assert copy_out(root, tmp_path / "a", ok_guard, {}, ["readers-print"], "r1")["readers-print"] == "PASS n=2"
+    assert copy_out(root, tmp_path / "b", ok_guard, {}, ["readers-print"], "r2", include_manual=False)[
         "readers-print"
-    ] == "PASS n=2"
+    ] == "PASS n=1"
+    guard = guard_file(tmp_path, PASS_GUARD)
+    assert main(["--dest", str(tmp_path / "c"), "--guard", str(guard), "--root", str(root),
+                 "--aim", "readers-print", "--exclude-manual"]) == 0
+    assert "readers-print: PASS n=1" in capsys.readouterr().out
 
 
 def test_held_aside_item_left_on_share_fails_the_aim(root, tmp_path):
@@ -168,7 +172,7 @@ def test_only_copied_items_rows_go_out(root, tmp_path):
     gone = f.add(item(tmp_path, body="s2"), "S", "synthetic aside", "jake")
     f.hold_aside(gone, "removed_by_jake", "jake")
     dest = tmp_path / "share"
-    assert copy_out(root, dest, ok_guard, {}, ["readers-print"], "r1")["readers-print"] == "PASS n=1"
+    assert copy_out(root, dest, ok_guard, {}, ["readers-print"], "r1", include_manual=False)["readers-print"] == "PASS n=1"
     text = (dest / "readers-print" / "manifest.jsonl").read_text()
     rows = [json.loads(x) for x in text.splitlines()]
     assert len(rows) == 1 and rows[0]["class"] == "S" and rows[0]["event"] == "added"
