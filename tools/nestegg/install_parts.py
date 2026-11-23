@@ -513,36 +513,119 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
     if not base:
         rep.row("FAIL", name, f"Python {part['python']} not found (phase 1 installs it)")
         return
+    # SET-11: the working environment is set aside (kept under a dated name, never deleted) and the new one is built at
+    # the real path (a venv's launchers hold their own path, so it is not built elsewhere and moved). It stays only if
+    # its own verdict and import probe pass; otherwise the previous one is put back and the failed build is kept beside.
+    leftover_copies(rep, name, env)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    # An environment counts as a working copy only if it carries VERIFIED, written after its verdict and probe
+    # passed. Every build writes BUILDING first, before the venv exists, so (reviewer 3 on #72, round 2):
+    #   VERIFIED                         -> .kept-        (restorable, the last known working copy)
+    #   BUILDING only                    -> .unfinished-  (a build a crash interrupted; never restored)
+    #   neither, but adastra.json        -> .legacy-      (built before this check existed; restorable, "not verified")
+    #   neither, no adastra.json         -> .unfinished-  (never restored)
+    aside = None
+    if env.exists():
+        kind = "kept" if (env / VERIFIED).is_file() else "unfinished" if (env / BUILDING).is_file() \
+            else "legacy" if (env / "adastra.json").is_file() else "unfinished"
+        aside = env.with_name(f"{name}.{kind}-{stamp}")
+        try:
+            env.rename(aside)
+        except OSError as e:
+            rep.row("FAIL", name, f"could not set the existing environment aside ({e}); close any program using {env}, "
+                    "then run again. Nothing was changed")
+            return
+    ok = _build_env(rep, part, src, envs, env, log, base, lines, repo, local, stamp)
+    if ok:
+        try:
+            (env / VERIFIED).write_text(json.dumps({"verified": stamp, "part": name}) + "\n", encoding="utf-8")
+        except OSError as e:
+            rep.row("FAIL", f"{name} verified marker", f"the new build passed but {env / VERIFIED} could not be "
+                    f"written ({e}), so it cannot be counted as a working copy")
+            ok = False
+    if ok:
+        if aside and aside.name.startswith(f"{name}.kept-"):
+            rep.row("INFO", f"{name} kept", f"the previous environment is kept at {aside} (last known working copy; "
+                    "delete it yourself when you no longer want it)")
+        elif aside and aside.name.startswith(f"{name}.legacy-"):
+            rep.row("INFO", f"{name} set aside", f"the previous environment was built before this check existed; kept, "
+                    f"not verified, at {aside}")
+        elif aside:
+            rep.row("INFO", f"{name} set aside", f"the previous environment was a build that did not finish; kept, "
+                    f"never verified, at {aside}")
+        return
+    if not aside and not list(envs.glob(f"{name}.kept-*")):
+        return  # a first install that failed: its FAIL rows already say so; nothing to put back
+    failed = env.with_name(f"{name}.failed-{stamp}")
+    # put back: the newest verified kept copy, else this run's pre-check (legacy) environment, else nothing
+    good = sorted(k for k in envs.glob(f"{name}.kept-*") if (k / VERIFIED).is_file())
+    legacy = not good and aside is not None and aside.name.startswith(f"{name}.legacy-")
+    if legacy:
+        good = [aside]
+    try:
+        if env.exists():
+            env.rename(failed)
+        if good:
+            good[-1].rename(env)
+    except OSError as e:
+        rep.row("FAIL", f"{name} restore", f"the new build did not pass and putting the last working copy back failed "
+                f"({e}). Close any program using these folders and move {good[-1] if good else 'nothing'} back by hand, "
+                "or run again")
+        return
+    if legacy:
+        rep.row("WARN", f"{name} restored", f"the new build did not pass, so the previous environment ({aside.name}) is "
+                f"put back, not verified (it was built before this check existed), at {env}; the failed build is kept "
+                f"at {failed}")
+    elif good:
+        rep.row("WARN", f"{name} restored", f"the new build did not pass, so the last verified working copy "
+                f"({good[-1].name}) is back in use at {env}; the failed build is kept at {failed}")
+    else:
+        rep.row("FAIL", f"{name} no working copy", f"the new build did not pass and there is no verified working copy to "
+                f"put back, so {name} is not installed now. The failed build is at {failed}"
+                + (f"; the earlier, never-verified environment is at {aside}" if aside else ""))
+
+def _build_env(rep: Report, part: dict, src: Path, envs: Path, env: Path, log: Path, base: list[str], lines: list[str],
+               repo: Path, local: set[str], stamp: str = "") -> bool:
+    """Build one part's environment at `env`; True when its own verdict and import probe have no FAIL row."""
+    name = part["name"]
+    try:  # written before the venv exists: an environment holding only this marker is a build that did not finish
+        env.mkdir(parents=True, exist_ok=True)
+        (env / BUILDING).write_text(json.dumps({"building": stamp, "part": name}) + "\n", encoding="utf-8")
+    except OSError as e:
+        rep.row("FAIL", f"{name} building marker", f"could not write {env / BUILDING}: {e}")
+        return False
     if not env_python(env).exists() and run(base + ["-m", "venv", env], log):
         rep.row("FAIL", name, f"could not create the environment (see {log})")
-        return
+        return False
     py = env_python(env)
     if locked_install(py, lines, envs / "_logs" / f"{name}.lock.txt", log):
         rep.row("FAIL", name, f"locked install failed (see {log})")
-        return
+        return False
     args = closure(repo, part["roots"])
     for r in part.get("add_repos", []):
         args += ["-e", str(src / r)]
     if run([py, "-m", "pip", "install", "--no-deps", *args], log):
         rep.row("FAIL", name, f"installing the part's own source failed (see {log})")
-        return
+        return False
     chk = subprocess.run([py, "-m", "pip", "check"], capture_output=True, text=True)
     if chk.returncode:
         for ln in (chk.stdout or chk.stderr).strip().splitlines():
             rep.row("FAIL", f"{name} pip check", ln)
-        return
+        return False
     for mod in part.get("must_import", []):  # a library the part reaches lazily (the probe may not see it in code)
         r = subprocess.run([py, "-I", "-c", f"import {mod}"], capture_output=True, text=True)
         if r.returncode:
             rep.row("FAIL", f"{name} import", f"{mod} does not import: {(r.stderr or '').strip().splitlines()[-1:]}")
-            return
+            return False
     try:  # how an installed program finds the install root (learning folders etc.): <env>/adastra.json, read-only for it
         env.mkdir(parents=True, exist_ok=True)
         (env / "adastra.json").write_text(json.dumps({"install_root": str(INSTALL_ROOT.get("root") or envs.parent),
                                                       "envs": str(envs), "part": name}, indent=1) + "\n", encoding="utf-8")
     except OSError as e:
         rep.row("FAIL", f"{name} root marker", f"could not write {env / 'adastra.json'}: {e}")
-        return
+        return False
+    core = rep.fails  # the environment's own verdict and its import probe decide whether it replaces the old one;
+    #                   a reader's unpinned model or a missing program is about the machine, not this environment
     status = list_status(f"{name}_py{part['python']}.txt")
     done = f"installed {len(lines)} locked packages (hash-checked) + its own source; pip check clean"
     if status.startswith("MATCHED") or status.startswith("empty on purpose"):
@@ -551,16 +634,20 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
         rep.row("HOLD", name, f"{done}; locked, not measured: {status}")
     else:
         own_tests(rep, part, repo, py, envs, log, done, status)
+    env_ok = rep.fails == core
     rep.row("INFO", f"{name} build tools", "pip fetches the build backend for the part's own source (e.g. setuptools) at install time; not locked yet")
     side_envs(rep, part, src, envs, log, py)
     models(rep, part, src, repo, envs, py, log)  # before the probe: a model can be an importable package
     if part.get("harness_from"):
         harness(rep, part, envs, py, log)
+    before_probe = rep.fails
     probe(rep, part, repo, py, local, log)
+    env_ok = env_ok and rep.fails == before_probe
     for prog in part.get("programs", []):
         rep.row("PASS" if shutil.which(prog) else "FAIL", f"{name} needs {prog}",
                 "found" if shutil.which(prog) else "not on PATH (phase 1 installs it)")
     run([py, "-m", "pip", "freeze"], envs / "_logs" / f"{name}.freeze.txt")
+    return env_ok
 
 
 def side_envs(rep: Report, part: dict, src: Path, envs: Path, log: Path, py: Path) -> None:
@@ -637,6 +724,22 @@ def side_envs(rep: Report, part: dict, src: Path, envs: Path, log: Path, py: Pat
             build_runtime_side_env(rep, part, src / part["repo"], needs, log)
 
 
+VERIFIED = "adastra_verified.json"  # written into a part's environment only after its own verdict and probe passed
+BUILDING = "adastra_building.json"  # written at the START of every build, before the venv; VERIFIED outranks it
+
+
+def leftover_copies(rep: Report, label: str, folder: Path) -> None:
+    """Every kept, unfinished or failed copy beside `folder` is named on EVERY run, not only the run that made it
+    (reviewer 3 on #70): they use disk, and nothing here deletes them (that is Jake's call)."""
+    for old in sorted(folder.parent.glob(f"{folder.name}.*")):
+        kind = old.name[len(folder.name) + 1:].split("-")[0]
+        what = {"kept": "previous working copy, kept", "new": "unfinished build, left in place",
+                "failed": "failed build, kept beside", "unfinished": "set aside, never verified",
+                "legacy": "built before the verified check, kept, not verified"}.get(kind)
+        if what and old.is_dir():
+            rep.row("INFO", f"{label} copy", f"{old} ({what}; delete it yourself when you no longer want it)")
+
+
 def runtime_side_env(repo: Path, part: dict) -> tuple[Path, dict] | None:
     """The spoke's own [side_env] table (conclave_runtime_needs.toml, read by the INSTALLER; Conclave #2941 for
     OcrPaddle): where the lens looks for its side environment and the hash-locked list to build it from."""
@@ -657,6 +760,7 @@ def build_runtime_side_env(rep: Report, part: dict, repo: Path, needs: tuple[Pat
     label = f"{part['name']} side env"
     req = f.parent / se["requirements"]
     target = Path(se["default_dir"]).expanduser()
+    leftover_copies(rep, label, target)
     for old in sorted(repo / r / ".paddle-env" for r in part["roots"]):
         if old.is_dir():  # built by the spoke's old script from the unhashed list; the lens refuses it since #2941
             rep.row("INFO", f"{label} old folder", f"{old} was built from the old list without hashes; {part['name']} "
@@ -693,16 +797,29 @@ def build_runtime_side_env(rep: Report, part: dict, repo: Path, needs: tuple[Pat
                 f"not switched in{in_use}")
         return
     kept = target.with_name(f"{target.name}.kept-{stamp}") if target.exists() else None
-    if kept:
-        target.rename(kept)  # the last known working copy, kept (never deleted)
-    new.rename(target)
+    try:
+        if kept:
+            target.rename(kept)  # the last known working copy, kept (never deleted)
+        try:
+            new.rename(target)
+        except OSError:
+            if kept:
+                kept.rename(target)
+            raise
+    except OSError as e:  # Windows refuses to rename a folder a running program holds open
+        rep.row("FAIL", label, f"could not switch the new build in ({e}); close any program using {target} (a running "
+                f"{part['name']} read), then run again. The new build is left at {new}{in_use}")
+        return
     tpy = env_python(target)  # a venv moved to its final folder is checked again there before it counts
     if run([tpy, "-I", worker, "--op", "warmup", "--response", target / "warmup_response.json"], log):
-        target.rename(new)
-        if kept:
-            kept.rename(target)
-        rep.row("FAIL", label, f"the new build passed its warmup but not after moving to {target}; switched back "
-                f"(new build left at {new}){in_use} (see {log})")
+        try:
+            target.rename(new)
+            if kept:
+                kept.rename(target)
+            back = f"switched back (new build left at {new}){in_use}"
+        except OSError as e:
+            back = f"switching back failed too ({e}): check {target}, {new} and {kept} by hand"
+        rep.row("FAIL", label, f"the new build passed its warmup but not after moving to {target}; {back} (see {log})")
         return
     rep.row("PASS", label, f"built at {target} from {se['requirements']} ({pins} exact pins, --require-hashes --no-deps); "
             "warmup passed before and after the switch (paddle imports, run_check, engine built)")

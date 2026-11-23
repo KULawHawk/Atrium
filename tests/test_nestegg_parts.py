@@ -944,3 +944,180 @@ def test_paddle_side_env_without_the_spokes_table_still_fails_as_not_locked(tmp_
     part = {"name": "OcrPaddle", "repo": "Conclave", "roots": ["conclave_lens_ocrpaddle"], "spoke_side_env": {"python": "3.12"}}
     m.side_envs(rep, part, tmp_path, tmp_path / "envs", tmp_path / "log.txt", Path("py"))
     assert rep.fails == 1 and "side env not locked" in capsys.readouterr().out
+
+
+def _swap_setup(tmp_path: Path, monkeypatch, ok: bool, verified: bool = True, marker: str = ""):
+    m = _mod()
+    src = tmp_path / "src"
+    (src / "atrium").mkdir(parents=True)
+    env = tmp_path / "envs" / "atrium"
+    env.mkdir(parents=True)
+    (env / "old.txt").write_text("working copy")
+    if verified:
+        (env / m.VERIFIED).write_text("{}")
+    if marker == "building":  # a build a crash interrupted
+        (env / m.BUILDING).write_text("{}")
+    elif marker == "legacy":  # built before the verified check existed: it has the root marker only
+        (env / "adastra.json").write_text("{}")
+    monkeypatch.setattr(m, "base_python", lambda v: ["py"])
+
+    def fake_build(rep, part, src_, envs, env_, log, base, lines, repo, local, stamp=""):
+        env_.mkdir(parents=True, exist_ok=True)
+        (env_ / "new.txt").write_text("new build")
+        return ok
+    monkeypatch.setattr(m, "_build_env", fake_build)
+    part = {"name": "atrium", "repo": "atrium", "roots": ["."], "python": "3.13"}
+    return m, part, src, env
+
+
+def test_main_env_rebuild_keeps_the_working_copy_when_the_new_one_passes(tmp_path: Path, monkeypatch, capsys) -> None:
+    """SET-11: the previous environment is kept under a dated name, never deleted."""
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=True)
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    kept = list(env.parent.glob("atrium.kept-*"))
+    assert len(kept) == 1 and (kept[0] / "old.txt").read_text() == "working copy" and (env / "new.txt").is_file()
+    assert "previous environment is kept at" in capsys.readouterr().out
+    rep2 = m.Report()  # a later run names the kept copy again (reviewer 3 on #70)
+    m.build_part(rep2, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    out = capsys.readouterr().out
+    assert f"{kept[0]} (previous working copy, kept" in out
+
+
+def test_main_env_failed_rebuild_puts_the_working_copy_back(tmp_path: Path, monkeypatch, capsys) -> None:
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=False)
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    failed = list(env.parent.glob("atrium.failed-*"))
+    assert (env / "old.txt").read_text() == "working copy" and not (env / "new.txt").exists()
+    assert len(failed) == 1 and (failed[0] / "new.txt").is_file() and not list(env.parent.glob("atrium.kept-*"))
+    assert "last verified working copy" in capsys.readouterr().out
+
+
+def test_crash_then_failed_rerun_restores_the_true_working_copy(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Reviewer 3 on #72: a crash leaves a half-built env at the real path with no VERIFIED marker. A re-run whose
+    build fails must not call that half env 'the previous environment'; it restores the newest VERIFIED .kept- copy."""
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=False, verified=False, marker="building")  # half build
+    (env / "old.txt").write_text("half build")
+    good = env.with_name("atrium.kept-20261123-070000")
+    good.mkdir()
+    (good / "old.txt").write_text("true working copy")
+    (good / m.VERIFIED).write_text("{}")
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    out = capsys.readouterr().out
+    assert (env / "old.txt").read_text() == "true working copy"
+    unfinished = list(env.parent.glob("atrium.unfinished-*"))
+    assert len(unfinished) == 1 and (unfinished[0] / "old.txt").read_text() == "half build"
+    assert "last verified working copy (atrium.kept-20261123-070000) is back in use" in out
+    assert "previous environment is back in use" not in out
+
+
+def test_failed_rerun_with_no_verified_copy_says_so_plainly(tmp_path: Path, monkeypatch, capsys) -> None:
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=False, verified=False)
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    out = capsys.readouterr().out
+    assert rep.fails == 1 and "there is no verified working copy to put back" in out and not env.exists()
+    assert "back in use" not in out and list(env.parent.glob("atrium.unfinished-*"))
+
+
+def test_env_from_before_the_check_is_kept_but_not_called_verified(tmp_path: Path, monkeypatch, capsys) -> None:
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=True, verified=False, marker="legacy")
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    out = capsys.readouterr().out
+    assert "kept, not verified, at" in out and "last known working copy" not in out
+    assert (env / m.VERIFIED).is_file() and not list(env.parent.glob("atrium.kept-*"))
+    assert len(list(env.parent.glob("atrium.legacy-*"))) == 1
+
+
+def test_env_from_before_the_check_is_put_back_not_verified_when_the_rebuild_fails(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Reviewer 3 on #72, round 2: on the first run after this lands every env on Jake's PC is from before the check.
+    A failed rebuild must put it back (SET-11), saying it is not verified, not leave the part uninstalled."""
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=False, verified=False, marker="legacy")
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    out = capsys.readouterr().out
+    assert (env / "old.txt").read_text() == "working copy" and not (env / "new.txt").exists()
+    assert "put back, not verified" in out and "no verified working copy" not in out and rep.fails == 0
+    assert not (env / m.VERIFIED).exists() and len(list(env.parent.glob("atrium.failed-*"))) == 1
+
+
+def test_verified_kept_copy_outranks_a_legacy_env_on_failure(tmp_path: Path, monkeypatch, capsys) -> None:
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=False, verified=False, marker="legacy")
+    good = env.with_name("atrium.kept-20261123-070000")
+    good.mkdir()
+    (good / "old.txt").write_text("verified copy")
+    (good / m.VERIFIED).write_text("{}")
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    assert (env / "old.txt").read_text() == "verified copy" and list(env.parent.glob("atrium.legacy-*"))
+    assert "last verified working copy (atrium.kept-20261123-070000)" in capsys.readouterr().out
+
+
+def test_crash_interrupted_env_is_never_put_back_when_the_rebuild_fails(tmp_path: Path, monkeypatch, capsys) -> None:
+    """A building marker with no verified marker is a build a crash cut off, even if adastra.json got written."""
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=False, verified=False, marker="building")
+    (env / "adastra.json").write_text("{}")
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    out = capsys.readouterr().out
+    assert rep.fails == 1 and "there is no verified working copy to put back" in out and not env.exists()
+    assert "put back, not verified" not in out and len(list(env.parent.glob("atrium.unfinished-*"))) == 1
+
+
+def test_verified_marker_write_failure_is_a_fail_row_not_a_crash(tmp_path: Path, monkeypatch, capsys) -> None:
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=True)
+    real = Path.write_text
+    monkeypatch.setattr(Path, "write_text", lambda self, *a, **k: (_ for _ in ()).throw(OSError(28, "disk full"))
+                        if self.name == m.VERIFIED else real(self, *a, **k))
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    out = capsys.readouterr().out
+    assert "verified marker" in out and "cannot be counted as a working copy" in out
+    assert (env / "old.txt").read_text() == "working copy"  # the verified previous copy is put back
+
+
+def test_building_marker_is_written_before_the_venv_is_created(tmp_path: Path, monkeypatch) -> None:
+    m = _mod()
+    env = tmp_path / "envs" / "atrium"
+    seen = []
+    monkeypatch.setattr(m, "run", lambda cmd, log: seen.append((env / m.BUILDING).is_file()) or 1)
+    rep = m.Report()
+    ok = m._build_env(rep, {"name": "atrium", "roots": ["."]}, tmp_path, tmp_path / "envs", env, tmp_path / "l.txt",
+                      ["py"], [], tmp_path, set(), "20261123-080000")
+    assert not ok and seen == [True] and not (env / m.VERIFIED).exists()
+
+
+def test_main_env_held_open_is_a_fail_row_not_a_crash(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Windows refuses to rename a folder a running program holds; that is a FAIL row and nothing changes."""
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=True)
+    real = Path.rename
+    monkeypatch.setattr(Path, "rename", lambda self, t: (_ for _ in ()).throw(PermissionError(32, "in use")) if self == env else real(self, t))
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    assert rep.fails == 1 and "could not set the existing environment aside" in capsys.readouterr().out
+    assert (env / "old.txt").is_file() and not (env / "new.txt").exists()
+
+
+def test_paddle_side_env_held_open_is_a_fail_row_and_the_old_one_stays(tmp_path: Path, monkeypatch, capsys) -> None:
+    m = _mod()
+    repo, part = _paddle_spoke(tmp_path)
+    target = tmp_path / "home" / "ocrpaddle-side"
+    target.mkdir(parents=True)
+    (target / "adastra.json").write_text("{}")
+    (target / "old.txt").write_text("working copy")
+    calls, fake = _fake_side_run()
+    monkeypatch.setattr(m, "run", fake)
+    monkeypatch.setattr(m, "base_python", lambda v: ["python3.12"])
+    real = Path.rename
+    monkeypatch.setattr(Path, "rename", lambda self, t: (_ for _ in ()).throw(PermissionError(32, "in use")) if self == target else real(self, t))
+    rep = m.Report()
+    m.side_envs(rep, part, tmp_path, tmp_path / "envs", tmp_path / "log.txt", Path("py"))
+    out = capsys.readouterr().out
+    assert rep.fails == 1 and "could not switch the new build in" in out and (target / "old.txt").is_file()
+    rep2 = m.Report()  # the unfinished build beside it is named on the next run
+    monkeypatch.setattr(Path, "rename", real)
+    m.side_envs(rep2, part, tmp_path, tmp_path / "envs", tmp_path / "log.txt", Path("py"))
+    assert "(unfinished build, left in place" in capsys.readouterr().out
