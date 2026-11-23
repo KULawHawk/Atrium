@@ -1419,6 +1419,121 @@ def learning_folders(rep: Report, cfg: dict, root: Path, dry: bool) -> None:
     rep.row("PASS", "learning folders", f"{len(lf['aims'])} aims under {base}; {made} new item(s), existing contents untouched")
 
 
+LOCUTUS_KEY_ENV = "CONCLAVE_LOCUTUS_KEY_FILE"  # read by conclave_locutus_rulings.wiring (Conclave)
+LAUNCHER_MARK = "REM adastra-launcher v1 (written by the Nestegg installer; safe to delete, the next install writes it again)"
+REVIEW_SURFACES = (("Open Workbench.cmd", "workbench", "conclave-workbench"),
+                   ("Open Review Console.cmd", "reviewconsole", "conclave-review-gui"))
+
+
+def locutus_key_path() -> Path:
+    """The capture key's home: the user profile itself (never redirected to OneDrive, unlike Documents or Desktop),
+    outside the install folder (so no saved copy, backup bundle or repo under it ever holds it)."""
+    return Path.home() / ".adastra_keys" / "locutus" / "partition_key_v1"
+
+
+def _key_place_problem(key: Path, install_root: Path) -> str | None:
+    """Why this folder must not hold the key, or None. Checked before anything is written."""
+    folder = key.parent.resolve() if key.parent.exists() else key.parent.absolute()
+    for var in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
+        od = os.environ.get(var, "").strip()
+        if od and (folder == Path(od).absolute() or Path(od).absolute() in folder.parents):
+            return f"{folder} is inside OneDrive ({var})"
+    if "onedrive" in str(folder).lower():
+        return f"{folder} looks like a OneDrive folder"
+    root = install_root.absolute()
+    if folder == root or root in folder.parents:
+        return f"{folder} is inside the install folder {root}"
+    for d in (folder, *folder.parents):
+        if (d / ".git").exists():
+            return f"{folder} is inside a git repository ({d})"
+    return None
+
+
+def make_locutus_key(key: Path) -> bool:
+    """Write a new random key (64 hex characters from the OS random source) only if no file is there. The create is
+    exclusive (O_EXCL), so an existing key can never be overwritten, even by a race. The key is never printed or
+    logged. Returns False when a key already exists."""
+    import secrets
+    key.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = os.open(key, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return False
+    with os.fdopen(fd, "w", encoding="ascii") as fh:
+        fh.write(secrets.token_hex(32))
+    return True
+
+
+def _write_launcher(path: Path, key: Path, exe: Path) -> str | None:
+    """A double-click launcher that starts one review surface with capture switched on (the variable is set for
+    that window only; no Windows setting changes). A file there that this installer did not write is never
+    replaced. Returns why it was not written, or None."""
+    if path.exists() and LAUNCHER_MARK not in path.read_text(encoding="utf-8", errors="replace"):
+        return f"{path.name} already exists and was not written by this installer; left untouched"
+    path.write_text(f'@echo off\r\n{LAUNCHER_MARK}\r\nset "{LOCUTUS_KEY_ENV}={key}"\r\nstart "" "{exe}"\r\n',
+                    encoding="utf-8", newline="")
+    return None
+
+
+def locutus_capture(rep: Report, envs: Path, install_root: Path, dry: bool) -> None:
+    """Decision 57 A (Jake, 11:37 AM CT 11/23): make the Locutus capture key on this PC during the installer run he
+    double-clicks, and set the review launchers to use it, so review screens read "Locutus capture: ON".
+    The key: random, in the user profile outside OneDrive, the install folder and every repo; never shown, printed,
+    logged or copied; an existing key is never overwritten (loud WARN, that key is kept). Any failed step leaves
+    capture off and says why. Undo: delete the two launchers (capture is then off); the key is never deleted here."""
+    label = "Locutus capture"
+    key = locutus_key_path()
+    off = "capture stays OFF; review still works and its screens say so"
+    if dry:
+        rep.row("INFO", label, f"would make the capture key at {key} (only if none is there) and write "
+                f"{', '.join(n for n, _, _ in REVIEW_SURFACES)} in {install_root}")
+        return
+    problem = _key_place_problem(key, install_root)
+    if problem:
+        rep.row("FAIL", label, f"key not made: {problem}; {off}")
+        return
+    try:
+        made = make_locutus_key(key)
+        if not key.is_file() or not key.read_bytes().strip():
+            rep.row("FAIL", label, f"the key file at {key} is empty or not a file; {off}")
+            return
+    except OSError as exc:
+        rep.row("FAIL", label, f"key not made ({type(exc).__name__}: {exc.strerror or exc}); {off}")
+        return
+    if made:
+        rep.row("PASS", "Locutus capture key", f"made at {key} (random; never shown, logged or copied)")
+    else:
+        rep.row("WARN", "Locutus capture key", f"a key already exists at {key}; NOT overwritten, capture uses that key")
+    wrote = []
+    for fname, part, script in REVIEW_SURFACES:
+        py = env_python(envs / part)
+        exe = env_bin(envs / part, script)
+        if not exe.exists():
+            rep.row("WARN", f"{label} {part}", f"{part} environment not built, so {fname} was not written; {off} there")
+            continue
+        chk = ("import os,sys;from conclave_locutus_rulings.wiring import capture_state;from pathlib import Path;"
+               "s=capture_state();ok=s=='Locutus capture: ON' and bool(Path(os.environ[sys.argv[1]]).read_bytes().strip());"
+               "print(s);sys.exit(0 if ok else 3)")
+        r = subprocess.run([str(py), "-I", "-c", chk, LOCUTUS_KEY_ENV], capture_output=True, text=True, check=False,
+                           env=dict(os.environ, **{LOCUTUS_KEY_ENV: str(key)}))  # only the path; the key is never passed
+        if r.returncode != 0:
+            why = (r.stdout.strip().splitlines() or r.stderr.strip().splitlines() or ["no output"])[-1][-200:]
+            rep.row("FAIL", f"{label} {part}", f"{part} did not read capture ON with the key ({why}); {fname} not written; {off} there")
+            continue
+        try:
+            skip = _write_launcher(install_root / fname, key, exe)
+        except OSError as exc:
+            skip = f"could not write {fname} ({type(exc).__name__})"
+        if skip:
+            rep.row("FAIL", f"{label} {part}", f"{skip}; {off} there")
+            continue
+        wrote.append(fname)
+    if wrote:
+        rep.row("PASS", label, f"ON in {', '.join(wrote)} ({install_root}): each sets the key for its own window and "
+                               "the screens read 'Locutus capture: ON'. Starting the app any other way leaves capture OFF, "
+                               "and its screens say so")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", type=Path, required=True)
@@ -1457,6 +1572,8 @@ def main(argv: list[str] | None = None) -> int:
         record = write_reader_envs(a.envs, readers)
         rep.row("INFO", "reader record", f"{record}: {len(readers)} reader environments")
         turn_on_reader_envs(rep, record, a.envs, parts, a.dry_run)
+    if not only or only & {"workbench", "reviewconsole"}:
+        locutus_capture(rep, a.envs, INSTALL_ROOT["root"], a.dry_run)
     counts = f"HOLD {rep.holds}, PASS {rep.passes}"
     if rep.fails:
         print(f"NESTEGG-PARTS: FAIL {rep.fails}, {counts}")
