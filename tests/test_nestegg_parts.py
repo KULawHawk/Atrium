@@ -946,7 +946,7 @@ def test_paddle_side_env_without_the_spokes_table_still_fails_as_not_locked(tmp_
     assert rep.fails == 1 and "side env not locked" in capsys.readouterr().out
 
 
-def _swap_setup(tmp_path: Path, monkeypatch, ok: bool, verified: bool = True):
+def _swap_setup(tmp_path: Path, monkeypatch, ok: bool, verified: bool = True, marker: str = ""):
     m = _mod()
     src = tmp_path / "src"
     (src / "atrium").mkdir(parents=True)
@@ -955,9 +955,13 @@ def _swap_setup(tmp_path: Path, monkeypatch, ok: bool, verified: bool = True):
     (env / "old.txt").write_text("working copy")
     if verified:
         (env / m.VERIFIED).write_text("{}")
+    if marker == "building":  # a build a crash interrupted
+        (env / m.BUILDING).write_text("{}")
+    elif marker == "legacy":  # built before the verified check existed: it has the root marker only
+        (env / "adastra.json").write_text("{}")
     monkeypatch.setattr(m, "base_python", lambda v: ["py"])
 
-    def fake_build(rep, part, src_, envs, env_, log, base, lines, repo, local):
+    def fake_build(rep, part, src_, envs, env_, log, base, lines, repo, local, stamp=""):
         env_.mkdir(parents=True, exist_ok=True)
         (env_ / "new.txt").write_text("new build")
         return ok
@@ -993,7 +997,7 @@ def test_main_env_failed_rebuild_puts_the_working_copy_back(tmp_path: Path, monk
 def test_crash_then_failed_rerun_restores_the_true_working_copy(tmp_path: Path, monkeypatch, capsys) -> None:
     """Reviewer 3 on #72: a crash leaves a half-built env at the real path with no VERIFIED marker. A re-run whose
     build fails must not call that half env 'the previous environment'; it restores the newest VERIFIED .kept- copy."""
-    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=False, verified=False)  # env = half build after a crash
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=False, verified=False, marker="building")  # half build
     (env / "old.txt").write_text("half build")
     good = env.with_name("atrium.kept-20261123-070000")
     good.mkdir()
@@ -1019,12 +1023,71 @@ def test_failed_rerun_with_no_verified_copy_says_so_plainly(tmp_path: Path, monk
 
 
 def test_env_from_before_the_check_is_kept_but_not_called_verified(tmp_path: Path, monkeypatch, capsys) -> None:
-    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=True, verified=False)
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=True, verified=False, marker="legacy")
     rep = m.Report()
     m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
     out = capsys.readouterr().out
     assert "kept, not verified, at" in out and "last known working copy" not in out
     assert (env / m.VERIFIED).is_file() and not list(env.parent.glob("atrium.kept-*"))
+    assert len(list(env.parent.glob("atrium.legacy-*"))) == 1
+
+
+def test_env_from_before_the_check_is_put_back_not_verified_when_the_rebuild_fails(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Reviewer 3 on #72, round 2: on the first run after this lands every env on Jake's PC is from before the check.
+    A failed rebuild must put it back (SET-11), saying it is not verified, not leave the part uninstalled."""
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=False, verified=False, marker="legacy")
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    out = capsys.readouterr().out
+    assert (env / "old.txt").read_text() == "working copy" and not (env / "new.txt").exists()
+    assert "put back, not verified" in out and "no verified working copy" not in out and rep.fails == 0
+    assert not (env / m.VERIFIED).exists() and len(list(env.parent.glob("atrium.failed-*"))) == 1
+
+
+def test_verified_kept_copy_outranks_a_legacy_env_on_failure(tmp_path: Path, monkeypatch, capsys) -> None:
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=False, verified=False, marker="legacy")
+    good = env.with_name("atrium.kept-20261123-070000")
+    good.mkdir()
+    (good / "old.txt").write_text("verified copy")
+    (good / m.VERIFIED).write_text("{}")
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    assert (env / "old.txt").read_text() == "verified copy" and list(env.parent.glob("atrium.legacy-*"))
+    assert "last verified working copy (atrium.kept-20261123-070000)" in capsys.readouterr().out
+
+
+def test_crash_interrupted_env_is_never_put_back_when_the_rebuild_fails(tmp_path: Path, monkeypatch, capsys) -> None:
+    """A building marker with no verified marker is a build a crash cut off, even if adastra.json got written."""
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=False, verified=False, marker="building")
+    (env / "adastra.json").write_text("{}")
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    out = capsys.readouterr().out
+    assert rep.fails == 1 and "there is no verified working copy to put back" in out and not env.exists()
+    assert "put back, not verified" not in out and len(list(env.parent.glob("atrium.unfinished-*"))) == 1
+
+
+def test_verified_marker_write_failure_is_a_fail_row_not_a_crash(tmp_path: Path, monkeypatch, capsys) -> None:
+    m, part, src, env = _swap_setup(tmp_path, monkeypatch, ok=True)
+    real = Path.write_text
+    monkeypatch.setattr(Path, "write_text", lambda self, *a, **k: (_ for _ in ()).throw(OSError(28, "disk full"))
+                        if self.name == m.VERIFIED else real(self, *a, **k))
+    rep = m.Report()
+    m.build_part(rep, part, PARTS, src, tmp_path / "envs", False, False, set(), {})
+    out = capsys.readouterr().out
+    assert "verified marker" in out and "cannot be counted as a working copy" in out
+    assert (env / "old.txt").read_text() == "working copy"  # the verified previous copy is put back
+
+
+def test_building_marker_is_written_before_the_venv_is_created(tmp_path: Path, monkeypatch) -> None:
+    m = _mod()
+    env = tmp_path / "envs" / "atrium"
+    seen = []
+    monkeypatch.setattr(m, "run", lambda cmd, log: seen.append((env / m.BUILDING).is_file()) or 1)
+    rep = m.Report()
+    ok = m._build_env(rep, {"name": "atrium", "roots": ["."]}, tmp_path, tmp_path / "envs", env, tmp_path / "l.txt",
+                      ["py"], [], tmp_path, set(), "20261123-080000")
+    assert not ok and seen == [True] and not (env / m.VERIFIED).exists()
 
 
 def test_main_env_held_open_is_a_fail_row_not_a_crash(tmp_path: Path, monkeypatch, capsys) -> None:

@@ -519,11 +519,15 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
     leftover_copies(rep, name, env)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     # An environment counts as a working copy only if it carries VERIFIED, written after its verdict and probe
-    # passed. One without it (a build a crash interrupted, or one made before this check existed) is set aside as
-    # .unfinished-, never called "kept" and never restored as the working copy (reviewer 3 on #72: no false OK).
+    # passed. Every build writes BUILDING first, before the venv exists, so (reviewer 3 on #72, round 2):
+    #   VERIFIED                         -> .kept-        (restorable, the last known working copy)
+    #   BUILDING only                    -> .unfinished-  (a build a crash interrupted; never restored)
+    #   neither, but adastra.json        -> .legacy-      (built before this check existed; restorable, "not verified")
+    #   neither, no adastra.json         -> .unfinished-  (never restored)
     aside = None
     if env.exists():
-        kind = "kept" if (env / VERIFIED).is_file() else "unfinished"
+        kind = "kept" if (env / VERIFIED).is_file() else "unfinished" if (env / BUILDING).is_file() \
+            else "legacy" if (env / "adastra.json").is_file() else "unfinished"
         aside = env.with_name(f"{name}.{kind}-{stamp}")
         try:
             env.rename(aside)
@@ -531,20 +535,33 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
             rep.row("FAIL", name, f"could not set the existing environment aside ({e}); close any program using {env}, "
                     "then run again. Nothing was changed")
             return
-    ok = _build_env(rep, part, src, envs, env, log, base, lines, repo, local)
+    ok = _build_env(rep, part, src, envs, env, log, base, lines, repo, local, stamp)
     if ok:
-        (env / VERIFIED).write_text(json.dumps({"verified": stamp, "part": name}) + "\n", encoding="utf-8")
+        try:
+            (env / VERIFIED).write_text(json.dumps({"verified": stamp, "part": name}) + "\n", encoding="utf-8")
+        except OSError as e:
+            rep.row("FAIL", f"{name} verified marker", f"the new build passed but {env / VERIFIED} could not be "
+                    f"written ({e}), so it cannot be counted as a working copy")
+            ok = False
+    if ok:
         if aside and aside.name.startswith(f"{name}.kept-"):
             rep.row("INFO", f"{name} kept", f"the previous environment is kept at {aside} (last known working copy; "
                     "delete it yourself when you no longer want it)")
+        elif aside and aside.name.startswith(f"{name}.legacy-"):
+            rep.row("INFO", f"{name} set aside", f"the previous environment was built before this check existed; kept, "
+                    f"not verified, at {aside}")
         elif aside:
-            rep.row("INFO", f"{name} set aside", f"the previous environment was never verified (built before this check "
-                    f"existed, or a build that did not finish); kept, not verified, at {aside}")
+            rep.row("INFO", f"{name} set aside", f"the previous environment was a build that did not finish; kept, "
+                    f"never verified, at {aside}")
         return
     if not aside and not list(envs.glob(f"{name}.kept-*")):
         return  # a first install that failed: its FAIL rows already say so; nothing to put back
     failed = env.with_name(f"{name}.failed-{stamp}")
+    # put back: the newest verified kept copy, else this run's pre-check (legacy) environment, else nothing
     good = sorted(k for k in envs.glob(f"{name}.kept-*") if (k / VERIFIED).is_file())
+    legacy = not good and aside is not None and aside.name.startswith(f"{name}.legacy-")
+    if legacy:
+        good = [aside]
     try:
         if env.exists():
             env.rename(failed)
@@ -555,7 +572,11 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
                 f"({e}). Close any program using these folders and move {good[-1] if good else 'nothing'} back by hand, "
                 "or run again")
         return
-    if good:
+    if legacy:
+        rep.row("WARN", f"{name} restored", f"the new build did not pass, so the previous environment ({aside.name}) is "
+                f"put back, not verified (it was built before this check existed), at {env}; the failed build is kept "
+                f"at {failed}")
+    elif good:
         rep.row("WARN", f"{name} restored", f"the new build did not pass, so the last verified working copy "
                 f"({good[-1].name}) is back in use at {env}; the failed build is kept at {failed}")
     else:
@@ -564,9 +585,15 @@ def build_part(rep: Report, part: dict, cfg: dict, src: Path, envs: Path, dry: b
                 + (f"; the earlier, never-verified environment is at {aside}" if aside else ""))
 
 def _build_env(rep: Report, part: dict, src: Path, envs: Path, env: Path, log: Path, base: list[str], lines: list[str],
-               repo: Path, local: set[str]) -> bool:
+               repo: Path, local: set[str], stamp: str = "") -> bool:
     """Build one part's environment at `env`; True when its own verdict and import probe have no FAIL row."""
     name = part["name"]
+    try:  # written before the venv exists: an environment holding only this marker is a build that did not finish
+        env.mkdir(parents=True, exist_ok=True)
+        (env / BUILDING).write_text(json.dumps({"building": stamp, "part": name}) + "\n", encoding="utf-8")
+    except OSError as e:
+        rep.row("FAIL", f"{name} building marker", f"could not write {env / BUILDING}: {e}")
+        return False
     if not env_python(env).exists() and run(base + ["-m", "venv", env], log):
         rep.row("FAIL", name, f"could not create the environment (see {log})")
         return False
@@ -698,6 +725,7 @@ def side_envs(rep: Report, part: dict, src: Path, envs: Path, log: Path, py: Pat
 
 
 VERIFIED = "adastra_verified.json"  # written into a part's environment only after its own verdict and probe passed
+BUILDING = "adastra_building.json"  # written at the START of every build, before the venv; VERIFIED outranks it
 
 
 def leftover_copies(rep: Report, label: str, folder: Path) -> None:
@@ -706,7 +734,8 @@ def leftover_copies(rep: Report, label: str, folder: Path) -> None:
     for old in sorted(folder.parent.glob(f"{folder.name}.*")):
         kind = old.name[len(folder.name) + 1:].split("-")[0]
         what = {"kept": "previous working copy, kept", "new": "unfinished build, left in place",
-                "failed": "failed build, kept beside", "unfinished": "set aside, never verified"}.get(kind)
+                "failed": "failed build, kept beside", "unfinished": "set aside, never verified",
+                "legacy": "built before the verified check, kept, not verified"}.get(kind)
         if what and old.is_dir():
             rep.row("INFO", f"{label} copy", f"{old} ({what}; delete it yourself when you no longer want it)")
 
