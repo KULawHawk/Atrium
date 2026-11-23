@@ -29,6 +29,11 @@
           "tomli": "imported only when Python < 3.11 (conclave_classifier/patterns.py:22); every part runs 3.12 or 3.13"
       }
   },
+  "learning": {
+    "_about": "Per-aim learning folders (Jake 11/22 6:18 PM; design learning-folders/DESIGN_learning_folders_2026-11-22.md sections 2 and 4). Created under <InstallRoot>\\learning on first install; upgrade and repair never touch existing contents (SEC-8). Class P contents are never put in a package backup.",
+    "subdirs": ["inbox", "approved", "held-aside", "feedback"],
+    "aims": ["readers-print", "handwriting", "formulas-tables", "obsidian", "obsidian-wording", "sequoia", "locutus", "conclave-voting", "install-health"]
+  },
   "parts": [
     {"name": "Docling",        "repo": "Conclave", "roots": ["conclave_lens_docling"],               "python": "3.13", "torch": "default", "gate3": true,
      "models": [{"step": "docling_download"}]},

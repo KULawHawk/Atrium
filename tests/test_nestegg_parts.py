@@ -54,7 +54,7 @@ def test_dry_run_writes_nothing_and_never_passes_an_unlocked_part(tmp_path: Path
     rc = _mod().main(["--src", str(tmp_path / "src"), "--envs", str(tmp_path / "envs"), "--dry-run"])
     assert not (tmp_path / "envs").exists()
     out = capsys.readouterr().out
-    assert out.count("TODO ") == len(PARTS["parts"])
+    assert out.count("TODO ") == len(PARTS["parts"]) + 1 and "TODO  learning folders" in out  # the parts + the learning folders
     fails = [ln for ln in out.splitlines() if ln.startswith("FAIL ")]
     assert fails and all(" not locked " in ln for ln in fails)  # launcher + sequoia_bridge have no list yet
     assert rc == 1 and out.rstrip().endswith(f"NESTEGG-PARTS: FAIL {len(fails)}, HOLD 0, PASS 0")
@@ -647,3 +647,27 @@ def test_one_command_install_runs_both_phases_in_order_and_never_assumes_yes() -
         assert line in ps
     for verb in ("Remove-Item", "Set-ItemProperty", "setx", "keyring"):
         assert verb not in ps
+
+
+def test_learning_folders_create_only_and_never_touch_existing(tmp_path, capsys) -> None:
+    m = _mod()
+    cfg = {"learning": PARTS_LEARNING}
+    rep = m.Report()
+    m.learning_folders(rep, cfg, tmp_path, False)
+    for aim in PARTS_LEARNING["aims"]:
+        for sub in PARTS_LEARNING["subdirs"]:
+            assert (tmp_path / "learning" / aim / sub).is_dir()
+        assert (tmp_path / "learning" / aim / "manifest.jsonl").read_text(encoding="utf-8") == ""
+    kept = tmp_path / "learning" / "sequoia"
+    (kept / "manifest.jsonl").write_text('{"sha256": "x"}\n', encoding="utf-8")
+    (kept / "README.md").write_text("mine", encoding="utf-8")
+    (kept / "approved" / "item.json").write_text("{}", encoding="utf-8")
+    m.learning_folders(rep, cfg, tmp_path, False)  # repair / upgrade
+    assert (kept / "manifest.jsonl").read_text(encoding="utf-8") == '{"sha256": "x"}\n'
+    assert (kept / "README.md").read_text(encoding="utf-8") == "mine" and (kept / "approved" / "item.json").exists()
+    assert rep.fails == 0 and "0 new item(s)" in capsys.readouterr().out
+    m.learning_folders(rep, {}, tmp_path, False)
+    assert rep.fails == 1  # undeclared folder list fails loudly (SET-9)
+
+
+PARTS_LEARNING = json.loads((NESTEGG / "parts.json").read_text(encoding="utf-8"))["learning"]

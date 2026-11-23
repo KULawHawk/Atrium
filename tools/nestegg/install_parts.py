@@ -795,10 +795,50 @@ def write_reader_envs(envs: Path, entries: list[dict]) -> Path:
     return out
 
 
+def learning_folders(rep: Report, cfg: dict, root: Path, dry: bool) -> None:
+    """<root>/learning/<aim>/ with inbox, approved, held-aside, feedback, an empty manifest.jsonl and a README.md.
+    Create-only: anything already there is left exactly as it is (SEC-8), so upgrade and repair are safe."""
+    lf = cfg.get("learning")
+    if not lf:
+        rep.row("FAIL", "learning folders", "parts.json declares no learning folders (SET-9)")
+        return
+    base = root / "learning"
+    if dry:
+        rep.row("TODO", "learning folders", f"{base}: {', '.join(lf['aims'])}")
+        return
+    made = 0
+    try:
+        for aim in lf["aims"]:
+            d = base / aim
+            for sub in lf["subdirs"]:
+                if not (d / sub).is_dir():
+                    (d / sub).mkdir(parents=True)
+                    made += 1
+            man = d / "manifest.jsonl"
+            if not man.exists():
+                man.write_text("", encoding="utf-8")
+                made += 1
+            readme = d / "README.md"
+            if not readme.exists():
+                readme.write_text(
+                    f"# Learning folder: {aim}\n\nCreated by the installer. Layout and rules: learning-folders design "
+                    "section 2.\n\n- inbox/: waiting for approval; the connector never reads here\n"
+                    "- approved/: the only place the connector reads\n- held-aside/: items taken out, never deleted, "
+                    "with the reason\n- feedback/: reports the connector wrote, one per run\n"
+                    "- manifest.jsonl: one line per item (sha256, class, source, added_at, added_by, gate result)\n\n"
+                    "Class P (derived from a real report) is never put in a package backup.\n", encoding="utf-8")
+                made += 1
+    except OSError as e:
+        rep.row("FAIL", "learning folders", f"could not create under {base}: {e}")
+        return
+    rep.row("PASS", "learning folders", f"{len(lf['aims'])} aims under {base}; {made} new item(s), existing contents untouched")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", type=Path, required=True)
     ap.add_argument("--envs", type=Path, required=True)
+    ap.add_argument("--root", type=Path, default=None, help="install root for learning folders (default: the folder above --envs)")
     ap.add_argument("--only", default="")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
@@ -824,6 +864,8 @@ def main(argv: list[str] | None = None) -> int:
         if is_reader(p) and not a.dry_run:  # a failed build is recorded as FAIL, never left on its last good entry
             outcome = "FAIL" if rep.fails > f0 else "HOLD" if rep.holds > h0 else "PASS"
             readers.append(reader_entry(rep, p, a.envs, outcome))
+    if not only:
+        learning_folders(rep, cfg, a.root or a.envs.parent, a.dry_run)
     if readers:
         host_selftest(rep, readers, a.envs)
         rep.row("INFO", "reader record", f"{write_reader_envs(a.envs, readers)}: {len(readers)} reader environments")
