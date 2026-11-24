@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"image"
 	"io"
 	"strings"
 	"sync"
@@ -26,6 +27,47 @@ type fake struct {
 func (f *fake) Foreground() (Window, error) { f.mu.Lock(); defer f.mu.Unlock(); return f.w, f.wErr }
 func (f *fake) Locked() (bool, error)       { f.mu.Lock(); defer f.mu.Unlock(); return f.locked, f.lErr }
 func (f *fake) Screenshot() ([]byte, error) { f.mu.Lock(); defer f.mu.Unlock(); return f.png, f.sErr }
+
+// The plain fake can black out (with nothing to black out): an empty window list,
+// a 4x4 screen and a one-monitor layout that matches it.
+func (f *fake) VisibleWindows() ([]VisibleWindow, error) { return nil, nil }
+func (f *fake) ScreenImage() (*image.RGBA, image.Point, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sErr != nil {
+		return nil, image.Point{}, f.sErr
+	}
+	img := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	for i := range img.Pix {
+		img.Pix[i] = byte(len(f.png))
+	}
+	return img, image.Point{}, nil
+}
+func (f *fake) Layout() (Layout, error) {
+	return Layout{Rect: image.Rect(0, 0, 4, 4), Monitors: 1}, nil
+}
+
+// plainOnly has only the old picture call and cannot black anything out.
+type plainOnly struct{ w Window }
+
+func (p plainOnly) Foreground() (Window, error) { return p.w, nil }
+func (plainOnly) Locked() (bool, error)         { return false, nil }
+func (plainOnly) Screenshot() ([]byte, error)   { return []byte("unmasked"), nil }
+
+func TestNoMaskingNoPicture(t *testing.T) {
+	var buf syncBuf
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+	defer cancel()
+	_ = Loop(ctx, plainOnly{w: Window{Title: "Notepad"}}, LoopConfig{Rules: config.DefaultDenyRules(), TextEvery: time.Hour, ShotEvery: 5 * time.Millisecond}, &buf, time.Now)
+	var frames []Frame
+	_ = Read(strings.NewReader(buf.String()), func(fr Frame) { frames = append(frames, fr) })
+	if count(frames, func(fr Frame) bool { return len(fr.PNG) > 0 }) != 0 {
+		t.Fatal("unmasked picture sent by a capturer that cannot black out")
+	}
+	if count(frames, func(fr Frame) bool { return strings.Contains(fr.Paused, "cannot black out") }) == 0 {
+		t.Fatalf("no pause: %+v", frames)
+	}
+}
 
 type syncBuf struct {
 	mu sync.Mutex
@@ -201,11 +243,11 @@ func (s *switching) Foreground() (Window, error) {
 	return s.w, nil
 }
 
-func (s *switching) Screenshot() ([]byte, error) {
+func (s *switching) ScreenImage() (*image.RGBA, image.Point, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.shot = true
-	return []byte("p"), nil
+	s.mu.Unlock()
+	return s.fake.ScreenImage()
 }
 
 func TestPictureDiscardedWhenScreenChanges(t *testing.T) {

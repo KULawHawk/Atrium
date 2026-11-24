@@ -27,6 +27,25 @@ type maskFake struct {
 	origin  image.Point
 	size    image.Point
 	shots   int
+	// layouts, when set, are returned in turn by Layout (the last one repeats);
+	// otherwise the layout matches the screen image.
+	layouts   []Layout
+	layCalls  int
+	afterShot *Window // front window once the picture is taken
+}
+
+func (m *maskFake) Layout() (Layout, error) {
+	m.mu2.Lock()
+	defer m.mu2.Unlock()
+	if len(m.layouts) == 0 {
+		return Layout{Rect: image.Rectangle{Min: m.origin, Max: m.origin.Add(m.size)}, Monitors: 1}, nil
+	}
+	i := m.layCalls
+	if i >= len(m.layouts) {
+		i = len(m.layouts) - 1
+	}
+	m.layCalls++
+	return m.layouts[i], nil
 }
 
 func (m *maskFake) VisibleWindows() ([]VisibleWindow, error) {
@@ -46,7 +65,13 @@ func (m *maskFake) VisibleWindows() ([]VisibleWindow, error) {
 func (m *maskFake) ScreenImage() (*image.RGBA, image.Point, error) {
 	m.mu2.Lock()
 	m.shots++
+	after := m.afterShot
 	m.mu2.Unlock()
+	if after != nil {
+		m.fake.mu.Lock()
+		m.fake.w = *after
+		m.fake.mu.Unlock()
+	}
 	img := image.NewRGBA(image.Rectangle{Max: m.size})
 	for i := range img.Pix {
 		img.Pix[i] = 0xc8 // light grey everywhere: "content"
@@ -207,5 +232,104 @@ func TestLoopMaskFailsClosed(t *testing.T) {
 	frames = runMask(t, m)
 	if m.shots != 0 || count(frames, func(fr Frame) bool { return fr.Paused == "paused: patient-mode window" }) == 0 {
 		t.Errorf("front patient window did not pause: shots=%d", m.shots)
+	}
+}
+
+// firstShot is the first "shot" frame: the one taken while the change happened
+// (later shots see the settled screen and may legitimately keep a picture).
+func firstShot(t *testing.T, frames []Frame) Frame {
+	t.Helper()
+	for _, fr := range frames {
+		if fr.Type == "shot" {
+			return fr
+		}
+	}
+	t.Fatal("no shot frame")
+	return Frame{}
+}
+
+// The front window changing during the picture discards it even when the window
+// list is identical (the front-window re-check is load-bearing on its own).
+func TestMaskFrontChangeDiscards(t *testing.T) {
+	front := Window{Title: "Windows PowerShell", Exe: "powershell.exe", PID: 7}
+	list := []VisibleWindow{vw(front, 1, image.Rect(0, 0, 900, 700), true), vw(patient, 2, image.Rect(1000, 0, 1900, 700), true)}
+	for _, after := range []Window{{Title: "Notepad", Exe: "notepad.exe", PID: 8}, patient} {
+		a := after
+		m := &maskFake{fake: fake{w: front}, size: image.Pt(1920, 1080), lists: [][]VisibleWindow{list}, afterShot: &a}
+		if fr := firstShot(t, runMask(t, m)); len(fr.PNG) > 0 || fr.Paused != "screen changed during capture; picture discarded" {
+			t.Errorf("front window became %q: picture not discarded (%q)", after.Title, fr.Paused)
+		}
+	}
+}
+
+// A monitor added, removed or moved during the picture discards it, and a picture
+// that does not match the layout is discarded too.
+func TestMaskLayoutChangeDiscards(t *testing.T) {
+	front := Window{Title: "Windows PowerShell", Exe: "powershell.exe", PID: 7}
+	list := []VisibleWindow{vw(front, 1, image.Rect(0, 0, 900, 700), true), vw(patient, 2, image.Rect(1000, 0, 1900, 700), true)}
+	one := Layout{Rect: image.Rect(0, 0, 1920, 1080), Monitors: 1}
+	for name, lays := range map[string][]Layout{
+		"monitor added":          {one, {Rect: image.Rect(-1920, 0, 1920, 1080), Monitors: 2}},
+		"same size, other count": {one, {Rect: one.Rect, Monitors: 2}},
+		"picture does not match": {{Rect: image.Rect(0, 0, 2560, 1440), Monitors: 1}},
+	} {
+		m := &maskFake{fake: fake{w: front}, size: image.Pt(1920, 1080), lists: [][]VisibleWindow{list}, layouts: lays}
+		if fr := firstShot(t, runMask(t, m)); len(fr.PNG) > 0 || fr.Paused != "screen changed during capture; picture discarded" {
+			t.Errorf("%s: picture not discarded (%q)", name, fr.Paused)
+		}
+	}
+}
+
+// While a patient window exists, minimized included, a task switcher or taskbar
+// preview on screen pauses the whole picture: it can show the patient window's
+// live content inside a shell window that no deny rule matches.
+func TestPreviewWithPatientWindowPauses(t *testing.T) {
+	rules := config.DefaultDenyRules()
+	front := Window{Title: "Windows PowerShell", Exe: "powershell.exe", PID: 7}
+	shell := Window{Title: "Task Switching", Exe: `C:\Windows\explorer.exe`, PID: 3}
+	sw := VisibleWindow{Window: shell, Handle: 9, Rect: image.Rect(0, 300, 1920, 800), Class: "XamlExplorerHostIslandWindow", Sure: true}
+	thumb := VisibleWindow{Window: Window{Exe: `C:\Windows\explorer.exe`, PID: 3}, Handle: 10, Rect: image.Rect(800, 800, 1100, 1040), Class: "TaskListThumbnailWnd", Sure: true}
+	minimized := VisibleWindow{Window: patient, Handle: 2, Hidden: true}
+	for name, ws := range map[string][]VisibleWindow{
+		"Alt-Tab, patient window on screen": {sw, vw(front, 1, image.Rect(0, 0, 900, 700), true), vw(patient, 2, image.Rect(1000, 0, 1900, 700), true)},
+		"taskbar hover, patient minimized":  {thumb, vw(front, 1, image.Rect(0, 0, 900, 700), true), minimized},
+	} {
+		if _, _, pause := MaskPlan(ws, rules); !strings.Contains(pause, "window preview") {
+			t.Errorf("%s: not paused (%q)", name, pause)
+		}
+	}
+	// A minimized patient window with no preview up: nothing to black out, picture allowed.
+	rects, n, pause := MaskPlan([]VisibleWindow{vw(front, 1, image.Rect(0, 0, 900, 700), true), minimized}, rules)
+	if pause != "" || n != 0 || len(rects) != 0 {
+		t.Errorf("minimized patient window alone: rects=%v n=%d pause=%q", rects, n, pause)
+	}
+	// A preview with no patient window anywhere does not pause.
+	if _, _, pause := MaskPlan([]VisibleWindow{sw, vw(front, 1, image.Rect(0, 0, 900, 700), true)}, rules); pause != "" {
+		t.Errorf("preview without a patient window paused: %q", pause)
+	}
+	// A minimized patient window drops out of the list while the picture is taken: discarded.
+	m := &maskFake{fake: fake{w: front}, size: image.Pt(1920, 1080), lists: [][]VisibleWindow{
+		{vw(front, 1, image.Rect(0, 0, 900, 700), true), minimized},
+		{vw(front, 1, image.Rect(0, 0, 900, 700), true), vw(patient, 2, image.Rect(1000, 0, 1900, 700), true)},
+	}}
+	if fr := firstShot(t, runMask(t, m)); len(fr.PNG) > 0 {
+		t.Error("picture kept while a minimized patient window was restored")
+	}
+}
+
+func TestSameWindowsComparesHiddenAndClass(t *testing.T) {
+	a := VisibleWindow{Window: patient, Handle: 2, Rect: image.Rect(0, 0, 10, 10), Class: "A", Sure: true}
+	b := a
+	b.Hidden = true
+	if sameWindows([]VisibleWindow{a}, []VisibleWindow{b}) {
+		t.Error("a window that became minimized counted as unchanged")
+	}
+	c := a
+	c.Class = "B"
+	if sameWindows([]VisibleWindow{a}, []VisibleWindow{c}) {
+		t.Error("a different window class counted as unchanged")
+	}
+	if !sameWindows([]VisibleWindow{a}, []VisibleWindow{a}) {
+		t.Error("identical lists differ")
 	}
 }

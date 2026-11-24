@@ -42,16 +42,56 @@ type Capturer interface {
 	Screenshot() ([]byte, error) // PNG
 }
 
-// VisibleWindow is one top-level window that is actually on screen: shown, not
-// minimized, not hidden by Windows. Rect is in physical pixels, in the same
-// coordinates as ScreenImage's origin (the virtual screen across all monitors).
+// VisibleWindow is one shown top-level window. Rect is in physical pixels, in the
+// same coordinates as ScreenImage's origin (the virtual screen across all monitors).
+// Hidden marks a window that is shown but not drawn on screen (minimized, or hidden
+// by Windows on another desktop): it has no area to black out, but the taskbar,
+// Alt-Tab and Task View can still show a live preview of it.
 type VisibleWindow struct {
 	Window
 	Handle uintptr         `json:"-"`
 	Rect   image.Rectangle `json:"-"`
+	Class  string          `json:"-"` // window class name
+	Hidden bool            `json:"-"`
 	// Sure is false when the window's bounds or the display scaling cannot be known
 	// for certain; any such window that needs blacking out pauses the whole picture.
 	Sure bool `json:"-"`
+}
+
+// Layout is the monitor arrangement: the virtual-screen rectangle and how many
+// monitors make it up. A picture is kept only if it did not change during capture.
+type Layout struct {
+	Rect     image.Rectangle
+	Monitors int
+}
+
+// ScreenLayout reports the current monitor arrangement.
+type ScreenLayout interface {
+	Layout() (Layout, error)
+}
+
+// previewClasses are the Windows shell windows that draw live previews of other
+// windows: taskbar hover thumbnails, Alt-Tab, Task View, Snap Assist and Peek. No deny
+// rule can match them by title, so while one is up and a patient window exists
+// (minimized included), the whole picture pauses.
+var previewClasses = []string{
+	"TaskListThumbnailWnd",         // taskbar hover thumbnail
+	"MultitaskingViewFrame",        // Alt-Tab and Task View (Windows 10)
+	"XamlExplorerHostIslandWindow", // Alt-Tab, Task View, Snap Assist (Windows 11)
+	"TaskSwitcherWnd",              // classic Alt-Tab
+	"TaskSwitcherOverlayWnd",       // classic Alt-Tab
+	"ForegroundStaging",            // switcher staging window
+	"LivePreview",                  // Peek
+	"Flip3D",                       // older switcher
+}
+
+func isPreview(class string) bool {
+	for _, c := range previewClasses {
+		if strings.EqualFold(class, c) {
+			return true
+		}
+	}
+	return false
 }
 
 // WindowLister lists the windows on screen, front first (Windows on the PC).
@@ -77,12 +117,26 @@ const MaskMargin = 16
 // certain).
 func MaskPlan(ws []VisibleWindow, rules []config.DenyRule) (rects []image.Rectangle, n int, pause string) {
 	pids := map[uint32]string{}
+	anyDenied := ""
 	for _, w := range ws {
-		if r := Denied(w.Window, rules); r != "" && w.PID != 0 {
-			pids[w.PID] = r
+		if r := Denied(w.Window, rules); r != "" {
+			anyDenied = r
+			if w.PID != 0 {
+				pids[w.PID] = r
+			}
+		}
+	}
+	if anyDenied != "" {
+		for _, w := range ws {
+			if !w.Hidden && isPreview(w.Class) {
+				return nil, 0, "paused: " + anyDenied + " open, and a window preview (task switcher or taskbar preview) is on screen"
+			}
 		}
 	}
 	for _, w := range ws {
+		if w.Hidden {
+			continue
+		}
 		reason := Denied(w.Window, rules)
 		if reason == "" && w.PID != 0 {
 			reason = pids[w.PID]
@@ -131,7 +185,7 @@ func sameWindows(a, b []VisibleWindow) bool {
 		return false
 	}
 	for i := range a {
-		if a[i].Handle != b[i].Handle || a[i].Rect != b[i].Rect || a[i].Window != b[i].Window || a[i].Sure != b[i].Sure {
+		if a[i].Handle != b[i].Handle || a[i].Rect != b[i].Rect || a[i].Window != b[i].Window || a[i].Sure != b[i].Sure || a[i].Hidden != b[i].Hidden || a[i].Class != b[i].Class {
 			return false
 		}
 	}
@@ -341,26 +395,9 @@ func Loop(ctx context.Context, c Capturer, lc LoopConfig, out io.Writer, now fun
 					f.PNG, f.Masked = pic, masked
 				}
 			default:
-				png, err := c.Screenshot()
-				if err != nil {
-					f = Frame{Type: "error", Error: err.Error()}
-					break
-				}
-				// Re-read after the picture: a key page may have opened in between.
-				w2, locked2, problem2 := state()
-				if problem2 != "" || locked2 || w2 != w || Denied(w2, rules) != "" {
-					f.Paused = "screen changed during capture; picture discarded"
-					if r2 := Denied(w2, rules); r2 != "" {
-						f.Window = Withhold(w2, r2)
-					}
-					break
-				}
-				h := sha256.Sum256(png)
-				if h == lastHash {
-					continue // unchanged screen: nothing new to copy
-				}
-				lastHash = h
-				f.PNG = png
+				// Fail closed: a capturer that cannot list windows, report the monitor
+				// layout and return a raw image cannot black out patient windows.
+				f.Paused = "paused: this build cannot black out patient windows; no picture"
 			}
 			if err := send(f); err != nil {
 				return err
@@ -372,7 +409,8 @@ func Loop(ctx context.Context, c Capturer, lc LoopConfig, out io.Writer, now fun
 func isMasking(c Capturer) bool {
 	_, l := c.(WindowLister)
 	_, i := c.(ImageShooter)
-	return l && i
+	_, m := c.(ScreenLayout)
+	return l && i && m
 }
 
 // maskedShot takes a picture with every patient (denied) window blacked out. It lists
@@ -380,7 +418,11 @@ func isMasking(c Capturer) bool {
 // anything moved, the front window changed, a window to black out has an uncertain
 // position, or the blackout check fails. Fails closed: no picture rather than a doubtful one.
 func maskedShot(c Capturer, rules []config.DenyRule, front Window, state func() (Window, bool, string)) (pic []byte, masked int, why string, err error) {
-	l, sh := c.(WindowLister), c.(ImageShooter)
+	l, sh, ly := c.(WindowLister), c.(ImageShooter), c.(ScreenLayout)
+	lay1, err := ly.Layout()
+	if err != nil {
+		return nil, 0, "paused: cannot read the monitor layout (" + err.Error() + ")", nil
+	}
 	ws1, err := l.VisibleWindows()
 	if err != nil {
 		return nil, 0, "paused: cannot list the windows on screen (" + err.Error() + ")", nil
@@ -395,7 +437,10 @@ func maskedShot(c Capturer, rules []config.DenyRule, front Window, state func() 
 	}
 	w2, locked2, problem2 := state()
 	ws2, err2 := l.VisibleWindows()
-	if problem2 != "" || locked2 || w2 != front || Denied(w2, rules) != "" || err2 != nil || !sameWindows(ws1, ws2) {
+	lay2, err3 := ly.Layout()
+	shot := image.Rectangle{Min: origin, Max: origin.Add(img.Rect.Size())}
+	if problem2 != "" || locked2 || w2 != front || Denied(w2, rules) != "" || err2 != nil || !sameWindows(ws1, ws2) ||
+		err3 != nil || lay2 != lay1 || shot != lay1.Rect {
 		return nil, 0, "screen changed during capture; picture discarded", nil
 	}
 	if err := BlackOut(img, origin, rects); err != nil {
