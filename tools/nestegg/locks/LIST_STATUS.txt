@@ -91,3 +91,8 @@ All four rebuilt lists pass uv pip check. Every added wheel was already saved (t
 11/22 4:40 PM CT: betacal==1.1.0 added to _test_env_lens_roster, _test_env_workbench, apexbridge, harness_adapters, launcher, sequoia_bridge (each installs votingengine; betacal required per PA-3, #2910). scikit-learn 1.9.1 / numpy already present in each.
 
 2026-11-22 5:20 PM CT: packaging==26.3 added to Adjudicator, Hierarchy, HtrHosted, MarkerPdf, OcrPaddle, PdfText, StructuredHeuristic, VisionClaude (installer request: the per-reader pre-run check needs it). Wheel already in the backup (packaging-26.3-py3-none-any.whl). These eight are HOLD until their tests pass on the new list.
+
+11/23 ~10:20 PM CT (PC-C cloud rehearsal finding): workbench and _test_env_workbench gain argon2-cffi 25.1.0 + argon2-cffi-bindings 26.2.0
+(obsidian's own pins; both wheels already in SHA256SUMS). Since Conclave #2953 the Workbench imports obsidian.unlock -> obsidian.store ->
+obsidian.kdf -> argon2; without it the installer's Workbench Run-button check ("No module named 'argon2'") and the Workbench's own tests
+fail, so harness.reader_envs can never be turned on. cffi and pycparser were already in both lists. Labels unchanged.

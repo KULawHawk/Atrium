@@ -1,6 +1,8 @@
 annotated-types==0.8.0
 anthropic==0.109.2
 anyio==4.16.0
+argon2-cffi==25.1.0
+argon2-cffi-bindings==26.2.0
 attrs==26.1.0
 betacal==1.1.0
 certifi==2026.11.20
