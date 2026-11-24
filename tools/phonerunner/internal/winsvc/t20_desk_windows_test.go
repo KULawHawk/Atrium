@@ -108,6 +108,14 @@ func TestT20DeskSelfTest(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// A test item left from an earlier T-20 run: the script must move it off the phone page
+	// (into old-test-items), not delete it.
+	oldItem := filepath.Join(root, "inbox", "t20-500-01010000")
+	if err := os.MkdirAll(oldItem, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(oldItem, "item.json"), []byte(`{"title":"T-20 test: print 500 lines","claimed_by":"T-20 desk test (synthetic)","entry":"run.ps1","estimate_time":"under 1 minute","estimate_cost":"$0"}`), 0o644)
+	os.WriteFile(filepath.Join(oldItem, "run.ps1"), []byte("'old'\r\n"), 0o644)
 	// The service log as the desk script reads it: one start that failed to join
 	// Tailscale, then a restart (seq counts from 1 again) that is listening.
 	old, err := store.Open(root)
@@ -216,6 +224,12 @@ loop:
 	last := strings.TrimSpace(lines[len(lines)-1])
 	t.Logf("RESULT LAST LINE: %s", last)
 
+	if _, err := os.Stat(oldItem); !os.IsNotExist(err) {
+		t.Errorf("the older test item is still in the inbox (%v)", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "old-test-items", "t20-500-01010000", "run.ps1")); err != nil {
+		t.Errorf("the older test item was not kept in old-test-items: %v", err)
+	}
 	if !errors.Is(linkRefusal, control.ErrNotRunnable) {
 		t.Errorf("the hard-link item was not refused as not runnable: %v", linkRefusal)
 	}
@@ -230,6 +244,7 @@ loop:
 		"PASS Stop ended t20-env-", "and its child process",
 		"was not copied or started (hard link refused)",
 		"Please type Y or N", "PASS phone showed the hard-link problem",
+		"INFO moved 1 older T-20 test item(s) off the phone page",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("result is missing %q", want)

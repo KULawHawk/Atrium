@@ -29,7 +29,8 @@
 # -SelfTestRoot <folder> is for the Windows test machine only (tools/phonerunner Go test): it
 # skips steps 1-8, uses <folder> instead of C:\ProgramData\PhoneRunner, takes its answers from
 # <folder>\selftest\answers.txt instead of the keyboard, and marks every result SELFTEST.
-# Nothing is deleted. Test items stay in the inbox (you can remove them later if you decide to).
+# Nothing is deleted. Today's test items stay in the inbox; older T-20 test items are moved to
+# <root>\old-test-items so the phone page shows only today's (you can remove them later if you decide to).
 param([switch]$DryRun, [switch]$Elevated, [string]$SelfTestRoot = '', [int]$SelfTestTlsPort = 0)
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -551,7 +552,19 @@ if (-not (Test-Path -LiteralPath $canary)) { [System.IO.File]::WriteAllText($can
 New-Item -ItemType HardLink -Path (Join-Path $linkDir 'data.txt') -Target $canary | Out-Null
 Say "PASS staged 3 synthetic items: $id500, $idEnv, $idLink"
 $old = @(Get-ChildItem -LiteralPath (Join-Path $Root 'inbox') -Directory -Filter 't20-*' | Where-Object { $_.Name -notlike "*-$stamp" })
-if ($old.Count -gt 0) { Say "INFO $($old.Count) older T-20 test items are still on the phone page (not deleted). Tap only the ones ending in -$stamp." }
+# Older T-20 test items (synthetic, made by this script) move out of the inbox so the phone shows
+# only today's three. Moved, not deleted: they wait in old-test-items and can be moved back.
+if ($old.Count -gt 0) {
+  $oldDir = Join-Path $Root 'old-test-items'
+  New-Item -ItemType Directory -Force -Path $oldDir | Out-Null
+  $moved = 0
+  foreach ($o in $old) {
+    try { Move-Item -LiteralPath $o.FullName -Destination (Join-Path $oldDir $o.Name) -ErrorAction Stop; $moved++ }
+    catch { Say "INFO could not move older test item $($o.Name) ($($_.Exception.Message)); it stays on the phone page" }
+  }
+  if ($moved -gt 0) { Say "INFO moved $moved older T-20 test item(s) off the phone page into $oldDir (not deleted)" }
+  if ($moved -lt $old.Count) { Say "INFO tap only the items ending in -$stamp" }
+}
 
 # 9a 500 lines
 try {
