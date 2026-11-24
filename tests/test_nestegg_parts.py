@@ -697,6 +697,7 @@ def test_locked_files_come_from_the_saved_copy_first(tmp_path: Path, monkeypatch
     sc.split(whl, tmp_path / "root" / "saved", 2_000_000_000)
     m.INSTALL_ROOT["root"] = tmp_path / "root"
     monkeypatch.setattr(m, "saved_file_names", lambda: {h: whl.name})
+    monkeypatch.setattr(m, "target_tags", lambda py: ["cp313-cp313-win_amd64", "py3-none-any"])
     envs = tmp_path / "root" / "envs"
     (envs / "_logs").mkdir(parents=True)
     calls = []
@@ -764,6 +765,7 @@ def test_changed_saved_package_copy_is_a_warn_row_on_screen(tmp_path: Path, monk
     _, h = _corrupt_home_copy(tmp_path, sc, b"wheel bytes")
     m.INSTALL_ROOT["root"] = tmp_path / "root"
     monkeypatch.setattr(m, "saved_file_names", lambda: {h: "demo-1.0-py3-none-any.whl"})
+    monkeypatch.setattr(m, "target_tags", lambda py: ["cp313-cp313-win_amd64", "py3-none-any"])
     envs = tmp_path / "root" / "envs"
     (envs / "_logs").mkdir(parents=True)
     calls = []
@@ -1987,3 +1989,99 @@ def test_measured_and_matched_lists_pass_and_unmeasured_lists_hold() -> None:
     assert not m.list_is_measured("MEASURED? in proof run 20261122-shard3 (this list equals that run's freeze exactly)")
     assert not m.list_is_measured("MEASURED in proof run 20261122-shard3 (partly; some packages differ)")
     assert not m.list_is_measured("MEASURED")
+
+
+def _home_copy_of(tmp_path: Path, sc, files: dict[str, bytes]) -> dict[str, str]:
+    """Save each named file in the home copy; returns sha256 -> name (as SHA256SUMS would)."""
+    import hashlib
+    out = {}
+    for name, data in files.items():
+        f = tmp_path / "in" / name
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes(data)
+        sc.split(f, tmp_path / "root" / "saved", 2_000_000_000)
+        out[hashlib.sha256(data).hexdigest()] = name
+    return out
+
+
+WIN313 = ["cp313-cp313-win_amd64", "cp313-abi3-win_amd64", "cp312-abi3-win_amd64", "py3-none-win_amd64",
+          "cp313-none-any", "py3-none-any"]
+
+
+def test_saved_copy_takes_the_file_built_for_the_environments_own_python(tmp_path: Path, monkeypatch) -> None:
+    """PC install 11/23 11:03 PM CT: the list line carries the cp312 AND cp313 Windows files; the installer took the
+    first (cp312) for a Python 3.13 environment and ran pip with --no-index, so every part failed. The file taken
+    must be the one the environment's own interpreter accepts."""
+    m = _mod()
+    sc = m._saved_copies()
+    names = _home_copy_of(tmp_path, sc, {"numpy-2.5.5-cp312-cp312-win_amd64.whl": b"np312",
+                                         "numpy-2.5.5-cp313-cp313-win_amd64.whl": b"np313",
+                                         "numpy-2.5.5-cp313-cp313-manylinux_2_28_x86_64.whl": b"nplinux"})
+    by = {v: k for k, v in names.items()}
+    m.INSTALL_ROOT["root"] = tmp_path / "root"
+    monkeypatch.setattr(m, "saved_file_names", lambda: names)
+    monkeypatch.setattr(m, "target_tags", lambda py: WIN313)
+    envs = tmp_path / "root" / "envs"
+    (envs / "_logs").mkdir(parents=True)
+    calls = []
+    monkeypatch.setattr(m, "run", lambda cmd, log, **k: calls.append([str(c) for c in cmd]) or 0)
+    line = "numpy==2.5.5 " + " ".join(f"--hash=sha256:{by[n]}" for n in sorted(by))  # cp312 sorts first
+    m.locked_install(Path("py"), [line], envs / "_logs" / "x.lock.txt", envs / "_logs" / "x.txt")
+    got = sorted(p.name for p in (envs / "_wheelhouse").iterdir())
+    assert got == ["numpy-2.5.5-cp313-cp313-win_amd64.whl"], got
+    assert "--no-index" in calls[0]
+
+
+def test_only_other_python_files_saved_means_pip_may_still_reach_the_index(tmp_path: Path, monkeypatch) -> None:
+    """Negative control: with only a cp312 file saved, nothing is taken for a 3.13 environment, the wheelhouse is not
+    'complete', and pip runs WITHOUT --no-index (still --require-hashes), so it can fetch the right file."""
+    m = _mod()
+    sc = m._saved_copies()
+    names = _home_copy_of(tmp_path, sc, {"numpy-2.5.5-cp312-cp312-win_amd64.whl": b"np312"})
+    (h,) = names
+    m.INSTALL_ROOT["root"] = tmp_path / "root"
+    monkeypatch.setattr(m, "saved_file_names", lambda: names)
+    monkeypatch.setattr(m, "target_tags", lambda py: WIN313)
+    envs = tmp_path / "root" / "envs"
+    (envs / "_logs").mkdir(parents=True)
+    calls = []
+    monkeypatch.setattr(m, "run", lambda cmd, log, **k: calls.append([str(c) for c in cmd]) or 0)
+    m.locked_install(Path("py"), [f"numpy==2.5.5 --hash=sha256:{h}"], envs / "_logs" / "x.lock.txt", envs / "_logs" / "x.txt")
+    assert "--no-index" not in calls[0] and "--require-hashes" in calls[0]
+    assert not (envs / "_wheelhouse" / "numpy-2.5.5-cp312-cp312-win_amd64.whl").exists()
+
+
+def test_unreadable_interpreter_tags_mean_no_saved_copies(tmp_path: Path, monkeypatch) -> None:
+    """If the environment's tags cannot be read, the saved copies are not used at all (never a guess)."""
+    m = _mod()
+    sc = m._saved_copies()
+    names = _home_copy_of(tmp_path, sc, {"demo-1.0-py3-none-any.whl": b"d"})
+    m.INSTALL_ROOT["root"] = tmp_path / "root"
+    monkeypatch.setattr(m, "saved_file_names", lambda: names)
+    monkeypatch.setattr(m, "target_tags", lambda py: None)
+    envs = tmp_path / "root" / "envs"
+    (envs / "_logs").mkdir(parents=True)
+    calls = []
+    monkeypatch.setattr(m, "run", lambda cmd, log, **k: calls.append([str(c) for c in cmd]) or 0)
+    (h,) = names
+    m.locked_install(Path("py"), [f"demo==1.0 --hash=sha256:{h}"], envs / "_logs" / "x.lock.txt", envs / "_logs" / "x.txt")
+    assert "--no-index" not in calls[0] and "--find-links" not in calls[0]
+
+
+def test_wheel_rank_reads_dotted_tags_and_refuses_other_pythons() -> None:
+    m = _mod()
+    rank = {t: i for i, t in enumerate(WIN313)}
+    assert m.wheel_rank("a-1-cp313-cp313-win_amd64.whl", rank) == 0
+    assert m.wheel_rank("a-1-py2.py3-none-any.whl", rank) == WIN313.index("py3-none-any")
+    assert m.wheel_rank("a-1-cp312-cp312-win_amd64.whl", rank) is None
+    assert m.wheel_rank("a-1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", rank) is None
+    assert m.wheel_rank("a-1.tar.gz", rank) == len(rank)
+    assert m.wheel_rank("a-1.exe", rank) is None
+
+
+def test_target_tags_reads_the_interpreters_own_tags() -> None:
+    """Real call on this test's own interpreter: its first tag names its own Python version."""
+    m = _mod()
+    tags = m.target_tags(Path(sys.executable))
+    assert tags and tags[0].startswith(f"cp{sys.version_info[0]}{sys.version_info[1]}-")
+    assert m.target_tags(Path("no-such-python-here")) is None
