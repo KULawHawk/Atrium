@@ -21,7 +21,7 @@ async function tick() {
     $("lock").replaceChildren(ss.locked ? el("b", "The PC is locked. Pictures are not possible until it is unlocked.", "bad") : el("span", ss.connected ? "Unlocked" : "", "ok"));
     $("win").textContent = ss.window && ss.window.title ? ss.window.title : "—";
     $("exe").textContent = ss.window && ss.window.exe ? "(" + ss.window.exe.split("\\").pop() + ")" : "";
-    $("paused").textContent = ss.shot_paused || "";
+    $("paused").textContent = ss.shot_paused || (ss.shot_masked ? ss.shot_masked + " patient window(s) blacked out in the picture" : "");
     const st = $("stext");
     if (st) {
       st.textContent = ss.text_paused ? ss.text_paused : (ss.screen_text && ss.screen_text.length ? ss.screen_text.join("\n") : "—");
