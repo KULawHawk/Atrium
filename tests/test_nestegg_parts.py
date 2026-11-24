@@ -1964,3 +1964,26 @@ def test_pinned_models_places_a_models_folder_model_and_visionlocal_uses_it(tmp_
     assert man["readers"]["VisionLocal"]["models"]["qwen2_vl_7b_instruct"]["local_dir"]["default"] == "{models}/qwen2_vl_7b"
     parts = {p["name"]: p for p in json.loads((NESTEGG / "parts.json").read_text(encoding="utf-8"))["parts"]}
     assert parts["VisionLocal"]["models"] == [{"step": "pinned_models", "what": parts["VisionLocal"]["models"][0]["what"]}]
+
+
+def test_measured_and_matched_lists_pass_and_unmeasured_lists_hold() -> None:
+    m = _mod()
+    status = {ln.split(":", 1)[0]: ln.split(":", 1)[1].strip()
+              for ln in (NESTEGG / "locks" / "LIST_STATUS.txt").read_text(encoding="utf-8").splitlines()
+              if ln.endswith(")") or ":" in ln and ln.split(":", 1)[0].endswith(".txt")}
+    # The real LIST_STATUS lines: a MEASURED proof-run list and a MATCHED pod-freeze list both count as measured.
+    assert m.list_is_measured(status["PdfText_py3.13.txt"])
+    assert m.list_is_measured(status["StructuredHeuristic_py3.13.txt"])
+    assert m.list_is_measured(status["OcrTesseract_py3.13.txt"])
+    assert m.list_is_measured(status["OcrPaddle_py3.13.txt"])
+    assert m.list_is_measured(status["FormFieldLens_py3.13.txt"])
+    assert m.list_is_measured(status["atrium_py3.13.txt"])
+    # Negative controls: resolved-today and kit-recipe lists stay not measured, as does a missing status.
+    assert not m.list_is_measured(status["harness_adapters_py3.13.txt"])
+    assert not m.list_is_measured(status["MarkerPdf_py3.13.txt"])
+    assert not m.list_is_measured(m.list_status("no_such_list.txt"))
+    assert not m.list_is_measured("NOT MEASURED")
+    # A hedged or partial MEASURED status never passes: only the full proof-run form counts (reviewer 3 follow-up 1).
+    assert not m.list_is_measured("MEASURED? in proof run 20261122-shard3 (this list equals that run's freeze exactly)")
+    assert not m.list_is_measured("MEASURED in proof run 20261122-shard3 (partly; some packages differ)")
+    assert not m.list_is_measured("MEASURED")

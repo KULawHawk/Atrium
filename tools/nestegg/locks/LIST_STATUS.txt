@@ -1,4 +1,6 @@
 # Status of each list (11/22/2026). Only a list matched line for line to a pod freeze may be called MEASURED (known-good).
+# MATCHED and MEASURED are EQUIVALENT for passing (Jake, Decision 80, 11/23): the installer passes a reader on either; MEASURED counts
+# only in its full form "MEASURED in proof run ... this list equals that run's freeze exactly". Any other status is not measured (HOLD).
 # Built at Conclave main 0f03c13 with the calibration kit's own recipe (POD_CALIB_GPU_v5.sh): torch 2.6.0 + torchvision 0.21.0 for every
 # torch reader, torch 2.4.1 + torchvision 0.19.1 on Python 3.12 for HtrLens, the gate-3 pins for Docling and TableSurgeon, six 1.17.0 for
 # MarkerPdf and MinerU, the kit's engine pins. Packages the kit did not pin were resolved today.
