@@ -637,13 +637,13 @@ try {
 
 # 9c hard link refused
 try {
-  Ask "On your phone: reload, open '$idLink' (ends in -$stamp). It should list a problem for data.txt and Run should be refused. Try tapping Run once. Then press Enter here."
+  Ask "On your phone: reload, open '$idLink' (ends in -$stamp). It should list a problem for data.txt, and its Run button should be greyed out. Try tapping Run once: if nothing happens, that is the pass. Then press Enter here."
   [void](Read-Answer)
   if (@(Get-ChildItem -LiteralPath (Join-Path $Root 'approved') -Directory -Filter "$idLink-*").Count -ne 0) { throw "STEP: an approved copy of $idLink was made: the hard-link check did not stop it" }
   if (@(Get-Events $start | Where-Object { $_.event -eq 'run.started' -and $_.item -eq $idLink }).Count -ne 0) { throw "STEP: $idLink was started" }
   Say "PASS $idLink was not copied or started (hard link refused)"
   $yn = ''
-  Ask "What did the phone show for '$idLink'? Type Y if it listed a problem for data.txt and refused Run, N if not"
+  Ask "What did the phone show for '$idLink'? Type Y if it listed a problem for data.txt and Run was greyed out or did nothing, N if Run started"
   for ($try = 1; $try -le 5 -and $yn -ne 'Y' -and $yn -ne 'N'; $try++) {
     if ($try -gt 1) { Ask "Please type Y or N, then press Enter" }
     $yn = "$(Read-Answer)".Trim().ToUpper()
