@@ -202,3 +202,41 @@ jobs:
           $v = "$(($o | Where-Object { "$_" -match '^NESTEGG-PARTS: ' } | Select-Object -Last 1))"
           if ($v -notmatch '^NESTEGG-PARTS: PASS \d+$') { Write-Host "FAIL: $v"; exit 1 }
           Write-Host 'NESTEGG-PHASE2-WINDOWS: PASS'
+
+  saved-copy-pcc:
+    # The PC install of 11/23 11:03 PM CT failed for all 6 parts: the saved packages supplied the cp312 file of
+    # numpy / pydantic-core / charset-normalizer to Python 3.13 environments, with pip in --no-index mode. The private
+    # release cannot be read here, so this job rebuilds the same situation with a home copy holding EVERY Windows file
+    # the lists name (cp312 and cp313 alike, from PyPI, sha256-checked), then installs each list into a fresh Python
+    # 3.13 environment: first with main's installer (must FAIL: the reproduction), then with this branch's (must PASS
+    # with pip check clean).
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src/atrium
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: src/atrium_main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Home copy, then main's installer (must fail), then this branch's (must pass)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $h = 'src\atrium\tools\nestegg\ci_saved_copy_install.py'
+          $root = Join-Path $env:RUNNER_TEMP 'AdAstra'
+          python -I $h home --root $root *>&1 | Tee-Object -Variable hc
+          if ($LASTEXITCODE -ne 0) { Write-Host 'FAIL: home copy not built'; exit 1 }
+          python -I $h install --root $root --tag main --installer 'src\atrium_main\tools\nestegg\install_parts.py' *>&1 | Tee-Object -Variable old
+          $ov = "$(($old | Where-Object { "$_" -match '^SAVED-COPY-INSTALL: ' } | Select-Object -Last 1))"
+          if ($ov -notmatch '^SAVED-COPY-INSTALL: FAIL') { Write-Host "FAIL: main's installer did not reproduce the PC failure ($ov)"; exit 1 }
+          Write-Host "reproduced with main's installer: $ov"
+          python -I $h install --root $root --tag fixed --installer 'src\atrium\tools\nestegg\install_parts.py' *>&1 | Tee-Object -Variable new
+          $nv = "$(($new | Where-Object { "$_" -match '^SAVED-COPY-INSTALL: ' } | Select-Object -Last 1))"
+          if ($nv -notmatch '^SAVED-COPY-INSTALL: PASS \d+$') { Write-Host "FAIL: fixed installer: $nv"; exit 1 }
+          if ($new | Where-Object { "$_" -match 'files built for another Python were taken' }) { Write-Host 'FAIL: a cp312 file was taken'; exit 1 }
+          Write-Host "NESTEGG-SAVED-COPY-PCC: PASS ($nv)"
