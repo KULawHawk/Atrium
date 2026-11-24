@@ -386,3 +386,45 @@ func TestWithTimeout(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+// Conclave #3056 marks every Workbench window title with "(patient run)" while a patient run
+// is selected or on a tile, and the review console's terminal title carries the same marker.
+// Any case of that marker must pause both the picture and the screen text, and withhold the title.
+func TestPatientRunMarkerPauses(t *testing.T) {
+	titles := []string{
+		"Conclave Workbench (patient run)",
+		"Conclave Workbench (patient run) - Review",
+		"Conclave Workbench (Patient Run) - Observatory",
+		"CONCLAVE WORKBENCH (PATIENT RUN)",
+		"Administrator: review console (patient run)",
+	}
+	for _, title := range titles {
+		if Denied(Window{Title: title}, config.DefaultDenyRules()) == "" {
+			t.Errorf("not withheld: %q", title)
+			continue
+		}
+		f := &fake{w: Window{Title: title, Exe: "conclave-workbench.exe", PID: 7}, png: []byte("tile")}
+		shots := run(t, f, 40*time.Millisecond)
+		if count(shots, func(fr Frame) bool { return strings.HasPrefix(fr.Paused, "paused: ") }) == 0 {
+			t.Errorf("%q: picture not paused", title)
+		}
+		for _, fr := range shots {
+			if len(fr.PNG) > 0 || strings.Contains(strings.ToLower(fr.Window.Title), "workbench") || strings.Contains(strings.ToLower(fr.Window.Title), "console") {
+				t.Fatalf("%q: leaked: %+v", title, fr)
+			}
+		}
+		text := runText(t, &fake{w: Window{Title: title}}, &reader{lines: []string{"Smith, John 1980-02-03"}})
+		if count(text, func(fr Frame) bool { return strings.HasPrefix(fr.Paused, "paused: ") }) == 0 {
+			t.Errorf("%q: screen text not paused", title)
+		}
+		for _, fr := range text {
+			if len(fr.Lines) > 0 {
+				t.Fatalf("%q: screen text leaked: %+v", title, fr)
+			}
+		}
+	}
+	// The plain Workbench title (no patient run) is not withheld by this rule.
+	if r := Denied(Window{Title: "Conclave Workbench - Corpus"}, config.DefaultDenyRules()); r != "" {
+		t.Errorf("plain Workbench title withheld: %s", r)
+	}
+}
