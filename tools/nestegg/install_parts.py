@@ -358,6 +358,18 @@ def _test_env(rep: Report, part: dict, repo: Path, envs: Path, log: Path, done: 
     return py
 
 
+def list_is_measured(status: str) -> bool:
+    """README rule 5: a reader's list PASSes when it is MATCHED or MEASURED; the two are EQUIVALENT for passing
+    (Jake 11/23 10:13 PM CT, Decision 80: "Yes and make sure it's clear they're the equivalent"). LIST_STATUS.txt writes them as
+    MATCHED (copied from a measured pod freeze) and "MEASURED in proof run <run> ... this list equals that run's freeze
+    exactly". MEASURED counts only in that full form, so a hedged status ("MEASURED?", "MEASURED, partly") never
+    passes. An empty list on purpose has nothing to measure. Anything else (resolved today, kit recipe) is not
+    measured."""
+    if status.startswith(("MATCHED", "empty on purpose")):
+        return True
+    return status.startswith("MEASURED in proof run ") and "this list equals that run's freeze exactly" in status
+
+
 def list_status(name: str) -> str:
     for ln in (LOCKS / "LIST_STATUS.txt").read_text(encoding="utf-8").splitlines():
         if ln.startswith(name + ":"):
@@ -641,8 +653,9 @@ def _build_env(rep: Report, part: dict, src: Path, envs: Path, env: Path, log: P
     #                   a reader's unpinned model or a missing program is about the machine, not this environment
     status = list_status(f"{name}_py{part['python']}.txt")
     done = f"installed {len(lines)} locked packages (hash-checked) + its own source; pip check clean"
-    if status.startswith("MATCHED") or status.startswith("empty on purpose"):
-        rep.row("PASS", name, f"{done}; list measured ({status.split('(')[0].strip()})")
+    if list_is_measured(status):
+        rep.row("PASS", name, f"{done}; list measured ({status.split('(')[0].strip()}; MATCHED and MEASURED are "
+                              "equivalent for passing)")
     elif is_reader(part):
         rep.row("HOLD", name, f"{done}; locked, not measured: {status}")
     else:
