@@ -8,7 +8,7 @@ the measured sha256, then runs the installer's own locked_install for each list 
 interpreter, followed by pip check.
 
   python -I ci_saved_copy_install.py home    --root <dir> [--lists a,b]             (build the home copy)
-  python -I ci_saved_copy_install.py install --root <dir> --installer <install_parts.py> [--lists a,b]
+  python -I ci_saved_copy_install.py install --root <dir> --installer <install_parts.py> [--lists a,b] [--tag t]
 Last line of install: SAVED-COPY-INSTALL: PASS n | FAIL n (exit 0 / 1). The home copy is never a release.
 """
 from __future__ import annotations
@@ -17,6 +17,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import urllib.request
@@ -98,7 +99,7 @@ def home(root: Path, lists: list[str]) -> int:
     return 0
 
 
-def install(root: Path, installer: Path, lists: list[str]) -> int:
+def install(root: Path, installer: Path, lists: list[str], tag: str) -> int:
     ip = load(installer, "install_parts_under_test")
     ip.INSTALL_ROOT["root"] = root
     envs = root / "envs"
@@ -108,8 +109,8 @@ def install(root: Path, installer: Path, lists: list[str]) -> int:
         env = envs / f"ci_{name}"
         venv.EnvBuilder(with_pip=True, clear=True).create(env)
         py = ip.env_python(env)
-        log = envs / "_logs" / f"ci_{name}.txt"
-        rc = ip.locked_install(py, lines_for(ip, name), envs / "_logs" / f"ci_{name}.lock.txt", log)
+        log = envs / "_logs" / f"ci_{tag}_{name}.txt"  # the installer appends to its log: one log per run
+        rc = ip.locked_install(py, lines_for(ip, name), envs / "_logs" / f"ci_{tag}_{name}.lock.txt", log)
         chk = subprocess.run([str(py), "-m", "pip", "check"], capture_output=True, text=True) if rc == 0 else None
         if rc == 0 and chk.returncode == 0:
             ok += 1
@@ -120,7 +121,8 @@ def install(root: Path, installer: Path, lists: list[str]) -> int:
             print(f"FAIL  {name:<22} rc={rc} {(chk.stdout.strip() if chk else '')} {' | '.join(tail)}")
         taken = [l.split("saved copy: ", 1)[1] for l in log.read_text(encoding="utf-8", errors="replace").splitlines()
                  if l.startswith("saved copy: ")]
-        wrong = [t for t in taken if "-cp312-" in t or "-cp311-" in t]
+        own = f"cp{sys.version_info[0]}{sys.version_info[1]}"
+        wrong = [t for t in taken if re.search(r"-cp(\d+)-cp\1[a-z]?-", t) and f"-{own}-{own}" not in t]  # abi3 is fine
         if wrong:
             print(f"      {name}: files built for another Python were taken: {wrong[:3]}")
     print(f"SAVED-COPY-INSTALL: {'FAIL ' + str(bad) if bad else 'PASS ' + str(ok)}")
@@ -133,9 +135,10 @@ def main() -> int:
     ap.add_argument("--root", type=Path, required=True)
     ap.add_argument("--installer", type=Path, default=HERE / "install_parts.py")
     ap.add_argument("--lists", default=",".join(DEFAULT_LISTS))
+    ap.add_argument("--tag", default="run", help="names this run's logs (the installer appends to its log)")
     a = ap.parse_args()
     lists = [x for x in a.lists.split(",") if x]
-    return home(a.root, lists) if a.mode == "home" else install(a.root, a.installer, lists)
+    return home(a.root, lists) if a.mode == "home" else install(a.root, a.installer, lists, a.tag)
 
 
 if __name__ == "__main__":

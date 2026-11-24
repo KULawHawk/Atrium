@@ -231,11 +231,11 @@ jobs:
           $root = Join-Path $env:RUNNER_TEMP 'AdAstra'
           python -I $h home --root $root *>&1 | Tee-Object -Variable hc
           if ($LASTEXITCODE -ne 0) { Write-Host 'FAIL: home copy not built'; exit 1 }
-          python -I $h install --root $root --installer 'src\atrium_main\tools\nestegg\install_parts.py' *>&1 | Tee-Object -Variable old
+          python -I $h install --root $root --tag main --installer 'src\atrium_main\tools\nestegg\install_parts.py' *>&1 | Tee-Object -Variable old
           $ov = "$(($old | Where-Object { "$_" -match '^SAVED-COPY-INSTALL: ' } | Select-Object -Last 1))"
           if ($ov -notmatch '^SAVED-COPY-INSTALL: FAIL') { Write-Host "FAIL: main's installer did not reproduce the PC failure ($ov)"; exit 1 }
           Write-Host "reproduced with main's installer: $ov"
-          python -I $h install --root $root --installer 'src\atrium\tools\nestegg\install_parts.py' *>&1 | Tee-Object -Variable new
+          python -I $h install --root $root --tag fixed --installer 'src\atrium\tools\nestegg\install_parts.py' *>&1 | Tee-Object -Variable new
           $nv = "$(($new | Where-Object { "$_" -match '^SAVED-COPY-INSTALL: ' } | Select-Object -Last 1))"
           if ($nv -notmatch '^SAVED-COPY-INSTALL: PASS \d+$') { Write-Host "FAIL: fixed installer: $nv"; exit 1 }
           if ($new | Where-Object { "$_" -match 'files built for another Python were taken' }) { Write-Host 'FAIL: a cp312 file was taken'; exit 1 }

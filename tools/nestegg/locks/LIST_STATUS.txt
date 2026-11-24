@@ -96,3 +96,7 @@ All four rebuilt lists pass uv pip check. Every added wheel was already saved (t
 (obsidian's own pins; both wheels already in SHA256SUMS). Since Conclave #2953 the Workbench imports obsidian.unlock -> obsidian.store ->
 obsidian.kdf -> argon2; without it the installer's Workbench Run-button check ("No module named 'argon2'") and the Workbench's own tests
 fail, so harness.reader_envs can never be turned on. cffi and pycparser were already in both lists. Labels unchanged.
+
+11/23 ~11:35 PM CT (PC-C Windows saved-copy proof, Atrium #104): _test_tools gains colorama 0.4.6. pytest 9.2.0 requires it on Windows
+(sys_platform == "win32"), so a Windows env with this list failed pip check ("pytest 9.2.0 requires colorama, which is not installed").
+Already pinned in workbench / _test_env_workbench / observatory and in SHA256SUMS (colorama-0.4.6-py2.py3-none-any.whl). Label unchanged.
