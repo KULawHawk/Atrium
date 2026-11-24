@@ -32,3 +32,5 @@ jobs:
           cache-dependency-path: tools/phonerunner/go.sum
       - name: Windows-only tests (launch lock-down)
         run: go test -count=1 -v ./internal/winsvc/
+      - name: Windows-only tests (patient-window blackout in the PC picture)
+        run: go test -count=1 -v ./internal/capture/

@@ -54,6 +54,7 @@ type Session struct {
 	Window     capture.Window `json:"window"`
 	Locked     bool           `json:"locked"`
 	ShotPaused string         `json:"shot_paused,omitempty"`
+	ShotMasked int            `json:"shot_masked,omitempty"` // patient windows blacked out in the last picture
 	LastShotAt time.Time      `json:"last_shot_at"`
 	ScreenText []string       `json:"screen_text"`
 	TextAt     time.Time      `json:"text_at"`
@@ -155,6 +156,7 @@ func (s *Service) Ingest(ctx context.Context, f capture.Frame) {
 		return
 	}
 	s.shot = f.PNG
+	s.sess.ShotMasked = f.Masked
 	s.sess.LastShotAt = f.At
 	if _, err := s.st.SaveShot(f.PNG, store.ShotMeta{At: f.At, Window: f.Window.Title, MayCopy: false, HoldReason: PictureHold}); err != nil {
 		s.log("store.error", map[string]any{"error": err.Error()})
