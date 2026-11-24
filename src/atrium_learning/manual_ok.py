@@ -26,10 +26,12 @@ import argparse
 import hashlib
 import re
 import sys
+import unicodedata
 from pathlib import Path
 from typing import Sequence
 
-from atrium_learning.folder import LearningFolderError, find_install_root, manual_oks, record_manual_ok
+from atrium_learning.folder import (MANUAL_OKS, LearningFolderError, _read_jsonl, find_install_root, manual_oks,
+                                   record_manual_ok)
 
 #: Jake's answer to Decision 41 (LF-3), 6:29 AM CT 11/23/2026, verbatim.
 DECISION_41_WORDS = "They're all approved as of now and revisit in 5 mo"
@@ -46,6 +48,26 @@ def list_sha256(data: bytes) -> str:
     return hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest()
 
 
+def _manual_ids(data: bytes) -> list[str]:
+    """The manual ids in a list. A UTF-8 byte-order mark (PowerShell 5.1 ``Out-File -Encoding utf8`` and older
+    Notepad write one) is not part of the first id, and an id holding any other invisible or control character
+    is refused: such an id never equals the id on record, so a withdrawal would report ``ALREADY withdrawn`` and
+    PASS while the real OK stayed in force (hunt 2026-11-24)."""
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise LearningFolderError("the list is not UTF-8 text") from None
+    ids = []
+    for n, line in enumerate(text.splitlines(), 1):
+        manual = line.strip()
+        if not manual or manual.startswith("#"):
+            continue
+        if any(unicodedata.category(c).startswith("C") for c in manual):
+            raise LearningFolderError(f"list line {n} holds an invisible or control character; retype that manual id")
+        ids.append(manual)
+    return ids
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="atrium_learning.manual_ok", description=__doc__.splitlines()[0])
     ap.add_argument("--list", required=True, type=Path)
@@ -60,8 +82,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise LearningFolderError(f"list not found: {args.list}")
         data = args.list.read_bytes()
         digest = list_sha256(data)
-        ids = [x.strip() for x in data.decode("utf-8").splitlines()]
-        ids = [x for x in ids if x and not x.startswith("#")]
+        ids = _manual_ids(data)
         if not ids:
             raise LearningFolderError("the list names no manual")
         if not args.withdraw and not args.words:
@@ -73,8 +94,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         root = args.root or find_install_root()
         current = manual_oks(root)
-        written = already = moved = 0
+        ever = {str(row.get("manual")) for row in _read_jsonl(Path(root) / "learning" / MANUAL_OKS)}
+        written = already = moved = unknown = 0
         for manual in ids:
+            if args.withdraw and manual not in ever:
+                # A misspelt id matches no record: saying "already withdrawn" would PASS while the OK the person
+                # meant stays in force (reviewer 3, hunt 2026-11-24). The other ids are still withdrawn.
+                print(f"NOT FOUND {manual}: no OK was ever recorded under this id; check the spelling")
+                unknown += 1
+                continue
             if not args.withdraw and manual in current:
                 print(f"ALREADY {manual}")
                 already += 1
@@ -89,6 +117,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except LearningFolderError as exc:
         print(str(exc))
         print("MANUAL-OK: FAIL")
+        return 1
+    if unknown:
+        print(f"MANUAL-OK: FAIL written={written} already={already} items_moved_aside={moved} not_found={unknown}")
         return 1
     print(f"MANUAL-OK: PASS written={written} already={already} items_moved_aside={moved}")
     return 0
