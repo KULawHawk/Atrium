@@ -58,3 +58,12 @@ def test_an_id_with_an_invisible_character_is_refused(root, tmp_path, capsys, hi
 def test_a_list_that_is_not_utf8_is_refused(root, tmp_path, capsys):
     assert _withdraw(root, tmp_path, b"\xff\xfeA\x00") == 1
     assert "not UTF-8" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("lookalike", ["A\u00a0manual [aaa]", "A\u202fmanual [aaa]", "A m\u0430nual [aaa]",
+                                       "A manuel [aaa]"])
+def test_a_withdrawal_naming_no_recorded_id_fails(root, tmp_path, capsys, lookalike):
+    assert _withdraw(root, tmp_path, (lookalike + "\n").encode()) == 1
+    out = capsys.readouterr().out
+    assert f"NOT FOUND {lookalike}" in out and "MANUAL-OK: FAIL" in out
+    assert manual_oks(root) == {MANUAL}  # the real OK is untouched and the run says so

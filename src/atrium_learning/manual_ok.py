@@ -30,7 +30,8 @@ import unicodedata
 from pathlib import Path
 from typing import Sequence
 
-from atrium_learning.folder import LearningFolderError, find_install_root, manual_oks, record_manual_ok
+from atrium_learning.folder import (MANUAL_OKS, LearningFolderError, _read_jsonl, find_install_root, manual_oks,
+                                   record_manual_ok)
 
 #: Jake's answer to Decision 41 (LF-3), 6:29 AM CT 11/23/2026, verbatim.
 DECISION_41_WORDS = "They're all approved as of now and revisit in 5 mo"
@@ -93,8 +94,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         root = args.root or find_install_root()
         current = manual_oks(root)
-        written = already = moved = 0
+        ever = {str(row.get("manual")) for row in _read_jsonl(Path(root) / "learning" / MANUAL_OKS)}
+        written = already = moved = unknown = 0
         for manual in ids:
+            if args.withdraw and manual not in ever:
+                # A misspelt id matches no record: saying "already withdrawn" would PASS while the OK the person
+                # meant stays in force (reviewer 3, hunt 2026-11-24). The other ids are still withdrawn.
+                print(f"NOT FOUND {manual}: no OK was ever recorded under this id; check the spelling")
+                unknown += 1
+                continue
             if not args.withdraw and manual in current:
                 print(f"ALREADY {manual}")
                 already += 1
@@ -109,6 +117,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except LearningFolderError as exc:
         print(str(exc))
         print("MANUAL-OK: FAIL")
+        return 1
+    if unknown:
+        print(f"MANUAL-OK: FAIL written={written} already={already} items_moved_aside={moved} not_found={unknown}")
         return 1
     print(f"MANUAL-OK: PASS written={written} already={already} items_moved_aside={moved}")
     return 0
