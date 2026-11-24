@@ -26,6 +26,7 @@ import argparse
 import hashlib
 import re
 import sys
+import unicodedata
 from pathlib import Path
 from typing import Sequence
 
@@ -46,6 +47,26 @@ def list_sha256(data: bytes) -> str:
     return hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest()
 
 
+def _manual_ids(data: bytes) -> list[str]:
+    """The manual ids in a list. A UTF-8 byte-order mark (PowerShell 5.1 ``Out-File -Encoding utf8`` and older
+    Notepad write one) is not part of the first id, and an id holding any other invisible or control character
+    is refused: such an id never equals the id on record, so a withdrawal would report ``ALREADY withdrawn`` and
+    PASS while the real OK stayed in force (hunt 2026-11-24)."""
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise LearningFolderError("the list is not UTF-8 text") from None
+    ids = []
+    for n, line in enumerate(text.splitlines(), 1):
+        manual = line.strip()
+        if not manual or manual.startswith("#"):
+            continue
+        if any(unicodedata.category(c).startswith("C") for c in manual):
+            raise LearningFolderError(f"list line {n} holds an invisible or control character; retype that manual id")
+        ids.append(manual)
+    return ids
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="atrium_learning.manual_ok", description=__doc__.splitlines()[0])
     ap.add_argument("--list", required=True, type=Path)
@@ -60,8 +81,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise LearningFolderError(f"list not found: {args.list}")
         data = args.list.read_bytes()
         digest = list_sha256(data)
-        ids = [x.strip() for x in data.decode("utf-8").splitlines()]
-        ids = [x for x in ids if x and not x.startswith("#")]
+        ids = _manual_ids(data)
         if not ids:
             raise LearningFolderError("the list names no manual")
         if not args.withdraw and not args.words:
