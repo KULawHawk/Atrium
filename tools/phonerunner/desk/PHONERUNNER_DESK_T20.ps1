@@ -551,7 +551,11 @@ $canary = Join-Path $Root 'private\t20_canary.txt'
 if (-not (Test-Path -LiteralPath $canary)) { [System.IO.File]::WriteAllText($canary, 'T-20 canary (synthetic). If you can read this through the inbox, the hard-link check failed.') }
 New-Item -ItemType HardLink -Path (Join-Path $linkDir 'data.txt') -Target $canary | Out-Null
 Say "PASS staged 3 synthetic items: $id500, $idEnv, $idLink"
-$old = @(Get-ChildItem -LiteralPath (Join-Path $Root 'inbox') -Directory -Filter 't20-*' | Where-Object { $_.Name -notlike "*-$stamp" })
+# Only items this script made: a t20- name AND item.json claimed_by the T-20 desk test.
+function Test-OwnTestItem($d) {
+  try { return ((Get-Content -Raw -LiteralPath (Join-Path $d.FullName 'item.json') | ConvertFrom-Json).claimed_by -eq 'T-20 desk test (synthetic)') } catch { return $false }
+}
+$old = @(Get-ChildItem -LiteralPath (Join-Path $Root 'inbox') -Directory -Filter 't20-*' | Where-Object { $_.Name -notlike "*-$stamp" -and (Test-OwnTestItem $_) })
 # Older T-20 test items (synthetic, made by this script) move out of the inbox so the phone shows
 # only today's three. Moved, not deleted: they wait in old-test-items and can be moved back.
 if ($old.Count -gt 0) {
@@ -559,7 +563,10 @@ if ($old.Count -gt 0) {
   New-Item -ItemType Directory -Force -Path $oldDir | Out-Null
   $moved = 0
   foreach ($o in $old) {
-    try { Move-Item -LiteralPath $o.FullName -Destination (Join-Path $oldDir $o.Name) -ErrorAction Stop; $moved++ }
+    # Move-Item into an existing folder of the same name would nest it: pick a free name instead.
+    $to = Join-Path $oldDir $o.Name
+    if (Test-Path -LiteralPath $to) { $to = Join-Path $oldDir ($o.Name + '-moved-' + (Get-Date -Format 'yyyyMMddHHmmss')) }
+    try { Move-Item -LiteralPath $o.FullName -Destination $to -ErrorAction Stop; $moved++ }
     catch { Say "INFO could not move older test item $($o.Name) ($($_.Exception.Message)); it stays on the phone page" }
   }
   if ($moved -gt 0) { Say "INFO moved $moved older T-20 test item(s) off the phone page into $oldDir (not deleted)" }
