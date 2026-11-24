@@ -160,6 +160,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     for aim, verdict in result.items():
         print(f"{aim}: {verdict}")
+    if not result:  # nothing was examined, so nothing was shown to be sent safely (hunt 2026-11-24)
+        print("no aim folder was found under the install root's learning folder; nothing was copied")
+        print("LEARNING-COPY: FAIL aims=0 failed=0")
+        return 1
     failed = [a for a, v in result.items() if v.startswith("FAIL")]
     print(f"LEARNING-COPY: {'FAIL' if failed else 'PASS'} aims={len(result)} failed={len(failed)}")
     return 1 if failed else 0
