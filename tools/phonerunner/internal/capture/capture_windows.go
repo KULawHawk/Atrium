@@ -33,6 +33,7 @@ var (
 	pEnumWindows               = user32.NewProc("EnumWindows")
 	pIsWindowVisible           = user32.NewProc("IsWindowVisible")
 	pIsIconic                  = user32.NewProc("IsIconic")
+	pGetClassNameW             = user32.NewProc("GetClassNameW")
 	pGetThreadDpiAwarenessCtx  = user32.NewProc("GetThreadDpiAwarenessContext")
 	pGetAwarenessFromDpiCtx    = user32.NewProc("GetAwarenessFromDpiAwarenessContext")
 
@@ -55,6 +56,7 @@ const (
 	smYVirtual         = 77
 	smCXVirtual        = 78
 	smCYVirtual        = 79
+	smCMonitors        = 80
 	srcCopy            = 0x00CC0020
 	captureBlt         = 0x40000000
 	dibRGBColors       = 0
@@ -157,11 +159,15 @@ func (Win) VisibleWindows() ([]VisibleWindow, error) {
 		if v, _, _ := pIsWindowVisible.Call(h); v == 0 {
 			continue
 		}
-		if ic, _, _ := pIsIconic.Call(h); ic != 0 {
-			continue
-		}
+		cls := make([]uint16, 256)
+		pGetClassNameW.Call(h, uintptr(unsafe.Pointer(&cls[0])), uintptr(len(cls)))
+		class := windows.UTF16ToString(cls)
+		// Minimized or hidden on another desktop: nothing to black out, but listed,
+		// because the taskbar and the task switchers can still show its preview.
 		var cloaked uint32
-		if hr, _, _ := pDwmGetWindowAttribute.Call(h, dwmwaCloaked, uintptr(unsafe.Pointer(&cloaked)), 4); hr == 0 && cloaked != 0 {
+		ic, _, _ := pIsIconic.Call(h)
+		if hr, _, _ := pDwmGetWindowAttribute.Call(h, dwmwaCloaked, uintptr(unsafe.Pointer(&cloaked)), 4); ic != 0 || (hr == 0 && cloaked != 0) {
+			out = append(out, VisibleWindow{Window: windowInfo(h), Handle: h, Class: class, Hidden: true})
 			continue
 		}
 		var rc winRect
@@ -173,7 +179,7 @@ func (Win) VisibleWindows() ([]VisibleWindow, error) {
 		if sure && rect.Empty() {
 			continue
 		}
-		out = append(out, VisibleWindow{Window: windowInfo(h), Handle: h, Rect: rect, Sure: sure})
+		out = append(out, VisibleWindow{Window: windowInfo(h), Handle: h, Rect: rect, Class: class, Sure: sure})
 	}
 	return out, nil
 }
@@ -222,6 +228,16 @@ func (w Win) Screenshot() ([]byte, error) {
 		return nil, err
 	}
 	return out.Bytes(), nil
+}
+
+// Layout reports the virtual-screen rectangle and the number of monitors.
+func (Win) Layout() (Layout, error) {
+	metric := func(i uintptr) int { r, _, _ := pGetSystemMetrics.Call(i); return int(int32(r)) }
+	x, y, w, h, n := metric(smXVirtual), metric(smYVirtual), metric(smCXVirtual), metric(smCYVirtual), metric(smCMonitors)
+	if w <= 0 || h <= 0 || n <= 0 {
+		return Layout{}, errors.New("capture: no screen area (no desktop in this session?)")
+	}
+	return Layout{Rect: image.Rect(x, y, x+w, y+h), Monitors: n}, nil
 }
 
 // ScreenImage captures all monitors as one image; origin is the virtual-screen

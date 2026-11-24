@@ -136,15 +136,25 @@ func TestRealWindowFoundAndCovered(t *testing.T) {
 		t.Fatalf("no blackout rectangle covers the patient window %v: %v", w.Rect, rects)
 	}
 
+	if w.Hidden || w.Class != "PhoneRunnerMaskTest" {
+		t.Fatalf("visible window marked hidden or wrong class: hidden=%v class=%q", w.Hidden, w.Class)
+	}
+
+	// Minimized: still listed (its taskbar preview can show it), marked hidden, and
+	// nothing to black out.
 	pShowWindow.Call(patient, swMinimize)
 	pump()
-	if _, ok := find(t, patient); ok {
-		t.Fatal("a minimized window was listed")
+	if m, ok := find(t, patient); !ok || !m.Hidden {
+		t.Fatalf("a minimized window must be listed as hidden: found=%v %+v", ok, m)
+	}
+	ws, _ = Win{}.VisibleWindows()
+	if _, n, pause := MaskPlan(ws, config.DefaultDenyRules()); pause != "" || n != 0 {
+		t.Fatalf("minimized patient window with no preview up: n=%d pause=%q", n, pause)
 	}
 	pShowWindow.Call(patient, swRestore)
 	pump()
-	if _, ok := find(t, patient); !ok {
-		t.Fatal("the restored window was not listed again")
+	if r, ok := find(t, patient); !ok || r.Hidden {
+		t.Fatal("the restored window was not listed as shown again")
 	}
 }
 
@@ -162,6 +172,13 @@ func TestRealScreenBlackOut(t *testing.T) {
 	img, origin, err := Win{}.ScreenImage()
 	if err != nil {
 		t.Skipf("no screen picture on this machine: %v", err)
+	}
+	lay, err := Win{}.Layout()
+	if err != nil || lay.Monitors < 1 {
+		t.Fatalf("Layout: %+v %v", lay, err)
+	}
+	if got := (image.Rectangle{Min: origin, Max: origin.Add(img.Rect.Size())}); got != lay.Rect {
+		t.Fatalf("picture %v does not match the monitor layout %v", got, lay.Rect)
 	}
 	r := w.Rect.Inset(-MaskMargin)
 	if err := BlackOut(img, origin, []image.Rectangle{r}); err != nil {
