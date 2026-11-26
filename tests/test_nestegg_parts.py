@@ -1915,15 +1915,17 @@ def test_pinned_models_checks_models_shipped_in_a_wheel_in_place_and_reports_an_
 
 
 def test_docling_rapidocr_pins_match_the_wheel_it_runs_from() -> None:
-    """The three models the installed reader loads are pinned (rapidocr 3.10.0 defaults); the v3.8.0 set is kept
-    as an unused pin, never a FAIL."""
+    """The three models the installed reader loads are pinned (rapidocr 3.10.0 defaults); the v3.8.0 set is placed
+    in RapidOcr/ for completeness (Decision 167), every file sha256-pinned, and the reader does not load it."""
     man = json.loads((NESTEGG / "models_pinned.json").read_text(encoding="utf-8"))
     dm = man["readers"]["Docling"]["models"]
     w = dm["rapidocr_wheel_models"]
     assert w["source"] == "package_bundled" and w["package_dir"] == {"package": "rapidocr", "sub": "models"}
     assert sorted(w["files"]) == ["PP-OCRv6_det_small.onnx", "PP-OCRv6_rec_small.onnx", "ch_ppocr_mobile_v2.0_cls_mobile.onnx"]
-    assert "unused_reason" in dm["rapidocr_models"] and "not_placed_reason" not in dm["rapidocr_models"]
-    assert w["requires_unset_env"] == ["DOCLING_ARTIFACTS_PATH"] and "DOCLING_ARTIFACTS_PATH is unset" in dm["rapidocr_models"]["unused_reason"]
+    r = dm["rapidocr_models"]
+    assert "unused_reason" not in r and "not_placed_reason" not in r and r["local_dir"]["default"] == "{models}/docling_artifacts/RapidOcr"
+    assert len(r["files"]) == 10 and all(len(f["sha256"]) == 64 and f["url"].endswith(p) for p, f in r["files"].items())
+    assert w["requires_unset_env"] == ["DOCLING_ARTIFACTS_PATH"]
     locks = (NESTEGG / "locks" / "SHA256SUMS_win_amd64.txt").read_text(encoding="utf-8")
     assert "2fc34e26cd0f48514804a94f8832283039c7334076bff60768b1fed9ad068050  rapidocr-3.10.0-py3-none-any.whl" in locks
 

@@ -1030,7 +1030,7 @@
           "pinned_in_code": true,
           "revision_source": "pinned in library code: docling v2.94.0 docling/models/stages/ocr/rapid_ocr_model.py:35-38 (_RAPIDOCR_MODELSCOPE_RELEASE = \"v3.8.0\", base https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve) and :40-55 (paths); download_models() fetches torch+onnxruntime x chinese+english (model_downloader.py with_rapidocr=True)",
           "license": "apache-2.0 (RapidOCR/PaddleOCR models; not read from a card)",
-          "file_selection": "the 10 distinct files docling download_models fetches (cls file shared by both languages)",
+          "file_selection": "the 10 distinct files docling download_models fetches (cls file shared by both languages). Not yet here: the two character lists and the font docling 2.94 rapid_ocr_model.py:37-71 also names (paddle/PP-OCRv4/rec/ch_PP-OCRv4_rec_mobile/ppocr_keys_v1.txt, paddle/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile/en_dict.txt, resources/fonts/FZYTK.TTF); they join once measured by download with ModelScope's listing as the second check",
           "files": {
             "onnx/PP-OCRv4/det/ch_PP-OCRv4_det_mobile.onnx": {
               "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.8.0/onnx/PP-OCRv4/det/ch_PP-OCRv4_det_mobile.onnx",
@@ -1093,7 +1093,10 @@
               "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py), two downloads agree; checked a second way: ModelScope's own file listing for RapidAI/RapidOCR at v3.8.0 gives the same sha256"
             }
           },
-          "unused_reason": "not loaded by the installed Docling reader while DOCLING_ARTIFACTS_PATH is unset (checked): it passes no artifacts_path (docling_runner.py builds RapidOcrOptions() with no model paths), so docling 2.94 hands RapidOCR empty paths and rapidocr 3.10.0 uses its own default models, shipped inside its wheel (see rapidocr_wheel_models). These v3.8.0 files are what docling's download_models / an artifacts folder would use; kept pinned and saved for that"
+          "local_dir": {
+            "default": "{models}/docling_artifacts/RapidOcr",
+            "where": "Decision 167 A + Jake 11/26 1:48 PM CT (\"those files are included in the installation\"): placed in docling's artifacts layout. Not loaded by the reader: it pins RapidOCR to the PP-OCRv6 models inside the rapidocr wheel (rapidocr_wheel_models), so OCR output is unchanged (package accounting lane, 11/26 1:53 PM)"
+          }
         },
         "rapidocr_wheel_models": {
           "source": "package_bundled",
