@@ -72,7 +72,11 @@ jobs:
             }
           }
           if ($bad) { Write-Host "FAIL: $bad pinned version(s) no longer offered by winget"; exit 1 }
-          $dry = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -DryRun *>&1 | Tee-Object -Variable d
+          # Each run's lines are also written to nestegg-ci\ one line at a time (outside the install folder, so the
+          # dry-run check is unchanged), so a hang or cancel still leaves its output for "Keep the logs" (Jake 11/26).
+          $ci = Join-Path $env:RUNNER_TEMP 'nestegg-ci'
+          New-Item -ItemType Directory -Force -Path $ci | Out-Null
+          $dry = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -DryRun *>&1 | ForEach-Object { Add-Content -LiteralPath (Join-Path $ci 'dry_run.log') -Value "$_"; $_ } | Tee-Object -Variable d
           if (Test-Path $root) { Write-Host 'FAIL: the dry run created the install folder'; exit 1 }
           # Tesseract (Jake 11/23 12:17 AM, A): fetch UB Mannheim's official release file, check it against the
           # fingerprint written in Install-Prereqs.ps1, and place it where the installer looks. A mismatch fails the job.
@@ -88,13 +92,13 @@ jobs:
           $tgot = (Get-FileHash -LiteralPath $tdest -Algorithm SHA256).Hash.ToLower()
           if ($tgot -ne $tsha) { Write-Host "FAIL: downloaded $tname sha256 $tgot is not the recorded $tsha"; exit 1 }
           Write-Host "  Tesseract installer fetched and matches the recorded sha256 $tsha"
-          $one = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -AssumeYes *>&1 | Tee-Object -Variable o
+          $one = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -AssumeYes *>&1 | ForEach-Object { Add-Content -LiteralPath (Join-Path $ci 'first_run.log') -Value "$_"; $_ } | Tee-Object -Variable o
           $v1 = ($o | Where-Object { "$_" -match '^NESTEGG-PREREQS: ' } | Select-Object -Last 1)
           Write-Host "first run: $v1"
           if ("$v1" -ne 'NESTEGG-PREREQS: PASS') { $o | ForEach-Object { Write-Host "  | $_" } }
           if ("$v1" -ne 'NESTEGG-PREREQS: PASS') { exit 1 }
           if (-not (Test-Path (Join-Path $root '.adastra\prereqs.json'))) { Write-Host 'FAIL: prereqs.json not written'; exit 1 }
-          $two = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root *>&1 | Tee-Object -Variable t
+          $two = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root *>&1 | ForEach-Object { Add-Content -LiteralPath (Join-Path $ci 'second_run.log') -Value "$_"; $_ } | Tee-Object -Variable t
           $v2 = ($t | Where-Object { "$_" -match '^NESTEGG-PREREQS: ' } | Select-Object -Last 1)
           if ("$v2" -ne 'NESTEGG-PREREQS: PASS') { Write-Host "FAIL: second run $v2"; exit 1 }
           if ($t | Where-Object { "$_" -match 'installing winget package' }) { Write-Host 'FAIL: second run installed something'; exit 1 }
@@ -105,8 +109,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nestegg-prereqs-logs
-          path: ${{ runner.temp }}/AdAstra/.adastra
+          # Leave out kept\ (the ~50 MB public Tesseract installer, already pinned by sha256 in
+          # Install-Prereqs.ps1); the log and prereqs.json are the only content unique to a run.
+          path: |
+            ${{ runner.temp }}/AdAstra/.adastra
+            ${{ runner.temp }}/nestegg-ci
+            !${{ runner.temp }}/AdAstra/.adastra/kept
           include-hidden-files: true
+          retention-days: 60  # Jake 11/26 11:44 AM CT, Decision 166: "60 days is probably the minimum" (new saves only)
 
   htrlens-models:
     # Jake 11/21: every install includes the HtrLens model files and fails loudly without them.
@@ -208,8 +218,9 @@ jobs:
     # numpy / pydantic-core / charset-normalizer to Python 3.13 environments, with pip in --no-index mode. The private
     # release cannot be read here, so this job rebuilds the same situation with a home copy holding EVERY Windows file
     # the lists name (cp312 and cp313 alike, from PyPI, sha256-checked), then installs each list into a fresh Python
-    # 3.13 environment: first with main's installer (must FAIL: the reproduction), then with this branch's (must PASS
-    # with pip check clean).
+    # 3.13 environment: first with the installer as it was just before #104 (commit 94a3930, #103; must FAIL: the
+    # reproduction and this job's negative control), then with this branch's (must PASS with pip check clean). The
+    # reproduction is pinned to that commit, not main: since #104 merged, main carries the fix and would pass.
     runs-on: windows-latest
     timeout-minutes: 75
     steps:
@@ -218,12 +229,12 @@ jobs:
           path: src/atrium
       - uses: actions/checkout@v4
         with:
-          ref: main
-          path: src/atrium_main
+          ref: 94a39300da6c0601cba0990c90654a70face81f5  # 94a3930 (#103), the last commit before #104; never main
+          path: src/atrium_pre104
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Home copy, then main's installer (must fail), then this branch's (must pass)
+      - name: Home copy, then the pre-#104 installer (must fail), then this branch's (must pass)
         shell: powershell
         run: |
           $ErrorActionPreference = 'Continue'
@@ -231,10 +242,10 @@ jobs:
           $root = Join-Path $env:RUNNER_TEMP 'AdAstra'
           python -I $h home --root $root *>&1 | Tee-Object -Variable hc
           if ($LASTEXITCODE -ne 0) { Write-Host 'FAIL: home copy not built'; exit 1 }
-          python -I $h install --root $root --tag main --installer 'src\atrium_main\tools\nestegg\install_parts.py' *>&1 | Tee-Object -Variable old
+          python -I $h install --root $root --tag pre104 --installer 'src\atrium_pre104\tools\nestegg\install_parts.py' *>&1 | Tee-Object -Variable old
           $ov = "$(($old | Where-Object { "$_" -match '^SAVED-COPY-INSTALL: ' } | Select-Object -Last 1))"
-          if ($ov -notmatch '^SAVED-COPY-INSTALL: FAIL') { Write-Host "FAIL: main's installer did not reproduce the PC failure ($ov)"; exit 1 }
-          Write-Host "reproduced with main's installer: $ov"
+          if ($ov -notmatch '^SAVED-COPY-INSTALL: FAIL') { Write-Host "FAIL: the pre-#104 installer (94a3930) did not reproduce the PC failure ($ov)"; exit 1 }
+          Write-Host "reproduced with the pre-#104 installer (94a3930): $ov"
           python -I $h install --root $root --tag fixed --installer 'src\atrium\tools\nestegg\install_parts.py' *>&1 | Tee-Object -Variable new
           $nv = "$(($new | Where-Object { "$_" -match '^SAVED-COPY-INSTALL: ' } | Select-Object -Last 1))"
           if ($nv -notmatch '^SAVED-COPY-INSTALL: PASS \d+$') { Write-Host "FAIL: fixed installer: $nv"; exit 1 }
