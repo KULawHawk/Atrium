@@ -107,7 +107,7 @@ jobs:
           name: nestegg-prereqs-logs
           path: ${{ runner.temp }}/AdAstra/.adastra
           include-hidden-files: true
-          # retention-days: 14   # OFF: waits on Jake's Decision 166; uncomment only on his yes
+          retention-days: 60  # Jake 11/26 11:44 AM CT, Decision 166: "60 days is probably the minimum" (new saves only)
 
   htrlens-models:
     # Jake 11/21: every install includes the HtrLens model files and fails loudly without them.
