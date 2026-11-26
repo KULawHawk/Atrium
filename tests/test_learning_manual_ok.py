@@ -48,10 +48,13 @@ def test_withdraw_moves_items_aside(root, tmp_path, capsys):
     f.add(item(tmp_path), "M", "A manual [aaa]", "jake")
     args = ["--list", str(lst(tmp_path, "A manual [aaa]", "Z never [zzz]")), "--by", "jake", "--withdraw",
             "--root", str(root)]
-    assert main(args) == 0
+    assert main(args) == 1  # an id with no OK ever recorded is a FAIL (a typo must not PASS); the rest still go
     out = capsys.readouterr().out
-    assert "ALREADY withdrawn Z never [zzz]" in out and "items_moved_aside=1" in out
+    assert "NOT FOUND Z never [zzz]" in out and "items_moved_aside=1" in out
+    assert out.strip().endswith("not_found=1") and "MANUAL-OK: FAIL" in out
     assert f.approved() == []
+    assert main(["--list", str(lst(tmp_path, "A manual [aaa]")), "--by", "jake", "--withdraw", "--root", str(root)]) == 0
+    assert "ALREADY withdrawn A manual [aaa]" in capsys.readouterr().out  # withdrawn before: still a PASS
 
 
 @pytest.mark.parametrize(

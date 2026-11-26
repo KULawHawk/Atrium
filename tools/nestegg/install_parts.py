@@ -358,6 +358,18 @@ def _test_env(rep: Report, part: dict, repo: Path, envs: Path, log: Path, done: 
     return py
 
 
+def list_is_measured(status: str) -> bool:
+    """README rule 5: a reader's list PASSes when it is MATCHED or MEASURED; the two are EQUIVALENT for passing
+    (Jake 11/23 10:13 PM CT, Decision 80: "Yes and make sure it's clear they're the equivalent"). LIST_STATUS.txt writes them as
+    MATCHED (copied from a measured pod freeze) and "MEASURED in proof run <run> ... this list equals that run's freeze
+    exactly". MEASURED counts only in that full form, so a hedged status ("MEASURED?", "MEASURED, partly") never
+    passes. An empty list on purpose has nothing to measure. Anything else (resolved today, kit recipe) is not
+    measured."""
+    if status.startswith(("MATCHED", "empty on purpose")):
+        return True
+    return status.startswith("MEASURED in proof run ") and "this list equals that run's freeze exactly" in status
+
+
 def list_status(name: str) -> str:
     for ln in (LOCKS / "LIST_STATUS.txt").read_text(encoding="utf-8").splitlines():
         if ln.startswith(name + ":"):
@@ -393,23 +405,58 @@ def _saved_say(m: str, fh) -> None:
         print(f"{'WARN':<5} {'saved copy changed':<30} {m[6:].strip()}", flush=True)
 
 
-def saved_wheelhouse(lines: list[str], wheelhouse: Path, log: Path) -> tuple[Path | None, bool]:
+def target_tags(py: Path) -> list[str] | None:
+    """The wheel tags the environment's OWN interpreter accepts, best first (pip's vendored packaging, so nothing
+    extra is installed). None if they cannot be read: the saved copies are then not used for that environment."""
+    try:
+        r = subprocess.run([str(py), "-I", "-c", "from pip._vendor.packaging.tags import sys_tags\n"
+                            "print('\\n'.join(str(t) for t in sys_tags()))"], capture_output=True, text=True)
+    except OSError:
+        return None
+    tags = [t.strip() for t in r.stdout.splitlines() if t.strip()] if r.returncode == 0 else []
+    return tags or None
+
+
+def wheel_rank(fn: str, rank: dict[str, int]) -> int | None:
+    """Where a file stands in the interpreter's tag order (lower is better); None if that interpreter cannot use it.
+    A wheel's tags are py-abi-plat, each part possibly dotted (py2.py3); an sdist ranks after every wheel."""
+    if not fn.endswith(".whl"):
+        return len(rank) if fn.endswith((".tar.gz", ".zip")) else None
+    parts = fn[:-4].split("-")
+    if len(parts) < 5:
+        return None
+    pys, abis, plats = parts[-3].split("."), parts[-2].split("."), parts[-1].split(".")
+    got = [rank[f"{a}-{b}-{c}"] for a in pys for b in abis for c in plats if f"{a}-{b}-{c}" in rank]
+    return min(got) if got else None
+
+
+def saved_wheelhouse(lines: list[str], wheelhouse: Path, log: Path, py: Path) -> tuple[Path | None, bool]:
     """Decision 30 A: take each locked file from the saved copies first (home, then the private release), into a
     wheelhouse with its real name. Returns (wheelhouse or None, every file found). Files not found come from the
-    original index inside pip, still under --require-hashes; nothing is ever taken without its measured hash."""
+    original index inside pip, still under --require-hashes; nothing is ever taken without its measured hash.
+    Per requirement the file taken is the one the environment's own Python accepts best (its tags, read from that
+    interpreter): the lists carry every platform's files, and a file built for another Python (cp312 for a 3.13
+    environment, PC install 11/23 11:03 PM CT) must never be the only copy offered to pip with --no-index.
+    A requirement with no usable saved file counts as not found, so pip may still reach the index for it."""
     sc = _saved_copies()
     cfg = sc.load_config()
     locs = [loc for loc in cfg["locations"] if loc["kind"] != "origin"]
     root = INSTALL_ROOT.get("root") or wheelhouse.parent
     if not sc.usable(locs, root):
         return None, False
+    tags = target_tags(py)
+    if tags is None:
+        with log.open("a", encoding="utf-8") as fh:
+            fh.write(f"saved copies not used: the wheel tags of {py} could not be read\n")
+        return None, False
+    rank = {t: i for i, t in enumerate(tags)}
     names = saved_file_names()
     want: dict[str, str] = {}
     for ln in lines:
         hs = re.findall(r"--hash=sha256:([0-9a-f]{64})", ln)
-        got = [h for h in hs if h in names]
-        if got:
-            want[got[0]] = names[got[0]]  # one platform file per requirement is enough for pip
+        fits = sorted((r, h) for h in hs if h in names and (r := wheel_rank(names[h], rank)) is not None)
+        if fits:
+            want[fits[0][1]] = names[fits[0][1]]  # the best file this interpreter accepts; one per requirement
     found = 0
     with log.open("a", encoding="utf-8") as fh:
         for h, fn in sorted(want.items()):
@@ -424,7 +471,7 @@ def locked_install(py: Path, lines: list[str], lockfile: Path, log: Path) -> int
     if not lines:  # a part with no outside packages (an empty known-good list)
         return 0
     lockfile.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    wh, complete = saved_wheelhouse(lines, lockfile.parent.parent / "_wheelhouse", log)
+    wh, complete = saved_wheelhouse(lines, lockfile.parent.parent / "_wheelhouse", log, py)
     extra = (["--no-index"] if complete else []) + (["--find-links", str(wh)] if wh else [])
     return run([py, "-m", "pip", "install", "--require-hashes", "--no-deps", *extra, "-r", lockfile], log)
 
@@ -641,8 +688,9 @@ def _build_env(rep: Report, part: dict, src: Path, envs: Path, env: Path, log: P
     #                   a reader's unpinned model or a missing program is about the machine, not this environment
     status = list_status(f"{name}_py{part['python']}.txt")
     done = f"installed {len(lines)} locked packages (hash-checked) + its own source; pip check clean"
-    if status.startswith("MATCHED") or status.startswith("empty on purpose"):
-        rep.row("PASS", name, f"{done}; list measured ({status.split('(')[0].strip()})")
+    if list_is_measured(status):
+        rep.row("PASS", name, f"{done}; list measured ({status.split('(')[0].strip()}; MATCHED and MEASURED are "
+                              "equivalent for passing)")
     elif is_reader(part):
         rep.row("HOLD", name, f"{done}; locked, not measured: {status}")
     else:

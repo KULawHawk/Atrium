@@ -397,10 +397,26 @@ def _split_name(name: str) -> tuple[str, int] | None:
     return base, int(ver)
 
 
+class DuplicateKeyError(ValueError):
+    """A JSON object names the same key twice."""
+
+
+def _one_spelling(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """A JSON object whose keys are each named once. ``json.loads`` keeps the LAST of a repeated key, so a
+    registry carrying two ``sha256`` values for one contract read as the second while a reviewer of the diff
+    could take the first for the pin (hunt 2026-11-24): refused instead."""
+    obj: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in obj:
+            raise DuplicateKeyError(f"the key {key!r} appears twice in one object")
+        obj[key] = value
+    return obj
+
+
 def load_registry(path: Path) -> dict[str, Any]:
     try:
-        reg = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        reg = json.loads(Path(path).read_text(encoding="utf-8"), object_pairs_hook=_one_spelling)
+    except (OSError, json.JSONDecodeError, DuplicateKeyError) as exc:
         raise RegistryError(f"{path}: {exc}") from exc
     problems = validate_registry(reg)
     if problems:
@@ -459,7 +475,7 @@ def resolve_checkouts(
 
 
 def _load_json(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_one_spelling)
 
 
 # --------------------------------------------------------------------------- check
@@ -604,7 +620,7 @@ def _check_contract(report: Report, c: Mapping[str, Any], root: Path) -> Any:
         )
     try:
         doc = _load_json(path)
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError, DuplicateKeyError) as exc:
         report.add("error", "JSON_INVALID", name, f"{c['path']}: {exc}")
         return None
 
@@ -700,7 +716,7 @@ def _check_mirror(report: Report, reg: Mapping[str, Any], mi: Mapping[str, Any],
     if manifest_path.is_file():
         try:
             manifest = _load_json(manifest_path)
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        except (json.JSONDecodeError, UnicodeDecodeError, DuplicateKeyError) as exc:
             report.add("warn", "MIRROR_MANIFEST", subj, f"{mi['manifest']}: {exc}")
         else:
             pinned = manifest.get("upstream_commit") if isinstance(manifest, dict) else None

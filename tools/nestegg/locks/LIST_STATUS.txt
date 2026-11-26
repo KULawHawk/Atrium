@@ -1,4 +1,6 @@
 # Status of each list (11/22/2026). Only a list matched line for line to a pod freeze may be called MEASURED (known-good).
+# MATCHED and MEASURED are EQUIVALENT for passing (Jake, Decision 80, 11/23): the installer passes a reader on either; MEASURED counts
+# only in its full form "MEASURED in proof run ... this list equals that run's freeze exactly". Any other status is not measured (HOLD).
 # Built at Conclave main 0f03c13 with the calibration kit's own recipe (POD_CALIB_GPU_v5.sh): torch 2.6.0 + torchvision 0.21.0 for every
 # torch reader, torch 2.4.1 + torchvision 0.19.1 on Python 3.12 for HtrLens, the gate-3 pins for Docling and TableSurgeon, six 1.17.0 for
 # MarkerPdf and MinerU, the kit's engine pins. Packages the kit did not pin were resolved today.
@@ -89,3 +91,12 @@ All four rebuilt lists pass uv pip check. Every added wheel was already saved (t
 11/22 4:40 PM CT: betacal==1.1.0 added to _test_env_lens_roster, _test_env_workbench, apexbridge, harness_adapters, launcher, sequoia_bridge (each installs votingengine; betacal required per PA-3, #2910). scikit-learn 1.9.1 / numpy already present in each.
 
 2026-11-22 5:20 PM CT: packaging==26.3 added to Adjudicator, Hierarchy, HtrHosted, MarkerPdf, OcrPaddle, PdfText, StructuredHeuristic, VisionClaude (installer request: the per-reader pre-run check needs it). Wheel already in the backup (packaging-26.3-py3-none-any.whl). These eight are HOLD until their tests pass on the new list.
+
+11/23 ~10:20 PM CT (PC-C cloud rehearsal finding): workbench and _test_env_workbench gain argon2-cffi 25.1.0 + argon2-cffi-bindings 26.2.0
+(obsidian's own pins; both wheels already in SHA256SUMS). Since Conclave #2953 the Workbench imports obsidian.unlock -> obsidian.store ->
+obsidian.kdf -> argon2; without it the installer's Workbench Run-button check ("No module named 'argon2'") and the Workbench's own tests
+fail, so harness.reader_envs can never be turned on. cffi and pycparser were already in both lists. Labels unchanged.
+
+11/23 ~11:35 PM CT (PC-C Windows saved-copy proof, Atrium #104): _test_tools gains colorama 0.4.6. pytest 9.2.0 requires it on Windows
+(sys_platform == "win32"), so a Windows env with this list failed pip check ("pytest 9.2.0 requires colorama, which is not installed").
+Already pinned in workbench / _test_env_workbench / observatory and in SHA256SUMS (colorama-0.4.6-py2.py3-none-any.whl). Label unchanged.

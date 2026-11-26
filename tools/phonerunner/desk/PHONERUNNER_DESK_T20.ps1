@@ -29,7 +29,8 @@
 # -SelfTestRoot <folder> is for the Windows test machine only (tools/phonerunner Go test): it
 # skips steps 1-8, uses <folder> instead of C:\ProgramData\PhoneRunner, takes its answers from
 # <folder>\selftest\answers.txt instead of the keyboard, and marks every result SELFTEST.
-# Nothing is deleted. Test items stay in the inbox (you can remove them later if you decide to).
+# Nothing is deleted. Today's test items stay in the inbox; older T-20 test items are moved to
+# <root>\old-test-items so the phone page shows only today's (you can remove them later if you decide to).
 param([switch]$DryRun, [switch]$Elevated, [string]$SelfTestRoot = '', [int]$SelfTestTlsPort = 0)
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -550,8 +551,27 @@ $canary = Join-Path $Root 'private\t20_canary.txt'
 if (-not (Test-Path -LiteralPath $canary)) { [System.IO.File]::WriteAllText($canary, 'T-20 canary (synthetic). If you can read this through the inbox, the hard-link check failed.') }
 New-Item -ItemType HardLink -Path (Join-Path $linkDir 'data.txt') -Target $canary | Out-Null
 Say "PASS staged 3 synthetic items: $id500, $idEnv, $idLink"
-$old = @(Get-ChildItem -LiteralPath (Join-Path $Root 'inbox') -Directory -Filter 't20-*' | Where-Object { $_.Name -notlike "*-$stamp" })
-if ($old.Count -gt 0) { Say "INFO $($old.Count) older T-20 test items are still on the phone page (not deleted). Tap only the ones ending in -$stamp." }
+# Only items this script made: a t20- name AND item.json claimed_by the T-20 desk test.
+function Test-OwnTestItem($d) {
+  try { return ((Get-Content -Raw -LiteralPath (Join-Path $d.FullName 'item.json') | ConvertFrom-Json).claimed_by -eq 'T-20 desk test (synthetic)') } catch { return $false }
+}
+$old = @(Get-ChildItem -LiteralPath (Join-Path $Root 'inbox') -Directory -Filter 't20-*' | Where-Object { $_.Name -notlike "*-$stamp" -and (Test-OwnTestItem $_) })
+# Older T-20 test items (synthetic, made by this script) move out of the inbox so the phone shows
+# only today's three. Moved, not deleted: they wait in old-test-items and can be moved back.
+if ($old.Count -gt 0) {
+  $oldDir = Join-Path $Root 'old-test-items'
+  New-Item -ItemType Directory -Force -Path $oldDir | Out-Null
+  $moved = 0
+  foreach ($o in $old) {
+    # Move-Item into an existing folder of the same name would nest it: pick a free name instead.
+    $to = Join-Path $oldDir $o.Name
+    if (Test-Path -LiteralPath $to) { $to = Join-Path $oldDir ($o.Name + '-moved-' + (Get-Date -Format 'yyyyMMddHHmmss')) }
+    try { Move-Item -LiteralPath $o.FullName -Destination $to -ErrorAction Stop; $moved++ }
+    catch { Say "INFO could not move older test item $($o.Name) ($($_.Exception.Message)); it stays on the phone page" }
+  }
+  if ($moved -gt 0) { Say "INFO moved $moved older T-20 test item(s) off the phone page into $oldDir (not deleted)" }
+  if ($moved -lt $old.Count) { Say "INFO tap only the items ending in -$stamp" }
+}
 
 # 9a 500 lines
 try {
@@ -637,13 +657,13 @@ try {
 
 # 9c hard link refused
 try {
-  Ask "On your phone: reload, open '$idLink' (ends in -$stamp). It should list a problem for data.txt and Run should be refused. Try tapping Run once. Then press Enter here."
+  Ask "On your phone: reload, open '$idLink' (ends in -$stamp). It should list a problem for data.txt, and its Run button should be greyed out. Try tapping Run once: if nothing happens, that is the pass. Then press Enter here."
   [void](Read-Answer)
   if (@(Get-ChildItem -LiteralPath (Join-Path $Root 'approved') -Directory -Filter "$idLink-*").Count -ne 0) { throw "STEP: an approved copy of $idLink was made: the hard-link check did not stop it" }
   if (@(Get-Events $start | Where-Object { $_.event -eq 'run.started' -and $_.item -eq $idLink }).Count -ne 0) { throw "STEP: $idLink was started" }
   Say "PASS $idLink was not copied or started (hard link refused)"
   $yn = ''
-  Ask "What did the phone show for '$idLink'? Type Y if it listed a problem for data.txt and refused Run, N if not"
+  Ask "What did the phone show for '$idLink'? Type Y if it listed a problem for data.txt and Run was greyed out or did nothing, N if Run started"
   for ($try = 1; $try -le 5 -and $yn -ne 'Y' -and $yn -ne 'N'; $try++) {
     if ($try -gt 1) { Ask "Please type Y or N, then press Enter" }
     $yn = "$(Read-Answer)".Trim().ToUpper()

@@ -108,6 +108,25 @@ func TestT20DeskSelfTest(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// A test item left from an earlier T-20 run: the script must move it off the phone page
+	// (into old-test-items), not delete it.
+	oldItem := filepath.Join(root, "inbox", "t20-500-01010000")
+	if err := os.MkdirAll(oldItem, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(oldItem, "item.json"), []byte(`{"title":"T-20 test: print 500 lines","claimed_by":"T-20 desk test (synthetic)","entry":"run.ps1","estimate_time":"under 1 minute","estimate_cost":"$0"}`), 0o644)
+	os.WriteFile(filepath.Join(oldItem, "run.ps1"), []byte("'old'\r\n"), 0o644)
+	// One already in old-test-items under the same name (the move must not nest into it), and a
+	// t20- named item someone else staged (must stay in the inbox).
+	if err := os.MkdirAll(filepath.Join(root, "old-test-items", "t20-500-01010000"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(root, "inbox", "t20-500-01020000")
+	if err := os.MkdirAll(other, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(other, "item.json"), []byte(`{"title":"not ours","claimed_by":"someone else","entry":"run.ps1","estimate_time":"under 1 minute","estimate_cost":"$0"}`), 0o644)
+	os.WriteFile(filepath.Join(other, "run.ps1"), []byte("'other'\r\n"), 0o644)
 	// The service log as the desk script reads it: one start that failed to join
 	// Tailscale, then a restart (seq counts from 1 again) that is listening.
 	old, err := store.Open(root)
@@ -216,6 +235,18 @@ loop:
 	last := strings.TrimSpace(lines[len(lines)-1])
 	t.Logf("RESULT LAST LINE: %s", last)
 
+	if _, err := os.Stat(oldItem); !os.IsNotExist(err) {
+		t.Errorf("the older test item is still in the inbox (%v)", err)
+	}
+	if m, _ := filepath.Glob(filepath.Join(root, "old-test-items", "t20-500-01010000-moved-*", "run.ps1")); len(m) != 1 {
+		t.Errorf("the older test item was not kept in old-test-items under a free name: %v", m)
+	}
+	if m, _ := filepath.Glob(filepath.Join(root, "old-test-items", "t20-500-01010000", "*")); len(m) != 0 {
+		t.Errorf("the move nested into the existing folder: %v", m)
+	}
+	if _, err := os.Stat(filepath.Join(other, "run.ps1")); err != nil {
+		t.Errorf("an item not made by the desk test was moved: %v", err)
+	}
 	if !errors.Is(linkRefusal, control.ErrNotRunnable) {
 		t.Errorf("the hard-link item was not refused as not runnable: %v", linkRefusal)
 	}
@@ -230,6 +261,7 @@ loop:
 		"PASS Stop ended t20-env-", "and its child process",
 		"was not copied or started (hard link refused)",
 		"Please type Y or N", "PASS phone showed the hard-link problem",
+		"INFO moved 1 older T-20 test item(s) off the phone page",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("result is missing %q", want)
