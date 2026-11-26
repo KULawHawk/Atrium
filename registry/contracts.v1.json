@@ -16,7 +16,7 @@
     "conclave": {
       "repo": "KULawHawk/Conclave",
       "dir": "Conclave",
-      "pinned_commit": "b80edc6",
+      "pinned_commit": "d014256",
       "contract_dirs": []
     },
     "locutus": {
@@ -38,7 +38,7 @@
     "sequoia": {
       "repo": "KULawHawk/Sequoia",
       "dir": "Sequoia",
-      "pinned_commit": "dedfa0d",
+      "pinned_commit": "b487fd7",
       "contract_dirs": [
         "sequoia/integration/contracts"
       ]
