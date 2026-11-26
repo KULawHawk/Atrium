@@ -791,7 +791,7 @@
     },
     "Docling": {
       "lens": "conclave_lens_docling",
-      "env": "Docling (docling==2.94.0, docling-ibm-models==3.13.3)",
+      "env": "Docling (docling==2.94.0, docling-ibm-models==3.15.0)",
       "where_loaded": "{install}/envs/_models/docling_artifacts via atrium tools/nestegg/install_parts.py:703-707 (docling.utils.model_downloader.download_models defaults). NOTE: the lens itself does not pass artifacts_path (docling_runner.py:526-529), so at run time docling resolves models through the HF cache - see REPORT open problems",
       "models": {
         "docling_layout_heron": {

@@ -7,7 +7,7 @@
 
 Adjudicator_py3.13.txt: RESOLVED TODAY, NOT MEASURED (declared install; no calibration freeze exists)
 ColPaliVerify_py3.13.txt: MATCHED to pod freeze pod2_20261121-151703__freeze_ColPaliVerify.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
-Docling_py3.13.txt: MATCHED to pod freeze 20261119-182018-quick__freeze_Docling.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
+Docling_py3.13.txt: DECIDED PIN, NOT MEASURED: pod freeze 20261119-182018-quick__freeze_Docling.txt (exact pod versions copied in) except docling-ibm-models 3.13.3 -> 3.15.0 (Jake 11/24, Decision 142; conclave_lens_docling pyproject pins ==3.15.0), so the list no longer equals that freeze and the part is HOLD until the Decision 142 Docling run-through freeze matches it line for line. torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
 FormFieldLens_py3.13.txt: MATCHED to pod freeze pod2_20261121-151703__freeze_FormFieldLens.txt (exact pod versions copied in). torch/torchvision are +cu124 files from download.pytorch.org: NOT hash-locked until the pod post-step records their hashes
 FormulaLens_py3.13.txt: KIT RECIPE, resolved today, NOT matched to a pod freeze (ran on pod 1, whose freezes were never copied home and are gone)
 GlmOcr_py3.13.txt: MEASURED in proof run 20261122-shard3 (Conclave 0f03c13; the reader read the synthetic page and passed; this list equals that run's freeze exactly); numpy back to 2.5.5 as measured (no locutus code in this reader)
