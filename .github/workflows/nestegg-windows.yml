@@ -72,7 +72,11 @@ jobs:
             }
           }
           if ($bad) { Write-Host "FAIL: $bad pinned version(s) no longer offered by winget"; exit 1 }
-          $dry = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -DryRun *>&1 | Tee-Object -Variable d
+          # Each run's lines are also written to nestegg-ci\ one line at a time (outside the install folder, so the
+          # dry-run check is unchanged), so a hang or cancel still leaves its output for "Keep the logs" (Jake 11/26).
+          $ci = Join-Path $env:RUNNER_TEMP 'nestegg-ci'
+          New-Item -ItemType Directory -Force -Path $ci | Out-Null
+          $dry = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -DryRun *>&1 | ForEach-Object { Add-Content -LiteralPath (Join-Path $ci 'dry_run.log') -Value "$_"; $_ } | Tee-Object -Variable d
           if (Test-Path $root) { Write-Host 'FAIL: the dry run created the install folder'; exit 1 }
           # Tesseract (Jake 11/23 12:17 AM, A): fetch UB Mannheim's official release file, check it against the
           # fingerprint written in Install-Prereqs.ps1, and place it where the installer looks. A mismatch fails the job.
@@ -88,13 +92,13 @@ jobs:
           $tgot = (Get-FileHash -LiteralPath $tdest -Algorithm SHA256).Hash.ToLower()
           if ($tgot -ne $tsha) { Write-Host "FAIL: downloaded $tname sha256 $tgot is not the recorded $tsha"; exit 1 }
           Write-Host "  Tesseract installer fetched and matches the recorded sha256 $tsha"
-          $one = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -AssumeYes *>&1 | Tee-Object -Variable o
+          $one = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root -AssumeYes *>&1 | ForEach-Object { Add-Content -LiteralPath (Join-Path $ci 'first_run.log') -Value "$_"; $_ } | Tee-Object -Variable o
           $v1 = ($o | Where-Object { "$_" -match '^NESTEGG-PREREQS: ' } | Select-Object -Last 1)
           Write-Host "first run: $v1"
           if ("$v1" -ne 'NESTEGG-PREREQS: PASS') { $o | ForEach-Object { Write-Host "  | $_" } }
           if ("$v1" -ne 'NESTEGG-PREREQS: PASS') { exit 1 }
           if (-not (Test-Path (Join-Path $root '.adastra\prereqs.json'))) { Write-Host 'FAIL: prereqs.json not written'; exit 1 }
-          $two = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root *>&1 | Tee-Object -Variable t
+          $two = powershell -NoProfile -ExecutionPolicy Bypass -File $f -InstallRoot $root *>&1 | ForEach-Object { Add-Content -LiteralPath (Join-Path $ci 'second_run.log') -Value "$_"; $_ } | Tee-Object -Variable t
           $v2 = ($t | Where-Object { "$_" -match '^NESTEGG-PREREQS: ' } | Select-Object -Last 1)
           if ("$v2" -ne 'NESTEGG-PREREQS: PASS') { Write-Host "FAIL: second run $v2"; exit 1 }
           if ($t | Where-Object { "$_" -match 'installing winget package' }) { Write-Host 'FAIL: second run installed something'; exit 1 }
@@ -109,6 +113,7 @@ jobs:
           # Install-Prereqs.ps1); the log and prereqs.json are the only content unique to a run.
           path: |
             ${{ runner.temp }}/AdAstra/.adastra
+            ${{ runner.temp }}/nestegg-ci
             !${{ runner.temp }}/AdAstra/.adastra/kept
           include-hidden-files: true
           retention-days: 60  # Jake 11/26 11:44 AM CT, Decision 166: "60 days is probably the minimum" (new saves only)
