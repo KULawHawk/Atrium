@@ -105,7 +105,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nestegg-prereqs-logs
-          path: ${{ runner.temp }}/AdAstra/.adastra
+          # Leave out kept\ (the ~50 MB public Tesseract installer, already pinned by sha256 in
+          # Install-Prereqs.ps1); the log and prereqs.json are the only content unique to a run.
+          path: |
+            ${{ runner.temp }}/AdAstra/.adastra
+            !${{ runner.temp }}/AdAstra/.adastra/kept
           include-hidden-files: true
           retention-days: 60  # Jake 11/26 11:44 AM CT, Decision 166: "60 days is probably the minimum" (new saves only)
 
