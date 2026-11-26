@@ -107,6 +107,7 @@ jobs:
           name: nestegg-prereqs-logs
           path: ${{ runner.temp }}/AdAstra/.adastra
           include-hidden-files: true
+          # retention-days: 14   # OFF: waits on Jake's Decision 166; uncomment only on his yes
 
   htrlens-models:
     # Jake 11/21: every install includes the HtrLens model files and fails loudly without them.
@@ -208,8 +209,9 @@ jobs:
     # numpy / pydantic-core / charset-normalizer to Python 3.13 environments, with pip in --no-index mode. The private
     # release cannot be read here, so this job rebuilds the same situation with a home copy holding EVERY Windows file
     # the lists name (cp312 and cp313 alike, from PyPI, sha256-checked), then installs each list into a fresh Python
-    # 3.13 environment: first with main's installer (must FAIL: the reproduction), then with this branch's (must PASS
-    # with pip check clean).
+    # 3.13 environment: first with the installer as it was just before #104 (commit 94a3930, #103; must FAIL: the
+    # reproduction and this job's negative control), then with this branch's (must PASS with pip check clean). The
+    # reproduction is pinned to that commit, not main: since #104 merged, main carries the fix and would pass.
     runs-on: windows-latest
     timeout-minutes: 75
     steps:
@@ -218,12 +220,12 @@ jobs:
           path: src/atrium
       - uses: actions/checkout@v4
         with:
-          ref: main
-          path: src/atrium_main
+          ref: 94a39300da6c0601cba0990c90654a70face81f5  # 94a3930 (#103), the last commit before #104; never main
+          path: src/atrium_pre104
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Home copy, then main's installer (must fail), then this branch's (must pass)
+      - name: Home copy, then the pre-#104 installer (must fail), then this branch's (must pass)
         shell: powershell
         run: |
           $ErrorActionPreference = 'Continue'
@@ -231,10 +233,10 @@ jobs:
           $root = Join-Path $env:RUNNER_TEMP 'AdAstra'
           python -I $h home --root $root *>&1 | Tee-Object -Variable hc
           if ($LASTEXITCODE -ne 0) { Write-Host 'FAIL: home copy not built'; exit 1 }
-          python -I $h install --root $root --tag main --installer 'src\atrium_main\tools\nestegg\install_parts.py' *>&1 | Tee-Object -Variable old
+          python -I $h install --root $root --tag pre104 --installer 'src\atrium_pre104\tools\nestegg\install_parts.py' *>&1 | Tee-Object -Variable old
           $ov = "$(($old | Where-Object { "$_" -match '^SAVED-COPY-INSTALL: ' } | Select-Object -Last 1))"
-          if ($ov -notmatch '^SAVED-COPY-INSTALL: FAIL') { Write-Host "FAIL: main's installer did not reproduce the PC failure ($ov)"; exit 1 }
-          Write-Host "reproduced with main's installer: $ov"
+          if ($ov -notmatch '^SAVED-COPY-INSTALL: FAIL') { Write-Host "FAIL: the pre-#104 installer (94a3930) did not reproduce the PC failure ($ov)"; exit 1 }
+          Write-Host "reproduced with the pre-#104 installer (94a3930): $ov"
           python -I $h install --root $root --tag fixed --installer 'src\atrium\tools\nestegg\install_parts.py' *>&1 | Tee-Object -Variable new
           $nv = "$(($new | Where-Object { "$_" -match '^SAVED-COPY-INSTALL: ' } | Select-Object -Last 1))"
           if ($nv -notmatch '^SAVED-COPY-INSTALL: PASS \d+$') { Write-Host "FAIL: fixed installer: $nv"; exit 1 }
