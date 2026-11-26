@@ -1113,7 +1113,7 @@ def _mineru_config(snapshot: Path, envs: Path, log: Path) -> tuple[str, str]:
                     f"(models_download exit {rc}; models-dir.pipeline = {pdir}); the MinerU reader would not find it (see {log})")
 
 
-PLACEABLE = ("huggingface", "github_release", "datalab_cdn")
+PLACEABLE = ("huggingface", "github_release", "datalab_cdn", "modelscope")  # modelscope: Decision 167 (RapidOcr/), every file sha256-pinned from its published listing
 
 
 def _settings_dir(envs: Path, sd: dict, log: Path) -> Path | None:
@@ -1190,10 +1190,11 @@ def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, lo
             continue
         if m.get("source") == "package_bundled":  # shipped inside a locked wheel: checked in place below
             continue
-        if m.get("source") not in PLACEABLE or m.get("not_placed_reason"):
+        if m.get("source") not in PLACEABLE or m.get("not_placed_reason") or m.get("unmeasured_reason"):
             rep.row("FAIL", label, f"{', '.join(sorted(m.get('files') or {})[:2]) or m.get('source')}...: from "
                     f"{m.get('source')}, {m.get('not_placed_reason') or m.get('unmeasured_reason') or 'not measured yet'}; not installed")
-    hf = [m for m in every if m.get("source") in PLACEABLE and not m.get("not_placed_reason") and not m.get("unused_reason")]
+    hf = [m for m in every if m.get("source") in PLACEABLE and not m.get("not_placed_reason")
+          and not m.get("unmeasured_reason") and not m.get("unused_reason")]
     if not every:
         rep.row("FAIL", label, f"no model pinned for {part['name']} in models_pinned.json")
         return

@@ -792,7 +792,7 @@
     "Docling": {
       "lens": "conclave_lens_docling",
       "env": "Docling (docling==2.94.0, docling-ibm-models==3.15.0)",
-      "where_loaded": "{install}/envs/_models/docling_artifacts via atrium tools/nestegg/install_parts.py:703-707 (docling.utils.model_downloader.download_models defaults). NOTE: the lens itself does not pass artifacts_path (docling_runner.py:526-529), so at run time docling resolves models through the HF cache - see REPORT open problems",
+      "where_loaded": "{install}/envs/_models/docling_artifacts (docling artifacts layout), placed from the saved copies with every sha256 checked; the reader passes it as artifacts_path (Decision 167 A); DOCLING_ARTIFACTS_PATH stays unset",
       "models": {
         "docling_layout_heron": {
           "source": "huggingface",
@@ -833,6 +833,10 @@
               "sha256": "cd38cd59999e7a95d68e487fbe5132df3d4e5c32a0836add57e6126ba0c4eaf1",
               "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
+          },
+          "local_dir": {
+            "default": "{models}/docling_artifacts/docling-project--docling-layout-heron",
+            "where": "Decision 167 A (Jake 11/26 1:48 PM CT): the Docling reader hands {envs}/_models/docling_artifacts to docling as artifacts_path (found through <env>/adastra.json, package accounting lane contract 11/26 1:56 PM) and checks every file's sha256 against this manifest before loading; docling's own artifacts layout names each repo folder <org>--<name>"
           }
         },
         "docling_tableformer": {
@@ -883,6 +887,10 @@
               "sha256": "dca6762508dddfae6d57d6cb4ef822c6000119dff0f3b6489db7413118c2622a",
               "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
+          },
+          "local_dir": {
+            "default": "{models}/docling_artifacts/docling-project--docling-models",
+            "where": "Decision 167 A (Jake 11/26 1:48 PM CT): the Docling reader hands {envs}/_models/docling_artifacts to docling as artifacts_path (found through <env>/adastra.json, package accounting lane contract 11/26 1:56 PM) and checks every file's sha256 against this manifest before loading; docling's own artifacts layout names each repo folder <org>--<name>"
           }
         },
         "document_figure_classifier": {
@@ -931,6 +939,10 @@
               "sha256": "118dc069572036346fbacc3e15586089d3f8a9aaf9036c0c54b4666236a28032",
               "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
+          },
+          "local_dir": {
+            "default": "{models}/docling_artifacts/docling-project--DocumentFigureClassifier-v2.5",
+            "where": "Decision 167 A (Jake 11/26 1:48 PM CT): the Docling reader hands {envs}/_models/docling_artifacts to docling as artifacts_path (found through <env>/adastra.json, package accounting lane contract 11/26 1:56 PM) and checks every file's sha256 against this manifest before loading; docling's own artifacts layout names each repo folder <org>--<name>"
           }
         },
         "code_formula_v2": {
@@ -1007,6 +1019,10 @@
               "sha256": "8922f7e91084b9862d270c16ce1027071214aa252a1567a4b410f952101005fc",
               "sha256_source": "measured from the original site at the pinned commit by saved-copies run 45174686732, and checked a second way: the saved bytes give the same git blob oid and byte size that the Hugging Face tree API lists for this path at this commit"
             }
+          },
+          "local_dir": {
+            "default": "{models}/docling_artifacts/docling-project--CodeFormulaV2",
+            "where": "Decision 167 A (Jake 11/26 1:48 PM CT): the Docling reader hands {envs}/_models/docling_artifacts to docling as artifacts_path (found through <env>/adastra.json, package accounting lane contract 11/26 1:56 PM) and checks every file's sha256 against this manifest before loading; docling's own artifacts layout names each repo folder <org>--<name>"
           }
         },
         "rapidocr_models": {
@@ -1014,7 +1030,7 @@
           "pinned_in_code": true,
           "revision_source": "pinned in library code: docling v2.94.0 docling/models/stages/ocr/rapid_ocr_model.py:35-38 (_RAPIDOCR_MODELSCOPE_RELEASE = \"v3.8.0\", base https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve) and :40-55 (paths); download_models() fetches torch+onnxruntime x chinese+english (model_downloader.py with_rapidocr=True)",
           "license": "apache-2.0 (RapidOCR/PaddleOCR models; not read from a card)",
-          "file_selection": "the 10 distinct files docling download_models fetches (cls file shared by both languages)",
+          "file_selection": "the 10 distinct files docling download_models fetches (cls file shared by both languages). Not yet here: the two character lists and the font docling 2.94 rapid_ocr_model.py:37-71 also names (paddle/PP-OCRv4/rec/ch_PP-OCRv4_rec_mobile/ppocr_keys_v1.txt, paddle/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile/en_dict.txt, resources/fonts/FZYTK.TTF); they join once measured by download with ModelScope's listing as the second check",
           "files": {
             "onnx/PP-OCRv4/det/ch_PP-OCRv4_det_mobile.onnx": {
               "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.8.0/onnx/PP-OCRv4/det/ch_PP-OCRv4_det_mobile.onnx",
@@ -1077,7 +1093,10 @@
               "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py), two downloads agree; checked a second way: ModelScope's own file listing for RapidAI/RapidOCR at v3.8.0 gives the same sha256"
             }
           },
-          "unused_reason": "not loaded by the installed Docling reader while DOCLING_ARTIFACTS_PATH is unset (checked): it passes no artifacts_path (docling_runner.py builds RapidOcrOptions() with no model paths), so docling 2.94 hands RapidOCR empty paths and rapidocr 3.10.0 uses its own default models, shipped inside its wheel (see rapidocr_wheel_models). These v3.8.0 files are what docling's download_models / an artifacts folder would use; kept pinned and saved for that"
+          "local_dir": {
+            "default": "{models}/docling_artifacts/RapidOcr",
+            "where": "Decision 167 A + Jake 11/26 1:48 PM CT (\"those files are included in the installation\"): placed in docling's artifacts layout. Not loaded by the reader: it pins RapidOCR to the PP-OCRv6 models inside the rapidocr wheel (rapidocr_wheel_models), so OCR output is unchanged (package accounting lane, 11/26 1:53 PM)"
+          }
         },
         "rapidocr_wheel_models": {
           "source": "package_bundled",
