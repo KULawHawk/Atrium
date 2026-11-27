@@ -286,8 +286,12 @@ def pull(to: Path, cfg: dict, only: set[str] | None = None, say=print) -> int:
     idx: dict = {}
     getters: dict = {}
     for rel in rels:  # one home folder and one merged INDEX.json for every release
-        if not _release_exists(rel["repo"], rel["tag"]):  # listed, not published yet (reviewer 3 on #114)
-            say(f"SKIP  release {rel['repo']}@{rel['tag']} does not exist yet (not published); the other releases are pulled")
+        if not _release_exists(rel["repo"], rel["tag"]):
+            if not rel.get("until_published"):  # a release that should be there and is not: never a quiet pass
+                say(f"SAVED-COPIES: FAIL 1 (release {rel['repo']}@{rel['tag']} does not exist)")
+                return 1
+            # marked "until_published" in saved_copies.json: listed before its first publish (reviewer 3 on #114)
+            say(f"SKIP  release {rel['repo']}@{rel['tag']} is not published yet (marked until_published); the other releases are pulled")
             continue
         get = _release_get(rel["repo"], rel["tag"], Path(tempfile.mkdtemp(prefix="saved_idx_")))
         idx_file = get(INDEX)

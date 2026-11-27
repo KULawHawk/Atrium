@@ -384,7 +384,8 @@ def _pull_setup(tmp_path: Path, monkeypatch, exists: dict, indexes: dict):
         return get
     monkeypatch.setattr(sc, "_release_get", fake_get)
     entry = {sha: {"name": "pkg.whl", "bytes": len(data), "parts": []}}
-    cfg = _cfg(*({"name": t, "kind": "github_release", "repo": "o/r", "tag": t} for t in ("packages-v1", "programs-v1")))
+    cfg = _cfg({"name": "packages-v1", "kind": "github_release", "repo": "o/r", "tag": "packages-v1"},
+               {"name": "programs-v1", "kind": "github_release", "repo": "o/r", "tag": "programs-v1", "until_published": True})
     return cfg, entry, sha
 
 
@@ -393,7 +394,7 @@ def test_pull_skips_a_release_that_is_not_published_yet_and_pulls_the_rest(tmp_p
     cfg, entry, sha = _pull_setup(tmp_path, monkeypatch, {"packages-v1": True, "programs-v1": False}, {"packages-v1": True})
     assert sc.pull(tmp_path / "home", cfg) == 0
     out = capsys.readouterr().out
-    assert "SKIP  release o/r@programs-v1 does not exist yet" in out and out.strip().endswith("SAVED-COPIES: PASS")
+    assert "SKIP  release o/r@programs-v1 is not published yet (marked until_published)" in out and out.strip().endswith("SAVED-COPIES: PASS")
     assert (tmp_path / "home" / sha).is_file()
     assert sha in json.loads((tmp_path / "home" / sc.INDEX).read_text(encoding="utf-8"))
 
@@ -403,3 +404,16 @@ def test_pull_still_fails_for_a_published_release_with_no_index(tmp_path: Path, 
                                   {"packages-v1": False})
     assert sc.pull(tmp_path / "home", cfg) == 1
     assert "SAVED-COPIES: FAIL 1 (no INDEX.json in release o/r@packages-v1)" in capsys.readouterr().out
+
+
+def test_pull_fails_when_an_unmarked_release_is_missing(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Reviewer 3 on #114: only a release marked until_published may be skipped; a missing packages-v1 is a FAIL."""
+    cfg, entry, sha = _pull_setup(tmp_path, monkeypatch, {"packages-v1": False, "programs-v1": True}, {"programs-v1": True})
+    assert sc.pull(tmp_path / "home", cfg) == 1
+    out = capsys.readouterr().out
+    assert "SAVED-COPIES: FAIL 1 (release o/r@packages-v1 does not exist)" in out and "PASS" not in out
+
+
+def test_shipped_config_marks_only_programs_until_published() -> None:
+    cfg = sc.load_config()
+    assert [loc["tag"] for loc in cfg["locations"] if loc.get("until_published")] == ["programs-v1"]
