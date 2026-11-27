@@ -18,7 +18,8 @@ def _cfg(*locs: dict) -> dict:
 
 def test_shipped_config_is_ordered_home_release_origin_and_under_github_limit() -> None:
     cfg = sc.load_config()
-    assert [loc["kind"] for loc in cfg["locations"]] == ["folder", "github_release", "github_release", "origin"]
+    assert [loc["kind"] for loc in cfg["locations"]] == ["folder", "github_release", "github_release", "github_release", "origin"]
+    assert [loc.get("tag") for loc in cfg["locations"] if loc["kind"] == "github_release"] == ["packages-v1", "models-v1", "programs-v1"]
     assert {loc["repo"] for loc in cfg["locations"] if loc["kind"] == "github_release"} == {"KULawHawk/adastra-saved-copies"}
     assert cfg["max_part_bytes"] < sc.GH_MAX_ASSET
 
@@ -289,8 +290,62 @@ def test_release_job_refuses_to_publish_before_the_source_pin_passes() -> None:
     assert "branches: [main]" in wf and "claude/" not in wf  # Decision 48 A: publish only from main after a merge
     assert "if: github.ref == 'refs/heads/main'" in wf  # a manual run from another branch publishes nothing
     assert "needs: source-pin" in wf and "needs.source-pin.result == 'success'" in wf
-    assert wf.count('python3 -I -B -X pycache_prefix="$RUNNER_TEMP/no-pyc" nestegg/build_saved_release.py') == 2
+    assert wf.count('python3 -I -B -X pycache_prefix="$RUNNER_TEMP/no-pyc" nestegg/build_saved_release.py') == 3
     assert "--kind packages --source nestegg/SOURCE.txt" in wf and "--kind models --source nestegg/SOURCE.txt" in wf
+    assert "--kind programs --source nestegg/SOURCE.txt" in wf  # Decision 174 B
+    jobs = wf.split("\njobs:\n", 1)[1]
+    for job in ("packages", "models", "programs"):  # every publishing job waits on the source pin
+        body = jobs.split(f"\n  {job}:\n", 1)[1].split("\n  ", 1)[0] if f"\n  {job}:\n" in jobs else ""
+        assert "needs: source-pin" in body or "needs: [source-pin" in body, job
+
+
+def test_release_build_lists_every_pinned_program_installer() -> None:
+    """Decision 174 B: programs-v1 carries each Windows installer phase 1 uses, at its pinned sha256."""
+    m = _build()
+    items = {i["name"]: i for i in m.program_items()}
+    assert set(items) == {"mupdf-1.23.0-windows.zip", "python-3.13.17-amd64.exe", "python-3.12.10-amd64.exe",
+                          "Git-2.56.1-64-bit.exe", "gh_2.104.0_windows_amd64.msi", "Release-25.07.0-0.zip",
+                          "VC_redist.x64.exe", "tesseract-ocr-w64-setup-5.4.0.20240606.exe"}
+    mu = items["mupdf-1.23.0-windows.zip"]
+    assert mu["sha256"] == "702386666f0d5a7d968102759843509c2549c1a206489add6cd284f657393ff8"
+    assert mu["url"] == "https://mupdf.com/downloads/archive/mupdf-1.23.0-windows.zip"
+    assert items["Git-2.56.1-64-bit.exe"]["bytes"] == 66870448
+    src = (NESTEGG / "release" / "source_pin.py").read_text(encoding="utf-8")
+    assert '"tools/nestegg/programs_pinned.json": "nestegg/programs_pinned.json"' in src
+
+
+def test_a_program_without_a_usable_pin_stops_the_build(tmp_path: Path, monkeypatch) -> None:
+    import pytest
+    m = _build()
+    (tmp_path / "programs_pinned.json").write_text(json.dumps({"programs": {"x": {"sha256": "abc", "url": "https://e/x",
+                                                                                 "file_name": "x"}}}), encoding="utf-8")
+    monkeypatch.setattr(m, "HERE", tmp_path)
+    with pytest.raises(SystemExit, match="no pinned sha256"):
+        m.program_items()
+
+
+def test_fetch_one_takes_a_saved_copy_only_and_never_overwrites(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Install-Prereqs.ps1 calls 'saved_copies.py fetch' for mutool (Decision 174 B): saved copies only, hash-checked."""
+    import urllib.request
+    monkeypatch.setattr(urllib.request, "urlretrieve", lambda *a, **k: (_ for _ in ()).throw(AssertionError("origin asked")))
+    data = b"zip bytes"
+    sha = hashlib.sha256(data).hexdigest()
+    src = tmp_path / "z"
+    src.write_bytes(data)
+    sc.split(src, tmp_path / "root" / "saved", 5)
+    cfg = _cfg({"name": "home copy", "kind": "folder", "path": "{install_root}/saved"},
+               {"name": "original site", "kind": "origin"})
+    dest = tmp_path / "kept" / "m.zip"
+    assert sc.fetch_one(sha, len(data), "m.zip", dest, cfg, tmp_path / "root") == 0
+    assert dest.read_bytes() == data and "SAVED-COPY: PASS m.zip from home copy" in capsys.readouterr().out
+    other = tmp_path / "kept" / "o.zip"
+    other.write_bytes(b"someone else's")
+    assert sc.fetch_one(sha, len(data), "o.zip", other, cfg, tmp_path / "root") == 1
+    assert other.read_bytes() == b"someone else's" and "left untouched" in capsys.readouterr().out
+    assert sc.fetch_one("0" * 64, None, "none.zip", tmp_path / "none.zip", cfg, tmp_path / "root") == 1
+    out = capsys.readouterr().out
+    assert "SAVED-COPY: FAIL none.zip" in out and "not in this copy" in out and not (tmp_path / "none.zip").exists()
+    assert sc.fetch_one("not-a-sha", None, "bad", tmp_path / "bad", cfg, tmp_path / "root") == 1
 
 
 def test_installer_model_wheels_from_parts_json_are_saved() -> None:

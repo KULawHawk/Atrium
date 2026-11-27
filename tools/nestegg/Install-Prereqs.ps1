@@ -3,10 +3,11 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File Install-Prereqs.ps1            (installs)
 #   powershell -NoProfile -ExecutionPolicy Bypass -File Install-Prereqs.ps1 -DryRun    (says what it would do)
 #
-# Parts, in order: Python 3.13 (per user, no admin), Git, GitHub CLI, Tesseract OCR, Poppler,
+# Parts, in order: Python 3.13 (per user, no admin), Git, GitHub CLI, Tesseract OCR, Poppler, MuPDF mutool,
 # Visual C++ runtime. A part that is already present is left alone (PASS, nothing installed).
 # Everything comes through winget, which checks each download against the sha256 in its
-# signed package manifest; nothing is fetched from a URL this script makes up.
+# signed package manifest; nothing is fetched from a URL this script makes up. mutool comes from the saved copy first
+# (Decision 174 B: the same zip, checked against the same sha256), winget at the same pin if no copy can be read.
 #
 # What stays the person's own step (this script only explains and waits):
 #   - every Windows security (UAC) box: Git, GitHub CLI, Tesseract and the VC++ runtime install
@@ -217,6 +218,79 @@ function Ensure-Tesseract {
     else { Row 'FAIL' 'Tesseract OCR' ("not at {0} after the installer (exit code {1}, found {2}). If the Windows security box was declined, run this again and choose Yes." -f $TessVersion, $proc.ExitCode, $(if ($v) { $v } else { 'nothing' })) }
 }
 
+# --- MuPDF mutool: from the saved copy first (Jake 7:53 PM CT 11/26, Decision 174 B: "we always back up our
+# functionality ... and all components"). The Hierarchy reader and the printed-text check accept ONLY 1.23.0. The
+# zip winget's signed manifest names for 1.23.0 is kept in the private saved-copies release programs-v1 (and the
+# home copy pulled from it) under its sha256; it is unpacked into this installer's own folder
+# %LOCALAPPDATA%\AdAstra\tools\mupdf-1.23.0 (never over an existing file). If no saved copy can be read, winget
+# installs the same pinned version. A mutool on PATH at another version is left as it is (yours), and is not used.
+$MutoolVersion = '1.23.0'
+$MutoolZipName = 'mupdf-1.23.0-windows.zip'
+$MutoolZipRoot = 'mupdf-1.23.0-windows'
+$MutoolZipSha256 = '702386666f0d5a7d968102759843509c2549c1a206489add6cd284f657393ff8'  # = programs_pinned.json mutool.sha256
+$MutoolDir = Join-Path $env:LOCALAPPDATA "AdAstra\tools\mupdf-$MutoolVersion"
+function Mutool-Version([string]$Dir) {
+    $exe = Join-Path $Dir 'mutool.exe'
+    if (-not (Test-Path -LiteralPath $exe)) { return $null }
+    try { $o = (& $exe -v 2>&1 | ForEach-Object { "$_" }) -join ' ' } catch { return $null }
+    if ($o -match 'mutool version (\d+\.\d+\.\d+)') { return $Matches[1] }
+    return $null
+}
+function Expand-MutoolZip([string]$Zip, [string]$To) {
+    # Unpacks <zip_root>/... into $To, refusing any entry that would land outside it; never overwrites a file.
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $z = [IO.Compression.ZipFile]::OpenRead($Zip)
+    try {
+        $full = [IO.Path]::GetFullPath($To).TrimEnd('\') + '\'
+        foreach ($e in $z.Entries) {
+            $rel = $e.FullName -replace '/', '\'
+            if (-not $rel.StartsWith("$MutoolZipRoot\")) { throw "unexpected entry $($e.FullName) (not under $MutoolZipRoot/)" }
+            $rel = $rel.Substring($MutoolZipRoot.Length + 1)
+            if (-not $rel) { continue }
+            $dest = [IO.Path]::GetFullPath((Join-Path $To $rel))
+            if (-not $dest.StartsWith($full)) { throw "entry $($e.FullName) would land outside $To" }
+            if ($rel.EndsWith('\')) { New-Item -ItemType Directory -Force -Path $dest | Out-Null; continue }
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
+            [IO.Compression.ZipFileExtensions]::ExtractToFile($e, $dest, $false)
+        }
+    } finally { $z.Dispose() }
+}
+function Ensure-Mutool {
+    $v = Mutool-Version $MutoolDir
+    if ($v -eq $MutoolVersion) { Row 'PASS' 'MuPDF mutool' "saved copy already in place at the locked version $v`: $MutoolDir"; $script:found['mutool_dir'] = $MutoolDir; return }
+    if (Test-Path -LiteralPath $MutoolDir) { Row 'FAIL' 'MuPDF mutool' ("{0} exists but does not hold mutool {1} (found {2}); left as it is" -f $MutoolDir, $MutoolVersion, $(if ($v) { $v } else { 'nothing runnable' })); return }
+    $other = Find-Mutool
+    $ov = if ($other) { Mutool-Version $other } else { $null }
+    if ($ov -eq $MutoolVersion) { Row 'PASS' 'MuPDF mutool' "already present at the locked version $ov`: $other"; $script:found['mutool_dir'] = $other; return }
+    if ($other) { Say ("....  {0,-20} a mutool at {1} is on this PC ({2}); it is left as it is and not used" -f 'MuPDF mutool', $(if ($ov) { $ov } else { 'an unreadable version' }), $other) }
+    if ($DryRun) { Row 'TODO' 'MuPDF mutool' "would take $MutoolZipName (sha256 $MutoolZipSha256) from the saved copies and unpack it to $MutoolDir; winget $MutoolVersion if no saved copy can be read"; return }
+    $zip = Join-Path $InstallRoot ".adastra\kept\mupdf\$MutoolZipName"
+    $py = Get-Command py -ErrorAction SilentlyContinue
+    if (-not (Test-Path -LiteralPath $zip) -and $py) {
+        Say ("....  {0,-20} looking for {1} in the saved copies (home copy, then your private release)" -f 'MuPDF mutool', $MutoolZipName)
+        & py -3.13 -I (Join-Path $PSScriptRoot 'saved_copies.py') fetch $MutoolZipSha256 $zip --name $MutoolZipName --root $InstallRoot 2>&1 | ForEach-Object { Say ("      " + $_) }
+    }
+    if (Test-Path -LiteralPath $zip) {
+        $got = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLower()
+        if ($got -ne $MutoolZipSha256) { Row 'FAIL' 'MuPDF mutool' "$zip has sha256 $got, not the pinned $MutoolZipSha256; not used, left as it is"; return }
+        try { Expand-MutoolZip $zip $MutoolDir } catch { Row 'FAIL' 'MuPDF mutool' "could not unpack $zip to $MutoolDir`: $($_.Exception.Message)"; return }
+        $v = Mutool-Version $MutoolDir
+        if ($v -eq $MutoolVersion) { Row 'PASS' 'MuPDF mutool' "installed $v from the saved copy (sha256 checked): $MutoolDir"; $script:found['mutool_dir'] = $MutoolDir }
+        else { Row 'FAIL' 'MuPDF mutool' ("unpacked to {0}, but it reports {1}, not {2}" -f $MutoolDir, $(if ($v) { $v } else { 'no version' }), $MutoolVersion) }
+        return
+    }
+    Say ("....  {0,-20} no saved copy could be read; installing through winget at the same pinned version" -f 'MuPDF mutool')
+    Ensure 'MuPDF mutool' ${function:Find-MutoolLocked} 'ArtifexSoftware.mutool' '1.23.0' @() '(Hierarchy reader)' 'mutool_dir'  # = $MutoolVersion; written out so CI's winget check reads it
+}
+function Find-MutoolLocked {
+    # after winget: only a mutool that reports the locked version counts
+    $d = Find-Mutool
+    if ($d -and (Mutool-Version $d) -eq $MutoolVersion) { return $d }
+    $hit = Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\ArtifexSoftware.mutool*') -Recurse -Filter 'mutool.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($hit -and (Mutool-Version $hit.DirectoryName) -eq $MutoolVersion) { return $hit.DirectoryName }
+    return $null
+}
+
 Say ("Nestegg phase 1 (prerequisites) {0}  install folder: {1}{2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm'), $InstallRoot, $(if ($DryRun) { '  [DRY RUN: nothing installed]' } else { '' }))
 
 if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
@@ -231,9 +305,13 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     Ensure 'GitHub CLI'       ${function:Find-Gh}        'GitHub.cli'                   '2.104.0'       @()                  '(one Windows security box)'          'gh'
     Ensure-Tesseract  # locked to 5.4.0.20240606 from UB Mannheim's own installer at a measured sha256 (Jake 11/22 10:45 PM)
     Ensure 'Poppler'          ${function:Find-Poppler}   'oschwartz10612.Poppler'       '25.07.0-0'     @('--scope', 'user') '(per user, no Windows security box)' 'poppler_bin'
-    Ensure 'MuPDF mutool'     ${function:Find-Mutool}    'ArtifexSoftware.mutool'       '1.23.0'        @()                  '(Hierarchy reader)'                   'mutool_dir'
+    Ensure-Mutool  # locked to 1.23.0, from the saved copy first, winget at the same pin as the fallback (Decision 174 B)
     Ensure 'VC++ runtime x64' ${function:Find-VC}        'Microsoft.VCRedist.2015+.x64' '14.52.37029.0' @()                  '(one Windows security box)'          'vcredist'
 }
+
+# The mutool this script chose comes first on PATH for THIS window and the install steps it starts (never a permanent
+# PATH change), so a different mutool elsewhere on PATH cannot shadow it. Later runs read mutool_dir in prereqs.json.
+if ($script:found['mutool_dir']) { $env:Path = "$($script:found['mutool_dir']);$env:Path" }
 
 if (-not $DryRun) {
     $out = Join-Path $InstallRoot '.adastra\prereqs.json'

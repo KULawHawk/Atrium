@@ -18,7 +18,8 @@ location is skipped with a row saying so, and the next location is tried.
   python -I saved_copies.py split <file> <out-folder> [--max-part-bytes N]   (release build: add a file)
   python -I saved_copies.py check <folder>                                   (every file in INDEX.json, by hash)
   python -I saved_copies.py pull --to <home-folder> [--only sha,...]          (home copy from the release)
-Last line of check/pull: SAVED-COPIES: PASS n | FAIL n
+  python -I saved_copies.py fetch <sha256> <dest> --name N [--bytes B] [--root R]  (one file, saved copies only)
+Last line of check/pull: SAVED-COPIES: PASS n | FAIL n. Of fetch: SAVED-COPY: PASS <from where> | FAIL
 """
 
 from __future__ import annotations
@@ -317,6 +318,27 @@ def pull(to: Path, cfg: dict, only: set[str] | None = None, say=print) -> int:
     return 1 if fails else 0
 
 
+def fetch_one(sha: str, size: int | None, name: str, dest: Path, cfg: dict, install_root: Path, say=print) -> int:
+    """One pinned file from the saved copies only (never the original site); a file already at dest is never replaced."""
+    if len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
+        say(f"SAVED-COPY: FAIL {name}: {sha!r} is not a sha256")
+        return 1
+    if dest.exists() and not (dest.is_file() and sha256_file(dest) == sha):
+        say(f"SAVED-COPY: FAIL {name}: {dest} already exists with other bytes; left untouched")
+        return 1
+    locs = {"locations": [loc for loc in cfg["locations"] if loc["kind"] != "origin"]}
+    notes: list[str] = []
+    src = fetch(sha, size, name, dest, locs, install_root, origin_url=None, say=notes.append)
+    for w in notes:
+        if src is None or w.startswith("WARN"):  # where it looked is shown only when it was not found; WARN always
+            say(w)
+    if src is None:
+        say(f"SAVED-COPY: FAIL {name}: not found with sha256 {sha} in any saved copy")
+        return 1
+    say(f"SAVED-COPY: PASS {name} from {src} (sha256 checked) at {dest}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -330,6 +352,12 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("pull")
     p.add_argument("--to", type=Path, required=True)
     p.add_argument("--only", default="")
+    f = sub.add_parser("fetch")  # Install-Prereqs.ps1 (Decision 174 B): one pinned program from the saved copies only
+    f.add_argument("sha256")
+    f.add_argument("dest", type=Path)
+    f.add_argument("--name", required=True)
+    f.add_argument("--bytes", type=int, default=None)
+    f.add_argument("--root", type=Path, default=Path.home() / "AdAstra")
     a = ap.parse_args(argv)
     cfg = load_config()
     if a.cmd == "split":
@@ -338,6 +366,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if a.cmd == "check":
         return check_folder(a.folder)
+    if a.cmd == "fetch":
+        return fetch_one(a.sha256.lower(), a.bytes, a.name, a.dest, cfg, a.root)
     return pull(a.to, cfg, {x for x in a.only.split(",") if x} or None)
 
 

@@ -7,6 +7,7 @@ nothing, reads no secret, and always ends on one PASS/GAPS line.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -98,14 +99,54 @@ def test_prereqs_installs_only_through_winget_with_exact_ids() -> None:
     ids = [i for i, _ in rows]
     assert dict(rows)["ArtifexSoftware.mutool"] == "1.23.0"
     assert ids == [
+        "ArtifexSoftware.mutool",  # inside Ensure-Mutool: winget at the same pin only when no saved copy can be read
         "Python.Python.3.13",
         "Python.Python.3.12",
         "Git.Git",
         "GitHub.cli",
         "oschwartz10612.Poppler",
-        "ArtifexSoftware.mutool",
         "Microsoft.VCRedist.2015+.x64",
     ]
+
+
+def test_mutool_comes_from_the_saved_copy_first_at_the_pinned_sha256() -> None:
+    """Jake 7:53 PM CT 11/26, Decision 174 B: keep a saved copy of mutool 1.23.0 and pin the installer to it. The zip
+    winget's manifest names is taken from the saved copies only (home copy, then the private release; never the
+    original site from here), sha-checked, unpacked into the installer's own folder without overwriting, and only
+    a mutool reporting 1.23.0 counts. winget at the same pin is the fallback when no saved copy can be read."""
+    code = "\n".join(_code_lines(PREREQS))
+    pins = json.loads((NESTEGG / "programs_pinned.json").read_text(encoding="utf-8"))["programs"]["mutool"]
+    assert f"$MutoolZipSha256 = '{pins['sha256']}'" in code and f"$MutoolVersion = '{pins['version']}'" in code
+    assert f"$MutoolZipName = '{pins['file_name']}'" in code and f"$MutoolZipRoot = '{pins['zip_root']}'" in code
+    assert '$MutoolDir = Join-Path $env:LOCALAPPDATA "AdAstra\\tools\\mupdf-$MutoolVersion"' in code
+    assert re.search(r"^\s*Ensure-Mutool\b", code, flags=re.M)
+    fetch = code.index("saved_copies.py') fetch $MutoolZipSha256")
+    check = code.index("if ($got -ne $MutoolZipSha256)")
+    unpack = code.index("Expand-MutoolZip $zip $MutoolDir")
+    winget = code.index("Ensure 'MuPDF mutool' ${function:Find-MutoolLocked}")
+    assert fetch < check < unpack < winget  # saved copy first, hash before unpack, winget last
+    assert "ExtractToFile($e, $dest, $false)" in code  # never overwrites
+    assert "would land outside" in code  # no entry may climb out of the folder
+    assert "if ($v -eq $MutoolVersion)" in code and "if ($ov -eq $MutoolVersion)" in code
+    # the chosen mutool goes first on PATH for this window only (phase 2 inherits it); never a permanent change
+    assert "$env:Path = \"$($script:found['mutool_dir']);$env:Path\"" in code
+    assert code.index("$env:Path = \"$($script:found['mutool_dir'])") > code.rindex("Ensure-Mutool")
+
+
+def test_programs_list_pins_every_installer_the_prereqs_script_uses() -> None:
+    """Decision 174 B: every Windows program phase 1 installs has a pinned installer file for the saved copies,
+    at the same version the script pins, and the Tesseract pin equals the script's recorded fingerprint."""
+    code = "\n".join(_code_lines(PREREQS))
+    progs = json.loads((NESTEGG / "programs_pinned.json").read_text(encoding="utf-8"))["programs"]
+    rows = dict(re.findall(r"^\s*Ensure '[^']+'\s+\$\{function:Find-\w+\}\s+'([^']+)'\s+'([^']*)'", code, flags=re.M))
+    for key, p in progs.items():
+        assert re.fullmatch(r"[0-9a-f]{64}", p["sha256"]) and p["url"].startswith("https://"), key
+        assert p["file_name"] == p["url"].rsplit("/", 1)[-1], key
+        if p["winget_id"]:
+            assert rows[p["winget_id"]] == p["version"], key
+    assert set(rows) == {p["winget_id"] for p in progs.values() if p["winget_id"]}
+    assert f"$TessSetupSha256 = '{progs['tesseract_dir']['sha256']}'" in code
+    assert f"$TessVersion = '{progs['tesseract_dir']['version']}'" in code
 
 
 def test_agreements_are_answered_only_behind_assume_yes() -> None:

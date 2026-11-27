@@ -1,0 +1,54 @@
+{
+  "_about": "The Windows programs Install-Prereqs.ps1 installs, pinned so a saved copy can be kept (Jake 7:53 PM CT 11/26, Decision 174 B: 'we always back up our functionality, reference, calibration materials and all components'). Each entry is the exact x64 installer file winget's signed manifest names for the pinned version, with that manifest's InstallerSha256. build_saved_release.py --kind programs downloads each from its url, refuses any sha256 or byte count other than the pin, and saves it to the private release programs-v1. bytes null = not measured yet (the original site is not reachable from where this list was written); the release build then measures it and reports it in measured_pins.json, and only a reviewed commit makes it a pin. 'measured' says where each pin was read. mutool is installed from this saved copy first; the others keep winget at the same pin, with the saved copy as the backup.",
+  "programs": {
+    "mutool": {
+      "name": "MuPDF mutool", "version": "1.23.0", "winget_id": "ArtifexSoftware.mutool", "licence": "AGPL-3.0 (Artifex)",
+      "url": "https://mupdf.com/downloads/archive/mupdf-1.23.0-windows.zip", "file_name": "mupdf-1.23.0-windows.zip",
+      "sha256": "702386666f0d5a7d968102759843509c2549c1a206489add6cd284f657393ff8", "bytes": null,
+      "zip_root": "mupdf-1.23.0-windows", "exe": "mutool.exe",
+      "measured": "sha256 from winget-pkgs manifest ArtifexSoftware.mutool 1.23.0 (read 11/26 about 7:55 PM CT); mupdf.com not reachable from the authoring machine, so bytes are measured by the release build"
+    },
+    "python": {
+      "name": "Python 3.13", "version": "3.13.17", "winget_id": "Python.Python.3.13", "licence": "PSF-2.0",
+      "url": "https://www.python.org/ftp/python/3.13.17/python-3.13.17-amd64.exe", "file_name": "python-3.13.17-amd64.exe",
+      "sha256": "5da012101ba2e17113a9a1cd901e9ce1441086f2b7ecb5de06ec94163899a190", "bytes": null,
+      "measured": "sha256 from winget-pkgs manifest Python.Python.3.13 3.13.17, x64 (read 11/26 7:57 PM CT); python.org not reachable from the authoring machine"
+    },
+    "python312": {
+      "name": "Python 3.12", "version": "3.12.10", "winget_id": "Python.Python.3.12", "licence": "PSF-2.0",
+      "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe", "file_name": "python-3.12.10-amd64.exe",
+      "sha256": "67b5635e80ea51072b87941312d00ec8927c4db9ba18938f7ad2d27b328b95fb", "bytes": null,
+      "measured": "sha256 from winget-pkgs manifest Python.Python.3.12 3.12.10, x64 (read 11/26 7:57 PM CT); python.org not reachable from the authoring machine"
+    },
+    "git": {
+      "name": "Git", "version": "2.56.1", "winget_id": "Git.Git", "licence": "GPL-2.0",
+      "url": "https://github.com/git-for-windows/git/releases/download/v2.56.1.windows.1/Git-2.56.1-64-bit.exe", "file_name": "Git-2.56.1-64-bit.exe",
+      "sha256": "c330c72e10b408cc39994bfefdb63542b0d93d21699325c3e0bd874af8a5a559", "bytes": 66870448,
+      "measured": "downloaded 11/26 7:57 PM CT: 66,870,448 bytes, sha256 equals the winget-pkgs manifest's"
+    },
+    "gh": {
+      "name": "GitHub CLI", "version": "2.104.0", "winget_id": "GitHub.cli", "licence": "MIT",
+      "url": "https://github.com/cli/cli/releases/download/v2.104.0/gh_2.104.0_windows_amd64.msi", "file_name": "gh_2.104.0_windows_amd64.msi",
+      "sha256": "cc89beb33ee020669efac70270aff55ca3ad52321aa813307537f2fe9237cc6e", "bytes": 15425536,
+      "measured": "downloaded 11/26 7:57 PM CT: 15,425,536 bytes, sha256 equals the winget-pkgs manifest's (x64 wix entry)"
+    },
+    "poppler_bin": {
+      "name": "Poppler", "version": "25.07.0-0", "winget_id": "oschwartz10612.Poppler", "licence": "GPL-2.0-or-later",
+      "url": "https://github.com/oschwartz10612/poppler-windows/releases/download/v25.07.0-0/Release-25.07.0-0.zip", "file_name": "Release-25.07.0-0.zip",
+      "sha256": "435e6265738470b7ae6498b8a298a4025bacb9349656207ef54d0f069687ce57", "bytes": 16037650,
+      "measured": "downloaded 11/26 7:57 PM CT: 16,037,650 bytes, sha256 equals the winget-pkgs manifest's"
+    },
+    "vcredist": {
+      "name": "VC++ runtime x64", "version": "14.52.37029.0", "winget_id": "Microsoft.VCRedist.2015+.x64", "licence": "Microsoft Visual C++ Redistributable licence",
+      "url": "https://download.visualstudio.microsoft.com/download/pr/78d061c5-9ef3-42ab-98ed-3309d1095dc4/9C02C9ED120F671B900E6B9471D890E3B2414117A7E53F4AE2E855466FA2B7C9/VC_redist.x64.exe", "file_name": "VC_redist.x64.exe",
+      "sha256": "9c02c9ed120f671b900e6b9471d890e3b2414117a7e53f4ae2e855466fa2b7c9", "bytes": null,
+      "measured": "sha256 from winget-pkgs manifest Microsoft.VCRedist.2015+.x64 14.52.37029.0 (read 11/26 about 7:55 PM CT); download.visualstudio.microsoft.com not reachable from the authoring machine"
+    },
+    "tesseract_dir": {
+      "name": "Tesseract OCR", "version": "5.4.0.20240606", "winget_id": "", "licence": "Apache-2.0",
+      "url": "https://github.com/UB-Mannheim/tesseract/releases/download/v5.4.0.20240606/tesseract-ocr-w64-setup-5.4.0.20240606.exe", "file_name": "tesseract-ocr-w64-setup-5.4.0.20240606.exe",
+      "sha256": "c885fff6998e0608ba4bb8ab51436e1c6775c2bafc2559a19b423e18678b60c9", "bytes": 50175248,
+      "measured": "Decision 17 A pin (Install-Prereqs.ps1 $TessSetupSha256); downloaded again 11/26 7:57 PM CT: 50,175,248 bytes, same sha256"
+    }
+  }
+}

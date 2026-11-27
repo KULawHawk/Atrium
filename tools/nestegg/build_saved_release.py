@@ -2,14 +2,14 @@
 private saved-copies repository (its own GITHUB_TOKEN publishes; no key is stored anywhere). Run with python -I.
 
 For each pinned file (packages: locks/SHA256SUMS_*.txt; models: models_pinned.json + htrlens_models.json; hashes there were transcribed from the Hub listing, so each is
-recomputed here and a mismatch is a FAIL) it downloads
+recomputed here and a mismatch is a FAIL; programs: programs_pinned.json, the Windows installers, Decision 174 B) it downloads
 from the original site, refuses anything whose sha256 is not the pin, stores it content-addressed through
 saved_copies.split (parts under 2 GiB), uploads the pieces, then deletes its own local working copy so a runner's disk
 holds one file at a time. Assets already in the release are not uploaded again, so a stopped run resumes.
 INDEX.json is re-uploaded after every file. With --source, SOURCE.txt (the reviewed Atrium commit and the sha256 of
 every tool file; checked by release/source_pin.py before this runs) is uploaded into the release first.
 
-  python -I build_saved_release.py --repo OWNER/NAME --kind packages|models [--tag packages-v1] [--limit N] [--dry-run]
+  python -I build_saved_release.py --repo OWNER/NAME --kind packages|models|programs [--tag packages-v1] [--limit N] [--dry-run]
                                    [--source nestegg/SOURCE.txt]
 Last line: SAVED-RELEASE: PASS n | FAIL n (n files)
 """
@@ -95,6 +95,19 @@ def model_items() -> list[dict]:
     return list(out.values())
 
 
+def program_items() -> list[dict]:
+    """The Windows program installers (Decision 174 B), each at winget's manifest sha256 for its pinned version."""
+    pf = HERE / "programs_pinned.json"
+    if not pf.is_file():  # never a silent gap: no program would be saved
+        raise SystemExit(f"SAVED-RELEASE: FAIL {pf.name} not found next to {Path(__file__).name}")
+    out = []
+    for key, p in sorted(json.loads(pf.read_text(encoding="utf-8"))["programs"].items()):
+        if not re.fullmatch(r"[0-9a-f]{64}", p.get("sha256") or "") or not str(p.get("url", "")).startswith("https://"):
+            raise SystemExit(f"SAVED-RELEASE: FAIL programs_pinned.json {key}: no pinned sha256 or https url")
+        out.append({"sha256": p["sha256"], "name": p["file_name"], "bytes": p.get("bytes"), "url": p["url"]})
+    return out
+
+
 # ---- where a package file comes from --------------------------------------------------------------------------------
 
 class _Links(HTMLParser):
@@ -172,16 +185,16 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", required=True)
     ap.add_argument("--tag", default="")
-    ap.add_argument("--kind", choices=["packages", "models"], required=True)
+    ap.add_argument("--kind", choices=["packages", "models", "programs"], required=True)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--source", type=Path, default=None,
                     help="SOURCE.txt (Atrium commit + sha256 of every tool file); uploaded into the release first")
     a = ap.parse_args(argv)
-    a.tag = a.tag or f"{a.kind}-v1"  # packages-v1 / models-v1: each under GitHub's 1,000 files per release
+    a.tag = a.tag or f"{a.kind}-v1"  # packages-v1 / models-v1 / programs-v1: each under GitHub's 1,000 files per release
     sc = _sc()
     cfg = sc.load_config()
-    items = package_items() if a.kind == "packages" else model_items()
+    items = {"packages": package_items, "models": model_items, "programs": program_items}[a.kind]()
     total = sum(i["bytes"] or 0 for i in items)
     print(f"{len(items)} {a.kind} files, {total:,} bytes known", flush=True)
     if a.dry_run:

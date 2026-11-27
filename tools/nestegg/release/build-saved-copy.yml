@@ -1,5 +1,6 @@
 # Builds the private saved-copy releases (Jake's Decision 30 A, 11/23/2026): every pinned package file (release
-# packages-v1) and every pinned model file (release models-v1), each downloaded from its original site, refused unless
+# packages-v1), every pinned model file (release models-v1) and every pinned Windows program installer (release
+# programs-v1, Decision 174 B, 11/26/2026), each downloaded from its original site, refused unless
 # its sha256 is the pin, stored under its sha256 in parts under 2 GiB, one file on disk at a time. Uses this
 # repository's own token (no stored key). Resumes: files already in a release are not uploaded again.
 # What is published is decided by a REVIEWED Atrium commit (reviewer 3 on Atrium #67): nestegg/SOURCE.txt names an
@@ -58,3 +59,12 @@ jobs:
       - name: Save every pinned model file
         env: {GH_TOKEN: "${{ github.token }}"}
         run: python3 -I -B -X pycache_prefix="$RUNNER_TEMP/no-pyc" nestegg/build_saved_release.py --repo "${{ github.repository }}" --kind models --source nestegg/SOURCE.txt
+  programs:
+    needs: source-pin
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # well beyond the few minutes 250 MB takes (no tight time cap on a run)
+    steps:
+      - uses: actions/checkout@v4
+      - name: Save every pinned Windows program installer (Decision 174 B; about 250 MB)
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: python3 -I -B -X pycache_prefix="$RUNNER_TEMP/no-pyc" nestegg/build_saved_release.py --repo "${{ github.repository }}" --kind programs --source nestegg/SOURCE.txt
