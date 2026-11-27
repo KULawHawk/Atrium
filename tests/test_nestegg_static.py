@@ -175,3 +175,13 @@ def test_windows_ci_fetches_the_tesseract_installer_and_checks_the_recorded_fing
     assert "'.adastra\\kept\\tesseract'" in wf
     # placed after the dry run (which must create nothing) and before the real install
     assert wf.index("the dry run created the install folder") < wf.index("Invoke-WebRequest -Uri") < wf.index("-AssumeYes *>&1")
+
+
+def test_saved_copy_reproduction_must_fail_for_the_pc_reason_not_any_fail() -> None:
+    """Decision 172 A (Jake, 11/26): the pre-#104 run must FAIL *and* show a cp312 file taken into Python 3.13."""
+    wf = (NESTEGG.parent.parent / ".github" / "workflows" / "nestegg-windows.yml").read_text(encoding="utf-8")
+    job = wf.split("  saved-copy-pcc:", 1)[1]
+    assert "ref: 94a39300da6c0601cba0990c90654a70face81f5" in job
+    assert "-notmatch '^SAVED-COPY-INSTALL: FAIL'" in job
+    assert "files built for another Python were taken: .*-cp312-cp312-" in job
+    assert "if ($why.Count -lt 1) {" in job and "exit 1 }" in job.split("if ($why.Count -lt 1) {", 1)[1].splitlines()[0]
