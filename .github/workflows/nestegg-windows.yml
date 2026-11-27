@@ -245,7 +245,11 @@ jobs:
           python -I $h install --root $root --tag pre104 --installer 'src\atrium_pre104\tools\nestegg\install_parts.py' *>&1 | Tee-Object -Variable old
           $ov = "$(($old | Where-Object { "$_" -match '^SAVED-COPY-INSTALL: ' } | Select-Object -Last 1))"
           if ($ov -notmatch '^SAVED-COPY-INSTALL: FAIL') { Write-Host "FAIL: the pre-#104 installer (94a3930) did not reproduce the PC failure ($ov)"; exit 1 }
-          Write-Host "reproduced with the pre-#104 installer (94a3930): $ov"
+          # Decision 172 A (Jake, 11/26 5:58 PM CT): any FAIL is not enough; it must fail for the PC's own reason, a
+          # cp312 file taken into a Python 3.13 environment.
+          $why = @($old | Where-Object { "$_" -match 'files built for another Python were taken: .*-cp312-cp312-' })
+          if ($why.Count -lt 1) { Write-Host "FAIL: the pre-#104 installer failed ($ov), but not because a cp312 file was taken (the PC failure); no 'files built for another Python were taken' line names a cp312 file"; exit 1 }
+          Write-Host "reproduced with the pre-#104 installer (94a3930): $ov; $($why.Count) environment(s) took a cp312 file"
           python -I $h install --root $root --tag fixed --installer 'src\atrium\tools\nestegg\install_parts.py' *>&1 | Tee-Object -Variable new
           $nv = "$(($new | Where-Object { "$_" -match '^SAVED-COPY-INSTALL: ' } | Select-Object -Last 1))"
           if ($nv -notmatch '^SAVED-COPY-INSTALL: PASS \d+$') { Write-Host "FAIL: fixed installer: $nv"; exit 1 }
