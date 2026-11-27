@@ -4,21 +4,21 @@
     "mutool": {
       "name": "MuPDF mutool", "version": "1.23.0", "winget_id": "ArtifexSoftware.mutool", "licence": "AGPL-3.0 (Artifex)",
       "url": "https://mupdf.com/downloads/archive/mupdf-1.23.0-windows.zip", "file_name": "mupdf-1.23.0-windows.zip",
-      "sha256": "702386666f0d5a7d968102759843509c2549c1a206489add6cd284f657393ff8", "bytes": null,
+      "sha256": "702386666f0d5a7d968102759843509c2549c1a206489add6cd284f657393ff8", "bytes": 86192582,
       "zip_root": "mupdf-1.23.0-windows", "exe": "mutool.exe",
-      "measured": "sha256 from winget-pkgs manifest ArtifexSoftware.mutool 1.23.0 (read 11/26 about 7:55 PM CT); mupdf.com not reachable from the authoring machine, so bytes are measured by the release build"
+      "measured": "sha256 from winget-pkgs manifest ArtifexSoftware.mutool 1.23.0 (read 11/26 about 7:55 PM CT); mupdf.com not reachable from the authoring machine, so bytes are measured by the release build; bytes 86,192,582 measured by the programs-v1 publish run 45928813430 (11/26 8:31 PM CT), sha256 matched"
     },
     "python": {
       "name": "Python 3.13", "version": "3.13.17", "winget_id": "Python.Python.3.13", "licence": "PSF-2.0",
       "url": "https://www.python.org/ftp/python/3.13.17/python-3.13.17-amd64.exe", "file_name": "python-3.13.17-amd64.exe",
-      "sha256": "5da012101ba2e17113a9a1cd901e9ce1441086f2b7ecb5de06ec94163899a190", "bytes": null,
-      "measured": "sha256 from winget-pkgs manifest Python.Python.3.13 3.13.17, x64 (read 11/26 7:57 PM CT); python.org not reachable from the authoring machine"
+      "sha256": "5da012101ba2e17113a9a1cd901e9ce1441086f2b7ecb5de06ec94163899a190", "bytes": 29941280,
+      "measured": "sha256 from winget-pkgs manifest Python.Python.3.13 3.13.17, x64 (read 11/26 7:57 PM CT); python.org not reachable from the authoring machine; bytes 29,941,280 measured by the programs-v1 publish run 45928813430 (11/26 8:31 PM CT), sha256 matched"
     },
     "python312": {
       "name": "Python 3.12", "version": "3.12.10", "winget_id": "Python.Python.3.12", "licence": "PSF-2.0",
       "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe", "file_name": "python-3.12.10-amd64.exe",
-      "sha256": "67b5635e80ea51072b87941312d00ec8927c4db9ba18938f7ad2d27b328b95fb", "bytes": null,
-      "measured": "sha256 from winget-pkgs manifest Python.Python.3.12 3.12.10, x64 (read 11/26 7:57 PM CT); python.org not reachable from the authoring machine"
+      "sha256": "67b5635e80ea51072b87941312d00ec8927c4db9ba18938f7ad2d27b328b95fb", "bytes": 26964224,
+      "measured": "sha256 from winget-pkgs manifest Python.Python.3.12 3.12.10, x64 (read 11/26 7:57 PM CT); python.org not reachable from the authoring machine; bytes 26,964,224 measured by the programs-v1 publish run 45928813430 (11/26 8:31 PM CT), sha256 matched"
     },
     "git": {
       "name": "Git", "version": "2.56.1", "winget_id": "Git.Git", "licence": "GPL-2.0",
@@ -41,8 +41,8 @@
     "vcredist": {
       "name": "VC++ runtime x64", "version": "14.52.37029.0", "winget_id": "Microsoft.VCRedist.2015+.x64", "licence": "Microsoft Visual C++ Redistributable licence",
       "url": "https://download.visualstudio.microsoft.com/download/pr/78d061c5-9ef3-42ab-98ed-3309d1095dc4/9C02C9ED120F671B900E6B9471D890E3B2414117A7E53F4AE2E855466FA2B7C9/VC_redist.x64.exe", "file_name": "VC_redist.x64.exe",
-      "sha256": "9c02c9ed120f671b900e6b9471d890e3b2414117a7e53f4ae2e855466fa2b7c9", "bytes": null,
-      "measured": "sha256 from winget-pkgs manifest Microsoft.VCRedist.2015+.x64 14.52.37029.0 (read 11/26 about 7:55 PM CT); download.visualstudio.microsoft.com not reachable from the authoring machine"
+      "sha256": "9c02c9ed120f671b900e6b9471d890e3b2414117a7e53f4ae2e855466fa2b7c9", "bytes": 18863624,
+      "measured": "sha256 from winget-pkgs manifest Microsoft.VCRedist.2015+.x64 14.52.37029.0 (read 11/26 about 7:55 PM CT); download.visualstudio.microsoft.com not reachable from the authoring machine; bytes 18,863,624 measured by the programs-v1 publish run 45928813430 (11/26 8:31 PM CT), sha256 matched"
     },
     "tesseract_dir": {
       "name": "Tesseract OCR", "version": "5.4.0.20240606", "winget_id": "", "licence": "Apache-2.0",

@@ -310,6 +310,8 @@ def test_release_build_lists_every_pinned_program_installer() -> None:
     assert mu["sha256"] == "702386666f0d5a7d968102759843509c2549c1a206489add6cd284f657393ff8"
     assert mu["url"] == "https://mupdf.com/downloads/archive/mupdf-1.23.0-windows.zip"
     assert items["Git-2.56.1-64-bit.exe"]["bytes"] == 66870448
+    assert mu["bytes"] == 86192582  # measured by the programs-v1 publish run, now a pin
+    assert all(i["bytes"] for i in items.values())  # every installer's size is pinned
     src = (NESTEGG / "release" / "source_pin.py").read_text(encoding="utf-8")
     assert '"tools/nestegg/programs_pinned.json": "nestegg/programs_pinned.json"' in src
 
@@ -414,6 +416,8 @@ def test_pull_fails_when_an_unmarked_release_is_missing(tmp_path: Path, monkeypa
     assert "SAVED-COPIES: FAIL 1 (release o/r@packages-v1 does not exist)" in out and "PASS" not in out
 
 
-def test_shipped_config_marks_only_programs_until_published() -> None:
+def test_shipped_config_marks_no_release_until_published() -> None:
+    """programs-v1 was published 11/26 8:31 PM CT (run 45928813430), so its until_published flag is gone: every listed
+    release must now exist, and a missing one is a FAIL (reviewer 3 on #114)."""
     cfg = sc.load_config()
-    assert [loc["tag"] for loc in cfg["locations"] if loc.get("until_published")] == ["programs-v1"]
+    assert [loc["tag"] for loc in cfg["locations"] if loc.get("until_published")] == []
