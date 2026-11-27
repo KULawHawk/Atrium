@@ -1,6 +1,7 @@
 # Check-AdAstra.ps1 - Nestegg phase 0: READ-ONLY readiness check for installing the APEX suite
 # on a Windows PC. It is also the installer's -DryRun. It installs nothing, changes no Windows
 # setting, deletes nothing, reads no key or secret, and writes only its own report file.
+# The one program it runs is the found mutool with -v, to read its version (only 1.23.0 is accepted; Decision 174 B).
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File Check-AdAstra.ps1
 #   powershell -NoProfile -ExecutionPolicy Bypass -File Check-AdAstra.ps1 -InstallRoot "D:\AdAstra"

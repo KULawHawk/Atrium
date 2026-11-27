@@ -154,6 +154,13 @@ def _release_get(repo: str, tag: str, scratch: Path):
     return get
 
 
+def _release_exists(repo: str, tag: str) -> bool:
+    """False only when GitHub says this release does not exist yet (a newly listed tag before its first publish)."""
+    r = subprocess.run([shutil.which("gh"), "release", "view", tag, "-R", repo, "--json", "tagName"],
+                       capture_output=True, text=True)
+    return not (r.returncode != 0 and "release not found" in (r.stderr or "").lower())
+
+
 def fetch(sha: str, size: int | None, name: str, dest: Path, cfg: dict, install_root: Path,
           origin_url: str | None = None, say=print) -> str | None:
     """Put the file with this sha256 at `dest`. Returns the location name it came from, or None (with rows said)."""
@@ -279,6 +286,9 @@ def pull(to: Path, cfg: dict, only: set[str] | None = None, say=print) -> int:
     idx: dict = {}
     getters: dict = {}
     for rel in rels:  # one home folder and one merged INDEX.json for every release
+        if not _release_exists(rel["repo"], rel["tag"]):  # listed, not published yet (reviewer 3 on #114)
+            say(f"SKIP  release {rel['repo']}@{rel['tag']} does not exist yet (not published); the other releases are pulled")
+            continue
         get = _release_get(rel["repo"], rel["tag"], Path(tempfile.mkdtemp(prefix="saved_idx_")))
         idx_file = get(INDEX)
         if not idx_file:

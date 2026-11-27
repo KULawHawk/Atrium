@@ -273,10 +273,14 @@ function Ensure-Mutool {
     if (Test-Path -LiteralPath $zip) {
         $got = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLower()
         if ($got -ne $MutoolZipSha256) { Row 'FAIL' 'MuPDF mutool' "$zip has sha256 $got, not the pinned $MutoolZipSha256; not used, left as it is"; return }
-        try { Expand-MutoolZip $zip $MutoolDir } catch { Row 'FAIL' 'MuPDF mutool' "could not unpack $zip to $MutoolDir`: $($_.Exception.Message)"; return }
-        $v = Mutool-Version $MutoolDir
-        if ($v -eq $MutoolVersion) { Row 'PASS' 'MuPDF mutool' "installed $v from the saved copy (sha256 checked): $MutoolDir"; $script:found['mutool_dir'] = $MutoolDir }
-        else { Row 'FAIL' 'MuPDF mutool' ("unpacked to {0}, but it reports {1}, not {2}" -f $MutoolDir, $(if ($v) { $v } else { 'no version' }), $MutoolVersion) }
+        # Unpacked into a new sibling working folder, checked there, then renamed into place: a cut-off unpack never
+        # leaves a half-filled mupdf-1.23.0 behind (reviewer 3 on #114). A failed working folder is left, never deleted.
+        $work = "$MutoolDir.unpack-$stamp"
+        try { Expand-MutoolZip $zip $work } catch { Row 'FAIL' 'MuPDF mutool' "could not unpack $zip to $work`: $($_.Exception.Message) (that working folder is left as it is; the next run uses a new one)"; return }
+        $v = Mutool-Version $work
+        if ($v -ne $MutoolVersion) { Row 'FAIL' 'MuPDF mutool' ("unpacked to {0}, but it reports {1}, not {2}; left as it is, not used" -f $work, $(if ($v) { $v } else { 'no version' }), $MutoolVersion); return }
+        try { Rename-Item -LiteralPath $work -NewName (Split-Path -Leaf $MutoolDir) -ErrorAction Stop } catch { Row 'FAIL' 'MuPDF mutool' "checked in $work but could not rename it to $MutoolDir`: $($_.Exception.Message)"; return }
+        Row 'PASS' 'MuPDF mutool' "installed $v from the saved copy (sha256 checked, unpacked, version read, then put in place): $MutoolDir"; $script:found['mutool_dir'] = $MutoolDir
         return
     }
     Say ("....  {0,-20} no saved copy could be read; installing through winget at the same pinned version" -f 'MuPDF mutool')

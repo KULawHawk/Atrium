@@ -122,10 +122,16 @@ def test_mutool_comes_from_the_saved_copy_first_at_the_pinned_sha256() -> None:
     assert re.search(r"^\s*Ensure-Mutool\b", code, flags=re.M)
     fetch = code.index("saved_copies.py') fetch $MutoolZipSha256")
     check = code.index("if ($got -ne $MutoolZipSha256)")
-    unpack = code.index("Expand-MutoolZip $zip $MutoolDir")
+    unpack = code.index("Expand-MutoolZip $zip $work")
     winget = code.index("Ensure 'MuPDF mutool' ${function:Find-MutoolLocked}")
     assert fetch < check < unpack < winget  # saved copy first, hash before unpack, winget last
     assert "ExtractToFile($e, $dest, $false)" in code  # never overwrites
+    # unpacked into a sibling working folder, version read THERE, then renamed into place (reviewer 3 on #114)
+    work = code.index('$work = "$MutoolDir.unpack-$stamp"')
+    assert work < code.index("Expand-MutoolZip $zip $work") < code.index("$v = Mutool-Version $work") \
+        < code.index("Rename-Item -LiteralPath $work") < code.index("$script:found['mutool_dir'] = $MutoolDir", work)
+    assert "Expand-MutoolZip $zip $MutoolDir" not in code
+    assert "runs is the found mutool with -v" in CHECK.read_text(encoding="ascii")
     assert "would land outside" in code  # no entry may climb out of the folder
     assert "if ($v -eq $MutoolVersion)" in code and "if ($ov -eq $MutoolVersion)" in code
     # the chosen mutool goes first on PATH for this window only (phase 2 inherits it); never a permanent change

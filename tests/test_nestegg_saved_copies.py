@@ -358,3 +358,48 @@ def test_installer_model_wheels_from_parts_json_are_saved() -> None:
     assert en["url"].startswith("https://github.com/explosion/spacy-models/releases/download/")
     src = (NESTEGG / "release" / "source_pin.py").read_text(encoding="utf-8")
     assert '"tools/nestegg/parts.json": "nestegg/parts.json"' in src
+
+
+def _pull_setup(tmp_path: Path, monkeypatch, exists: dict, indexes: dict):
+    """Fake releases: exists[tag] says whether GitHub has the release; indexes[tag] says whether it has an INDEX.json."""
+    monkeypatch.setattr(sc, "_gh_ok", lambda: True)
+    monkeypatch.setattr(sc, "_release_exists", lambda repo, tag: exists[tag])
+    data = b"pkg"
+    sha = hashlib.sha256(data).hexdigest()
+    src = tmp_path / "rel"
+    src.mkdir()
+    (src / sha).write_bytes(data)
+
+    def fake_get(repo, tag, scratch):
+        def get(nm):
+            if nm == sc.INDEX:
+                if not indexes.get(tag):
+                    return None
+                p = scratch / f"{tag}.{sc.INDEX}"
+                p.write_text(json.dumps(entry), encoding="utf-8")
+                return p
+            p = scratch / nm
+            p.write_bytes((src / nm).read_bytes())
+            return p
+        return get
+    monkeypatch.setattr(sc, "_release_get", fake_get)
+    entry = {sha: {"name": "pkg.whl", "bytes": len(data), "parts": []}}
+    cfg = _cfg(*({"name": t, "kind": "github_release", "repo": "o/r", "tag": t} for t in ("packages-v1", "programs-v1")))
+    return cfg, entry, sha
+
+
+def test_pull_skips_a_release_that_is_not_published_yet_and_pulls_the_rest(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Reviewer 3 on #114: programs-v1 is listed before its first publish; Pull must still bring every other release."""
+    cfg, entry, sha = _pull_setup(tmp_path, monkeypatch, {"packages-v1": True, "programs-v1": False}, {"packages-v1": True})
+    assert sc.pull(tmp_path / "home", cfg) == 0
+    out = capsys.readouterr().out
+    assert "SKIP  release o/r@programs-v1 does not exist yet" in out and out.strip().endswith("SAVED-COPIES: PASS")
+    assert (tmp_path / "home" / sha).is_file()
+    assert sha in json.loads((tmp_path / "home" / sc.INDEX).read_text(encoding="utf-8"))
+
+
+def test_pull_still_fails_for_a_published_release_with_no_index(tmp_path: Path, monkeypatch, capsys) -> None:
+    cfg, entry, sha = _pull_setup(tmp_path, monkeypatch, {"packages-v1": True, "programs-v1": True},
+                                  {"packages-v1": False})
+    assert sc.pull(tmp_path / "home", cfg) == 1
+    assert "SAVED-COPIES: FAIL 1 (no INDEX.json in release o/r@packages-v1)" in capsys.readouterr().out
