@@ -70,7 +70,7 @@ def test_places_every_file_in_the_docling_layout_from_the_home_copy(tmp_path: Pa
     assert not (tmp_path / "out" / "other").exists() and not (tmp_path / "out" / "elsewhere").exists()
     assert "DOCLING-MODELS: PASS 3 files" in capsys.readouterr().out
     assert _run(tmp_path) == 0  # a second run keeps what is there
-    assert "3 from already present" in capsys.readouterr().out
+    assert "3 from already there" in capsys.readouterr().out
 
 
 def test_a_file_with_other_bytes_is_never_overwritten(tmp_path: Path, capsys) -> None:
@@ -124,3 +124,36 @@ def test_shipped_pins_cover_all_five_docling_folders() -> None:
         "docling-project--docling-layout-heron", "docling-project--docling-models",
         "docling-project--DocumentFigureClassifier-v2.5", "docling-project--CodeFormulaV2", "RapidOcr"}
     assert len(files) == 45 and sum(b for *_, b, _ in files) == 1_297_926_359
+
+
+def test_output_is_one_counted_line_per_file_with_no_skip_rows_and_the_verdict_last(tmp_path: Path, capsys) -> None:
+    """Jake's first PC run (11/26 6:05 PM CT): rows of SKIP for places that simply lack a file read as his files
+    being skipped. Wording only: one counted OK line per file, from where, and the verdict as the last line."""
+    _home_copy(tmp_path / "root")
+    assert _run(tmp_path) == 0
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert not [ln for ln in lines if "SKIP" in ln]
+    ok = [ln for ln in lines if " OK " in ln]
+    assert [ln.split("]")[0] for ln in ok] == ["[1 of 3", "[2 of 3", "[3 of 3"]
+    assert all("(from home copy, checked)" in ln for ln in ok)
+    assert lines[-1].startswith("DOCLING-MODELS: PASS 3 files") and lines[-2].startswith("Done.")
+
+
+def test_a_changed_copy_is_still_shown_and_a_failed_file_lists_where_it_looked(tmp_path: Path, capsys) -> None:
+    partial = dict(list(FILES.items())[:2])
+    _home_copy(tmp_path / "root", partial)
+    assert _run(tmp_path) == 1
+    out = capsys.readouterr().out
+    assert "FAIL  docling-project--docling-models/model_artifacts/tableformer/fast/tm_config.json" in out
+    assert "home copy: not in this copy" in out  # the reason is shown only for the file that failed
+    assert out.strip().splitlines()[-1].startswith("DOCLING-MODELS: FAIL 1")
+
+
+def test_a_copy_with_other_bytes_is_shown_as_warn_never_hidden(tmp_path: Path, capsys) -> None:
+    _home_copy(tmp_path / "root")
+    data = FILES[("docling-project--docling-layout-heron", "model.safetensors")]
+    (tmp_path / "root" / "saved" / f"{_sha(data)}.p001").write_bytes(b"XXXXX")  # tampered piece
+    assert _run(tmp_path) == 1
+    out = capsys.readouterr().out
+    assert "WARN" in out and "changed" in out
+    assert "FAIL  docling-project--docling-layout-heron/model.safetensors" in out

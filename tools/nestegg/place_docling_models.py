@@ -103,29 +103,42 @@ def main(argv: list[str] | None = None) -> int:
 
     placed: dict[str, int] = {}
     bad: list[str] = []
-    for dest, sha, size, label in files:
+    n = len(files)
+    print(f"Placing {n} files. Each one is checked against its pinned sha256 before it is kept.")
+    for i, (dest, sha, size, label) in enumerate(files, 1):
+        step = f"[{i:>{len(str(n))}} of {n}]"
         if dest.is_file():
             if (size is None or dest.stat().st_size == size) and sc.sha256_file(dest) == sha:
-                placed["already present"] = placed.get("already present", 0) + 1
+                placed["already there"] = placed.get("already there", 0) + 1
+                print(f"{step} OK    {label}  (already there, checked)")
                 continue
-            print(f"FAIL  {label}: a file with other bytes is already at {dest}; left untouched (move it aside to place the pinned one)")
+            print(f"{step} FAIL  {label}: a file with other bytes is already at {dest}; left untouched (move it aside to place the pinned one)")
             bad.append(label)
             continue
         if dest.exists():
-            print(f"FAIL  {label}: {dest} exists and is not a file; left untouched")
+            print(f"{step} FAIL  {label}: {dest} exists and is not a file; left untouched")
             bad.append(label)
             continue
-        src = sc.fetch(sha, size, label, dest, {"locations": locs}, a.root, origin_url=None, say=print)
+        notes: list[str] = []  # each saved-copy location's answer; a place that simply lacks the file is not news
+        src = sc.fetch(sha, size, label, dest, {"locations": locs}, a.root, origin_url=None, say=notes.append)
+        for w in notes:
+            if w.startswith("WARN"):  # a copy that was there but not the pinned bytes is always shown
+                print(f"{step} {w}")
         if src is None:
-            print(f"FAIL  {label}: not found with the pinned sha256 in any saved copy")
+            print(f"{step} FAIL  {label}: not found with the pinned sha256 in any saved copy")
+            for w in notes:
+                if not w.startswith("WARN"):
+                    print(f"{' ' * len(step)}       {w}")
             bad.append(label)
         else:
             placed[src] = placed.get(src, 0) + 1
+            print(f"{step} OK    {label}  (from {src}, checked)")
     where = ", ".join(f"{n} from {k}" for k, n in sorted(placed.items()))
     fails = len(bad) + len(problems)
     if fails:
-        print(f"DOCLING-MODELS: FAIL {fails} ({len(files) - len(bad)} of {len(files)} files in place: {where or 'none'})")
+        print(f"DOCLING-MODELS: FAIL {fails} ({len(files) - len(bad)} of {len(files)} files in place: {where or 'none'}). Not finished; see the FAIL lines above.")
         return 1
+    print("Done. All Docling model files are in place and checked. You can close this window.")
     print(f"DOCLING-MODELS: PASS {len(files)} files, {total:,} bytes, every sha256 matches its pin ({where}) at {to}")
     return 0
 
