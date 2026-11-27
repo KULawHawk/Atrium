@@ -1,6 +1,7 @@
 # Check-AdAstra.ps1 - Nestegg phase 0: READ-ONLY readiness check for installing the APEX suite
 # on a Windows PC. It is also the installer's -DryRun. It installs nothing, changes no Windows
 # setting, deletes nothing, reads no key or secret, and writes only its own report file.
+# The one program it runs is the found mutool with -v, to read its version (only 1.23.0 is accepted; Decision 174 B).
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File Check-AdAstra.ps1
 #   powershell -NoProfile -ExecutionPolicy Bypass -File Check-AdAstra.ps1 -InstallRoot "D:\AdAstra"
@@ -127,8 +128,14 @@ if (-not $pop) {
 if ($pop) { Row 'PASS' 'Poppler' $pop } else { Row 'GAP' 'Poppler' 'not found; installer unpacks a sha-checked copy under the install folder (no admin)' }
 
 # --- MuPDF mutool (Hierarchy reader) ---------------------------------------------------------
-$mu = Get-Command mutool -ErrorAction SilentlyContinue
-if ($mu) { Row 'PASS' 'MuPDF mutool' $mu.Source } else { Row 'GAP' 'MuPDF mutool' 'not found; installer adds it' }
+# Locked to 1.23.0 (Decision 174 B): the installer's own saved-copy folder first, then PATH. Read-only: runs mutool -v.
+$muSaved = Join-Path $env:LOCALAPPDATA 'AdAstra\tools\mupdf-1.23.0\mutool.exe'
+$muExe = if (Test-Path -LiteralPath $muSaved) { $muSaved } else { $g = Get-Command mutool -ErrorAction SilentlyContinue; if ($g) { $g.Source } else { $null } }
+if ($muExe) {
+    $muOut = (& $muExe -v 2>&1 | ForEach-Object { "$_" }) -join ' '
+    $muVer = if ($muOut -match 'mutool version (\d+\.\d+\.\d+)') { $Matches[1] } else { 'unreadable' }
+    if ($muVer -eq '1.23.0') { Row 'PASS' 'MuPDF mutool' "1.23.0 at $muExe" } else { Row 'GAP' 'MuPDF mutool' "version $muVer at $muExe; the readers accept only 1.23.0 (installer adds its own saved copy)" }
+} else { Row 'GAP' 'MuPDF mutool' 'not found; installer adds 1.23.0 from the saved copy' }
 
 # --- Visual C++ runtime ----------------------------------------------------------------------
 $vc = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64' -ErrorAction SilentlyContinue

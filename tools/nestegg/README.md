@@ -53,3 +53,18 @@ Windows security boxes and winget's agreement question are the person's own answ
 exists only for the clean-Windows test machine. Nothing is deleted and no Windows setting or
 permanent PATH is changed by this script. Log: `<InstallRoot>\.adastra\install_log\`; found paths:
 `<InstallRoot>\.adastra\prereqs.json`. Last line `NESTEGG-PREREQS: PASS` or `FAIL n`.
+
+## Saved copies of the Windows programs (Decision 174 B)
+
+`programs_pinned.json` pins the installer file of every program phase 1 uses. `build_saved_release.py --kind programs`
+saves them to the private release `programs-v1`. `Install-Prereqs.ps1` takes MuPDF mutool 1.23.0 from that saved copy
+first (sha256-checked, unpacked into a working folder, version read, then renamed to
+`%LOCALAPPDATA%\AdAstra\tools\mupdf-1.23.0`), and uses winget at the same pin only when no saved copy can be read. The
+folder it chose is recorded as `mutool_dir` in `<InstallRoot>\.adastra\prereqs.json`.
+
+**Licences, for the record.** mutool is AGPL-3.0 (Artifex); Git and Poppler are GPL-2.0 (or later). Keeping
+private copies for Jake's own use needs nothing more. If the saved-copies store, or an installer bundle that carries
+these files, is ever shared beyond Jake, each of those programs must come with its source code or a written source
+offer (AGPL-3.0 section 6, GPL-2.0 section 3), and the AGPL also covers a modified mutool offered over a network.
+Python (PSF-2.0), the GitHub CLI (MIT) and Tesseract (Apache-2.0) need their licence notices kept. The VC++ runtime
+follows Microsoft's redistributable terms.
