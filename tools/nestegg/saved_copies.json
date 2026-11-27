@@ -5,7 +5,7 @@
     {"name": "home copy", "kind": "folder", "path": "{install_root}/saved"},
     {"name": "saved packages release", "kind": "github_release", "repo": "KULawHawk/adastra-saved-copies", "tag": "packages-v1"},
     {"name": "saved models release", "kind": "github_release", "repo": "KULawHawk/adastra-saved-copies", "tag": "models-v1"},
-    {"name": "saved programs release", "kind": "github_release", "repo": "KULawHawk/adastra-saved-copies", "tag": "programs-v1", "until_published": true},
+    {"name": "saved programs release", "kind": "github_release", "repo": "KULawHawk/adastra-saved-copies", "tag": "programs-v1"},
     {"name": "original site", "kind": "origin"}
   ]
 }
