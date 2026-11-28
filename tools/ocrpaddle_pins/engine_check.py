@@ -138,11 +138,38 @@ def document_page():
     return _bgr(img)
 
 
+def word_check_selftest() -> str | None:
+    """Prove the word check can fail: words only in keys, scores, boxes and html must count as unread,
+    and words really recognized must all be found. Returns None on success, else why it failed."""
+    unread = [
+        {"type": "text", "score": 0.21, "bbox": [21, 21, 210, 121],
+         "res": [{"text": "", "confidence": 0.21, "text_region": [[21, 21]], "TOTAL": 21, "SCORE": 21}]},
+        {"type": "table", "score": 0.9, "bbox": [1, 2, 3, 4],
+         "res": {"html": "<table><tr><td>TOTAL</td><td>SCORE</td><td>21</td></tr></table>",
+                 "cell_bbox": [[21, 21]], "boxes": [[21]], "rec_res": []}},
+    ]
+    read = [
+        {"type": "text", "res": [{"text": "The TOTAL SCORE of 21", "confidence": 0.9, "text_region": [[1, 1]]}]},
+        {"type": "table", "res": {"html": "<table></table>", "rec_res": [["TOTAL", 0.99], ["21", 0.98]]}},
+    ]
+    got_u, ctrl_u = judge_words(recognized_texts(unread))
+    got_r, ctrl_r = judge_words(recognized_texts(read))
+    got_t, _ = judge_words(["total score 210"])  # wrong case / partial number: not a match
+    if got_u or ctrl_u or ctrl_r or got_r != list(WORDS) or got_t:
+        return f"unread gave {got_u}, read gave {got_r}, lowercase/partial gave {got_t}"
+    return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--measured", type=Path, required=True)
     ap.add_argument("--models", type=Path, required=True)
     a = ap.parse_args()
+    why = word_check_selftest()
+    if why:
+        print(f"OCRPADDLE-ENGINE: FAIL word-check self-test: {why}")
+        return 1
+    print("word-check self-test: nothing found where nothing was read; all found where read")
     try:
         import paddle
         paddle.utils.run_check()
