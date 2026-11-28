@@ -24,6 +24,34 @@ import traceback
 from pathlib import Path
 
 WORDS = ("TOTAL", "SCORE", "21")
+ABSENT = "ZEBRA"  # on no test page: if it is ever "read", the word check is broken (negative control)
+
+
+def tokens(texts) -> list[str]:
+    """Whole alphanumeric tokens of RECOGNIZED text only, case kept (never keys, scores, boxes or html)."""
+    import re
+    return [t for t in re.split(r"[^A-Za-z0-9]+", " ".join(str(x) for x in texts)) if t]
+
+
+def recognized_texts(regions) -> list[str]:
+    """The text the pipeline recognized: each region's res[].text, plus a table's rec_res texts."""
+    out: list[str] = []
+    for region in regions or []:
+        res = region.get("res")
+        for item in res if isinstance(res, list) else [res]:
+            if not isinstance(item, dict):
+                continue
+            if "text" in item:
+                out.append(str(item["text"]))
+            for pair in item.get("rec_res") or []:
+                if pair:
+                    out.append(str(pair[0]))
+    return out
+
+
+def judge_words(texts) -> tuple[list[str], bool]:
+    toks = tokens(texts)
+    return [w for w in WORDS if w in toks], ABSENT in toks
 
 
 def deny_network() -> None:
@@ -128,32 +156,36 @@ def main() -> int:
         # det + rec: every word on a plain text page
         boxes, rec, _ = eng.text_system(text_page())
         boxes, rec = boxes if boxes is not None else [], rec or []
-        text = " ".join(t for t, _s in rec).upper()
-        got = [w for w in WORDS if w in text]
-        print(f"det+rec: {len(boxes)} boxes, read {text!r}")
-        if len(got) != len(WORDS):
-            fails.append(f"det+rec read {got} of {list(WORDS)}")
+        rtexts = [t for t, _s in rec]
+        got, ctrl = judge_words(rtexts)
+        print(f"det+rec: {len(boxes)} boxes, read {' '.join(rtexts)!r}")
+        if len(got) != len(WORDS) or ctrl:
+            fails.append(f"det+rec read {got} of {list(WORDS)}, control {ABSENT} found {ctrl}")
         # table model (SLANet) + det/rec inside the table
         tres, _ = eng.table_system(table_page(), True)
         html = tres.get("html") or ""
         cells = html.count("<td")
         print(f"table: {cells} cells: {html[:300]}")
-        if "<table" not in html or cells < 6 or not all(w in html.upper() for w in WORDS):
-            fails.append(f"table gave {cells} cells, words {[w for w in WORDS if w in html.upper()]}")
+        tgot, tctrl = judge_words(str(p[0]) for p in (tres.get("rec_res") or []) if p)
+        if "<table" not in html or cells < 6 or len(tgot) != len(WORDS) or tctrl:
+            fails.append(f"table gave {cells} cells, recognized words {tgot}, control {ABSENT} found {tctrl}")
         # layout model + the whole pipeline (what the reader runs), JUDGED on a realistic page
         lres, _ = eng.layout_predictor(document_page())
         lres = lres if lres is not None else []
         full = eng(document_page(), return_ocr_result_in_table=True)
-        ftext = json.dumps([{k: v for k, v in r.items() if k != "img"} for r in full], default=str).upper()
+        ftexts = recognized_texts(full)
+        fgot, fctrl = judge_words(ftexts)
         kinds = sorted({str(r.get("type")) for r in full})
-        print(f"layout: {len(lres)} regions on the document page; full pipeline: {len(full)} regions {kinds}")
-        if not lres or not full or not all(w in ftext for w in WORDS):
+        print(f"layout: {len(lres)} regions on the document page; full pipeline: {len(full)} regions {kinds}; "
+              f"recognized {ftexts!r}")
+        if not lres or not full or len(fgot) != len(WORDS) or fctrl:
             fails.append(f"full pipeline on the document page: {len(lres)} layout regions, {len(full)} regions, "
-                         f"words {[w for w in WORDS if w in ftext]}")
+                         f"recognized words {fgot}, control {ABSENT} found {fctrl}")
         if fails:
             print("OCRPADDLE-ENGINE: FAIL " + "; ".join(fails))
             return 1
-        print(f"OCRPADDLE-ENGINE: PASS det+rec read {' '.join(got)}; table {cells} cells; full pipeline {len(full)} regions {kinds}")
+        print(f"OCRPADDLE-ENGINE: PASS det+rec read {' '.join(got)}; table {cells} cells read {' '.join(tgot)}; "
+              f"full pipeline {len(full)} regions {kinds} read {' '.join(fgot)}; control {ABSENT} absent")
         return 0
     except SystemExit:
         raise
