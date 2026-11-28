@@ -28,7 +28,7 @@ def test_every_part_is_complete() -> None:
         assert p.get("torch") in (None, *PARTS["torch"].keys()), p
         for m in p.get("models", []):
             assert m["step"] in {"unpinned", "htrlens_models", "spoke_script", "docling_download",
-                                 "mineru_download", "spacy_model", "pinned_models"}, m
+                                 "mineru_download", "spacy_model", "pinned_models", "spoke_pinned_folders"}, m
             if m["step"] == "pinned_models":  # every such reader has its files pinned in models_pinned.json
                 man = json.loads((NESTEGG / "models_pinned.json").read_text(encoding="utf-8"))["readers"][p["name"]]
                 assert all(meta.get("sha256") for mm in man["models"].values()
@@ -2103,3 +2103,66 @@ def test_docling_models_go_to_the_artifacts_folder_the_reader_reads(tmp_path: Pa
         assert all(len(f.get("sha256") or "") == 64 for f in v["files"].values())
         want = envs / "_models" / "docling_artifacts" / v["repo_id"].replace("/", "--")
         assert m._local_target(v, envs) == want
+
+
+# ---------------------------------------------------------------- OcrPaddle: the spoke places its own pinned models
+def test_ocrpaddle_pins_name_every_kept_file_and_match_the_conclave_measurement() -> None:
+    by = {p["name"]: p for p in PARTS["parts"]}
+    assert [m["step"] for m in by["OcrPaddle"]["models"]] == ["spoke_pinned_folders"]
+    r = json.loads((NESTEGG / "models_pinned.json").read_text(encoding="utf-8"))["readers"]["OcrPaddle"]
+    assert r["local_root"] == "~/.paddleocr/conclave_pinned"
+    files = r["models"]["ppstructure_v2_en"]["files"]
+    assert len(files) == 4
+    for fn, meta in files.items():
+        assert meta["folder"].endswith("-" + meta["sha256"][:16])  # the Conclave worker names folders this way
+        assert set(meta["kept_files"]) == {"inference.pdiparams", "inference.pdiparams.info", "inference.pdmodel"}
+        assert all(len(k["sha256"]) == 64 and k["bytes"] > 0 for k in meta["kept_files"].values())
+
+
+def _paddle_reader(tmp_path: Path, monkeypatch):
+    import hashlib
+    m = _mod()
+    here = tmp_path / "nest"
+    here.mkdir()
+    body = {"inference.pdmodel": b"model", "inference.pdiparams": b"params", "inference.pdiparams.info": b"info"}
+    kept = {n: {"bytes": len(b), "sha256": hashlib.sha256(b).hexdigest()} for n, b in body.items()}
+    root = tmp_path / "pinned"
+    man = {"readers": {"P": {"local_root": str(root), "models": {"x": {"files": {
+        "a.tar": {"sha256": "a" * 64, "url": "https://example.invalid/a.tar", "folder": "det-aaaa", "kept_files": kept},
+        "b.tar": {"sha256": "b" * 64, "url": "https://example.invalid/b.tar", "folder": "rec-bbbb", "kept_files": kept}}}}}}}
+    (here / "models_pinned.json").write_text(json.dumps(man), encoding="utf-8")
+    monkeypatch.setattr(m, "HERE", here)
+    return m, root, body
+
+
+def test_spoke_pinned_folders_pass_only_when_every_file_matches_and_never_touch_a_wrong_one(tmp_path, monkeypatch, capsys) -> None:
+    m, root, body = _paddle_reader(tmp_path, monkeypatch)
+    rep = m.Report()
+    m.spoke_pinned_folders(rep, {"name": "P"})
+    assert rep.fails == 1 and "6 of 6 pinned files not in place" in capsys.readouterr().out
+    for d in ("det-aaaa", "rec-bbbb"):
+        (root / d).mkdir(parents=True)
+        for n, b in body.items():
+            (root / d / n).write_bytes(b)
+    rep = m.Report()
+    m.spoke_pinned_folders(rep, {"name": "P"})
+    out = capsys.readouterr().out
+    assert rep.fails == 0 and "2 pinned model folders" in out and "all 6 files match" in out
+    (root / "rec-bbbb" / "inference.pdmodel").write_bytes(b"other")
+    rep = m.Report()
+    m.spoke_pinned_folders(rep, {"name": "P"})
+    out = capsys.readouterr().out
+    assert rep.fails == 1 and "does not match its pin (b.tar)" in out
+    assert (root / "rec-bbbb" / "inference.pdmodel").read_bytes() == b"other"  # read only: left as found
+
+
+def test_spoke_pinned_folders_fail_without_folder_pins(tmp_path, monkeypatch, capsys) -> None:
+    m = _mod()
+    here = tmp_path / "nest"
+    here.mkdir()
+    (here / "models_pinned.json").write_text(json.dumps({"readers": {"P": {"models": {"x": {"files": {"a.tar": {"sha256": "a" * 64}}}}}}}), encoding="utf-8")
+    monkeypatch.setattr(m, "HERE", here)
+    monkeypatch.setattr(m, "saved_models", lambda *a, **k: None)  # Hugging Face placement is not this step
+    rep = m.Report()
+    m.models(rep, {"name": "P", "roots": ["x"], "models": [{"step": "spoke_pinned_folders"}]}, tmp_path, tmp_path, tmp_path / "envs", Path("py"), tmp_path / "l")
+    assert rep.fails == 1 and "no local_root, folder and kept_files" in capsys.readouterr().out

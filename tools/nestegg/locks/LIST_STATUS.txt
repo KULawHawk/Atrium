@@ -100,3 +100,4 @@ fail, so harness.reader_envs can never be turned on. cffi and pycparser were alr
 11/23 ~11:35 PM CT (PC-C Windows saved-copy proof, Atrium #104): _test_tools gains colorama 0.4.6. pytest 9.2.0 requires it on Windows
 (sys_platform == "win32"), so a Windows env with this list failed pip check ("pytest 9.2.0 requires colorama, which is not installed").
 Already pinned in workbench / _test_env_workbench / observatory and in SHA256SUMS (colorama-0.4.6-py2.py3-none-any.whl). Label unchanged.
+protobuf-3.20.2-py2.py3-none-any.whl (SHA256SUMS_win_amd64.txt, 11/28/2026, CR-09): the OcrPaddle side env on Windows. paddlepaddle 2.6.2 requires protobuf<=3.20.2 on Windows; Conclave #3194 pins it in engine_requirements.txt (Linux keeps 7.36.2). sha256 equals PyPI; proven by Atrium ocrpaddle-pins #117 on a Windows runner. OcrPaddle_side_py3.12.txt stays the Linux freeze it was measured as.
