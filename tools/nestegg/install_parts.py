@@ -1277,6 +1277,36 @@ def pinned_models(rep: Report, part: dict, spoke: Path, envs: Path, py: Path, lo
             rep.row("PASS", label, f"{what}: {len(files)} files hash-checked ({where}) at {target}{note}")
 
 
+def spoke_pinned_folders(rep: Report, part: dict) -> None:
+    """A reader that places its own pinned models (OcrPaddle: its side-environment warmup fetches, hash-checks and
+    unpacks each archive; Conclave #3194). Checked here, independently, against models_pinned.json: every archive
+    entry names its folder under the reader's local_root and the sha256 + bytes of each file kept from it. Read
+    only: a missing or different file is a FAIL row and is never moved, replaced or deleted."""
+    label = f"{part['name']} model"
+    reader = json.loads((HERE / "models_pinned.json").read_text(encoding="utf-8")).get("readers", {}).get(part["name"]) or {}
+    root = reader.get("local_root")
+    entries = [(fn, meta) for m in reader.get("models", {}).values() for fn, meta in (m.get("files") or {}).items()]
+    if not root or not entries or not all(meta.get("folder") and meta.get("kept_files") for _, meta in entries):
+        rep.row("FAIL", label, f"models_pinned.json has no local_root, folder and kept_files for every {part['name']} archive")
+        return
+    base = Path(root).expanduser()
+    problems, n = [], 0
+    for fn, meta in entries:
+        folder = base / meta["folder"]
+        for name, pin in meta["kept_files"].items():
+            n += 1
+            f = folder / name
+            if not f.is_file():
+                problems.append(f"{f} is missing")
+            elif f.stat().st_size != pin["bytes"] or _sha256(f) != pin["sha256"]:
+                problems.append(f"{f} does not match its pin ({fn})")
+    if problems:
+        rep.row("FAIL", label, f"{len(problems)} of {n} pinned files not in place (the side-environment warmup places them): "
+                + "; ".join(problems[:4]) + (" ..." if len(problems) > 4 else ""))
+    else:
+        rep.row("PASS", label, f"{len(entries)} pinned model folders under {base}, all {n} files match models_pinned.json")
+
+
 def models(rep: Report, part: dict, src: Path, repo: Path, envs: Path, py: Path, log: Path) -> None:
     saved_models(rep, part, envs)
     mdir = envs / "_models"
@@ -1288,6 +1318,8 @@ def models(rep: Report, part: dict, src: Path, repo: Path, envs: Path, py: Path,
             rep.row("FAIL", label, f"{m['what']}: no pinned revision and hash in the project yet, so it is not installed")
         elif step == "pinned_models":
             pinned_models(rep, part, spoke, envs, py, log)
+        elif step == "spoke_pinned_folders":
+            spoke_pinned_folders(rep, part)
         elif step == "htrlens_models":
             rc = run([py, "-I", HERE / "htrlens_models.py"], log)
             rep.row("PASS" if rc == 0 else "FAIL", label, "Kraken + TrOCR fetched, hash-checked, load offline" if rc == 0 else f"see {log}")

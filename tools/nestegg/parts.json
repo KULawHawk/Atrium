@@ -71,7 +71,7 @@
     {"name": "OcrPaddle",      "repo": "Conclave", "roots": ["conclave_lens_ocrpaddle"],             "python": "3.13",
      "probe_ignore": {"torch": "reached only through LensRunner, which this lens never constructs (package thread 11/22)", "paddle": "imported only by side_env_worker.py, which runs in the .paddle-env side environment (checked by the spoke's own script)", "paddleocr": "same as paddle"},
      "spoke_side_env": {"script": "scripts/setup_side_env.ps1", "python": "3.12"},
-     "models": [{"step": "unpinned", "what": "PaddleOCR models (side env setup fetches them)"}]},
+     "models": [{"step": "spoke_pinned_folders", "what": "PP-Structure en models: placed and hash-checked by the side env warmup (Conclave #3194), re-checked here against models_pinned.json"}]},
     {"name": "PdfText",        "repo": "Conclave", "roots": ["conclave_lens_pdftext"],               "python": "3.13", "probe_ignore": {"torch": "reached only through LensRunner, which this lens never constructs (package thread 11/22)"}},
     {"name": "StructuredHeuristic", "repo": "Conclave", "roots": ["conclave_lens_structuredheuristic"], "python": "3.13"},
     {"name": "harness_adapters", "repo": "Conclave", "roots": ["conclave_harness_adapters", "conclave_integration_locutus_rulings", "conclave_integration_locutus_pack", "conclave_lens_pdftext", "conclave_lens_structuredheuristic"],         "python": "3.13", "probe_ignore": {"colpali_engine": "ColPaliVerify runs in its own environment through colpali_subprocess_verifier_client.py (its transformers pin conflicts with this one)", "peft": "same as colpali_engine"}, "torch": "default", "add": ["pillow"]},

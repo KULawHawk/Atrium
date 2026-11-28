@@ -1731,7 +1731,7 @@
     "OcrPaddle": {
       "lens": "conclave_lens_ocrpaddle",
       "env": ".paddle-env side env (paddleocr==2.8.1, paddlepaddle==2.6.2, python 3.12)",
-      "where_loaded": "~/.paddleocr/whl/... (paddleocr extracts each tar)",
+      "where_loaded": "~/.paddleocr/conclave_pinned/<model>-<archive sha256[:16]> (Conclave #3194: the side-environment warmup fetches each archive, checks its sha256, unpacks the three kept files and checks theirs; every engine build re-checks them and passes the folders to PPStructure explicitly)",
       "models": {
         "ppstructure_v2_en": {
           "source": "paddle_bcebos",
@@ -1743,29 +1743,94 @@
               "url": "https://paddleocr.bj.bcebos.com/PP-OCRv3/english/en_PP-OCRv3_det_infer.tar",
               "bytes": 4003840,
               "sha256": "e740eb522521827cc83da3ba33e1c70ccfd9b3cf7d9a24a420ce4ca5ebb8794f",
-              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py): two separate downloads gave the same bytes and sha256; PaddleOCR publishes no hash for these files, so that is the only second check"
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py): two separate downloads gave the same bytes and sha256; PaddleOCR publishes no hash for these files, so that is the only second check",
+              "folder": "det-e740eb522521827c",
+              "kept_files": {
+                "inference.pdiparams": {
+                  "bytes": 2377917,
+                  "sha256": "83676ec730627ab4502f401410a4b6a3ce1c0bb98fa249b71db055b6bddae051"
+                },
+                "inference.pdiparams.info": {
+                  "bytes": 26392,
+                  "sha256": "2fe414d9eadf914bf44e3f9ba212988a6f26f364e4f87c6d0af57438ffffc0c4"
+                },
+                "inference.pdmodel": {
+                  "bytes": 1590133,
+                  "sha256": "c4bfb1b05d9d1d5a760801eaf6d20180ef7e47bcc675fb17d1f3a89da5fef427"
+                }
+              },
+              "kept_files_source": "measured from the archive by Atrium ocrpaddle-pins runs 46117241043 and 46117773864 (two separate downloads, same bytes); the archive sha256 equals the 11/23 PC measurement above"
             },
             "en_PP-OCRv4_rec_infer.tar": {
               "url": "https://paddleocr.bj.bcebos.com/PP-OCRv4/english/en_PP-OCRv4_rec_infer.tar",
               "bytes": 10240000,
               "sha256": "d5ae153a6fbdacd5776543d3194c4258154ed6f83467d55de1cc345f7dd20322",
-              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py): two separate downloads gave the same bytes and sha256; PaddleOCR publishes no hash for these files, so that is the only second check"
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py): two separate downloads gave the same bytes and sha256; PaddleOCR publishes no hash for these files, so that is the only second check",
+              "folder": "rec-d5ae153a6fbdacd5",
+              "kept_files": {
+                "inference.pdiparams": {
+                  "bytes": 7607269,
+                  "sha256": "75f64a1ffb70c56b7a25655963ca16f5bf3286202e3f52ac972bee05cdee2f56"
+                },
+                "inference.pdiparams.info": {
+                  "bytes": 102540,
+                  "sha256": "710d9f3d7c503067ae708f4bc3adc6973c0d6391adb7a1470c36eb70da6b5b83"
+                },
+                "inference.pdmodel": {
+                  "bytes": 2517366,
+                  "sha256": "85b952f05f709af259cfe4254012aa7208bef0998f71f57a15495446f25ccd43"
+                }
+              },
+              "kept_files_source": "measured from the archive by Atrium ocrpaddle-pins runs 46117241043 and 46117773864 (two separate downloads, same bytes); the archive sha256 equals the 11/23 PC measurement above"
             },
             "en_ppstructure_mobile_v2.0_SLANet_infer.tar": {
               "url": "https://paddleocr.bj.bcebos.com/ppstructure/models/slanet/en_ppstructure_mobile_v2.0_SLANet_infer.tar",
               "bytes": 10193408,
               "sha256": "1f4aac346f441062f0f340d5cb8385d047d75bb6020928840dcf99f46e53a889",
-              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py): two separate downloads gave the same bytes and sha256; PaddleOCR publishes no hash for these files, so that is the only second check"
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py): two separate downloads gave the same bytes and sha256; PaddleOCR publishes no hash for these files, so that is the only second check",
+              "folder": "table-1f4aac346f441062",
+              "kept_files": {
+                "inference.pdiparams": {
+                  "bytes": 7580402,
+                  "sha256": "41c5587892b65faeafffaf1a0dc08dff154f21454eb254a574073a85c33a9f75"
+                },
+                "inference.pdiparams.info": {
+                  "bytes": 35261,
+                  "sha256": "fbdfa732173af232b0c06092a3a1303710b86b53967fa60ccedbe6317ef174b2"
+                },
+                "inference.pdmodel": {
+                  "bytes": 2574256,
+                  "sha256": "14aa8c554d27322f640d5b966eefc2ce09696f5610ff552643168615f74c6c9d"
+                }
+              },
+              "kept_files_source": "measured from the archive by Atrium ocrpaddle-pins runs 46117241043 and 46117773864 (two separate downloads, same bytes); the archive sha256 equals the 11/23 PC measurement above"
             },
             "picodet_lcnet_x1_0_fgd_layout_infer.tar": {
               "url": "https://paddleocr.bj.bcebos.com/ppstructure/models/layout/picodet_lcnet_x1_0_fgd_layout_infer.tar",
               "bytes": 10096640,
               "sha256": "67d67b15c3806b469e47fca89268bba7cd6e61c47f6fb005431a2772a40c8d72",
-              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py): two separate downloads gave the same bytes and sha256; PaddleOCR publishes no hash for these files, so that is the only second check"
+              "sha256_source": "measured 11/23/2026 on Jake's PC (measure_blocked_models.py): two separate downloads gave the same bytes and sha256; PaddleOCR publishes no hash for these files, so that is the only second check",
+              "folder": "layout-67d67b15c3806b46",
+              "kept_files": {
+                "inference.pdiparams": {
+                  "bytes": 7282759,
+                  "sha256": "5865c3f96e25150c65a6e51efc32d932ab4271b14bd14d04f5fd114223b8a307"
+                },
+                "inference.pdiparams.info": {
+                  "bytes": 44935,
+                  "sha256": "800268836d6bf0ddf5b55c271e95fb451006ee23132f72427dd376965ad9e34b"
+                },
+                "inference.pdmodel": {
+                  "bytes": 2763579,
+                  "sha256": "0517e54867af71996b1ef6df3d07b71957d912c9cddb15c4cbda82d3b918940f"
+                }
+              },
+              "kept_files_source": "measured from the archive by Atrium ocrpaddle-pins runs 46117241043 and 46117773864 (two separate downloads, same bytes); the archive sha256 equals the 11/23 PC measurement above"
             }
           }
         }
-      }
+      },
+      "local_root": "~/.paddleocr/conclave_pinned"
     },
     "UNKNOWN_consumer": {
       "lens": null,
