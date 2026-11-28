@@ -4,7 +4,8 @@ Run inside a Python 3.12 environment holding the side-environment versions (side
 versions of Conclave conclave_lens_ocrpaddle/engine_requirements.txt). Steps: paddle.utils.run_check(); unpack the
 measured archives' three kept members into <models>/<folder> and re-check every sha256 against the measurement;
 build PPStructure with the side_env_worker kwargs (lang "en", layout, table, ocr, CPU) and EXPLICIT model folders
-with every network connection refused, so nothing can be fetched; read a synthetic page with known words.
+with every network connection refused, so nothing can be fetched; then det+rec must read the known words on a
+text page, the table model must return a table holding them, and the layout model must run.
 
   python -I engine_check.py --measured <dir with ocrpaddle_models_measured.json + archives/> --models <dir>
 Last line: OCRPADDLE-ENGINE: PASS <words read> | FAIL <exact error>
@@ -51,15 +52,36 @@ def place(measured: Path, models: Path) -> dict[str, str]:
     return dirs
 
 
-def page():
+def _bgr(img):
     import numpy as np
+    return np.array(img)[:, :, ::-1].copy()  # BGR, as the worker hands the engine
+
+
+def text_page():
     from PIL import Image, ImageDraw, ImageFont
     img = Image.new("RGB", (1000, 400), "white")
     d = ImageDraw.Draw(img)
     font = ImageFont.load_default(size=64)
     d.text((60, 80), "TOTAL SCORE", fill="black", font=font)
     d.text((60, 220), "21", fill="black", font=font)
-    return np.array(img)[:, :, ::-1].copy()  # BGR, as the worker hands the engine
+    return _bgr(img)
+
+
+def table_page():
+    """A ruled 3x3 table of score words, the kind of crop the layout step hands the table model."""
+    from PIL import Image, ImageDraw, ImageFont
+    img = Image.new("RGB", (900, 330), "white")
+    d = ImageDraw.Draw(img)
+    font = ImageFont.load_default(size=40)
+    rows = (("Scale", "Raw", "T"), ("TOTAL", "21", "65"), ("SCORE", "14", "58"))
+    for r in range(4):
+        d.line((20, 20 + r * 100, 880, 20 + r * 100), fill="black", width=3)
+    for c in range(4):
+        d.line((20 + c * 286, 20, 20 + c * 286, 320), fill="black", width=3)
+    for r, row in enumerate(rows):
+        for c, cell in enumerate(row):
+            d.text((50 + c * 286, 45 + r * 100), cell, fill="black", font=font)
+    return _bgr(img)
 
 
 def main() -> int:
@@ -75,14 +97,32 @@ def main() -> int:
         from paddleocr import PPStructure
         import paddleocr
         eng = PPStructure(lang="en", layout=True, table=True, ocr=True, show_log=False, use_gpu=False, **dirs)
-        res = eng(page(), return_ocr_result_in_table=True)
-        text = json.dumps(res, default=str)
-        got = [w for w in WORDS if w in text.upper()]
-        print(f"paddle {paddle.__version__}, paddleocr {paddleocr.__version__}, regions {len(res)}")
+        print(f"paddle {paddle.__version__}, paddleocr {paddleocr.__version__}: engine built from the pinned folders, network denied")
+        fails = []
+        # det + rec: every word on a plain text page
+        boxes, rec, _ = eng.text_system(text_page())
+        boxes, rec = boxes if boxes is not None else [], rec or []
+        text = " ".join(t for t, _s in rec).upper()
+        got = [w for w in WORDS if w in text]
+        print(f"det+rec: {len(boxes)} boxes, read {text!r}")
         if len(got) != len(WORDS):
-            print(f"OCRPADDLE-ENGINE: FAIL read {got} of {list(WORDS)}: {text[:600]}")
+            fails.append(f"det+rec read {got} of {list(WORDS)}")
+        # table model (SLANet) + det/rec inside the table
+        tres, _ = eng.table_system(table_page(), True)
+        html = tres.get("html") or ""
+        cells = html.count("<td")
+        print(f"table: {cells} cells: {html[:300]}")
+        if "<table" not in html or cells < 6 or not all(w in html.upper() for w in WORDS):
+            fails.append(f"table gave {cells} cells, words {[w for w in WORDS if w in html.upper()]}")
+        # layout model: must run; how many regions a synthetic page gets is reported, not judged
+        lres, _ = eng.layout_predictor(table_page())
+        lres = lres if lres is not None else []
+        full = eng(text_page(), return_ocr_result_in_table=True)
+        print(f"layout: ran, {len(lres)} regions on the table page, {len(full)} on the text page (not judged)")
+        if fails:
+            print("OCRPADDLE-ENGINE: FAIL " + "; ".join(fails))
             return 1
-        print(f"OCRPADDLE-ENGINE: PASS {' '.join(got)}")
+        print(f"OCRPADDLE-ENGINE: PASS det+rec read {' '.join(got)}; table {cells} cells; layout ran")
         return 0
     except SystemExit:
         raise
