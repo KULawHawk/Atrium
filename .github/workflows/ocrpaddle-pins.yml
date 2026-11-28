@@ -1,0 +1,72 @@
+# OcrPaddle model pins (CR-09, Decision 189 C, 11/28). NOT a required check. Runs only when tools/ocrpaddle_pins changes.
+# 1. measure: downloads PP-Structure's four model archives from paddleocr.bj.bcebos.com (the address paddleocr 2.8.1
+#    itself uses; no revision exists there), hashes each archive and the three files PaddleOCR keeps from it, and keeps
+#    the archives + the measurement as the saved working copy (artifact; Hard Rule 14 until the saved-copies release
+#    holds them).
+# 2. engine (Windows and Linux, Python 3.12): a second, independent download must give the same hashes; then PP-Structure
+#    is built from the pinned files only, with the network refused, and reads a synthetic page.
+name: ocrpaddle-pins
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/ocrpaddle_pins/**"
+      - ".github/workflows/ocrpaddle-pins.yml"
+
+concurrency:
+  group: ocrpaddle-pins-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download and hash the four archives
+        run: python -I tools/ocrpaddle_pins/measure_ocrpaddle_models.py --out measured --keep
+      - name: Manifest of the saved working copy
+        run: cd measured && sha256sum ocrpaddle_models_measured.json archives/* | tee MANIFEST_SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ocrpaddle-models-measured
+          path: measured/
+          retention-days: 90
+
+  engine:
+    needs: measure
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: ocrpaddle-models-measured
+          path: measured
+      - name: Second download must give the same hashes
+        shell: bash
+        run: |
+          python -I tools/ocrpaddle_pins/measure_ocrpaddle_models.py --out measured2
+          python -I -c "import json,sys;a=json.load(open('measured/ocrpaddle_models_measured.json'))['models'];b=json.load(open('measured2/ocrpaddle_models_measured.json'))['models'];d=[k for k in a if (a[k]['sha256'],a[k]['members'])!=(b[k]['sha256'],b[k]['members'])];print('second download differs:',d) if d else print('second download: same 4 archives, same 12 files');sys.exit(1 if d else 0)"
+      - name: Side-environment versions (Python 3.12), then the engine from the pinned files only
+        shell: bash
+        run: |
+          python -m venv side
+          if [ -x side/Scripts/python.exe ]; then P=side/Scripts/python.exe; else P=side/bin/python; fi
+          $P -m pip install -q --no-deps -r tools/ocrpaddle_pins/side_env_versions_py3.12.txt
+          $P -I tools/ocrpaddle_pins/engine_check.py --measured measured --models models 2>&1 | tail -40
+          $P -I tools/ocrpaddle_pins/engine_check.py --measured measured --models models2 2>&1 | tail -1 | grep -q '^OCRPADDLE-ENGINE: PASS'
